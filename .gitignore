@@ -1,0 +1,29 @@
+# Environment variables
+.env
+*.env
+*.env.local
+
+# Database & Storage
+*.db
+*.db-journal
+backend/data/
+data/
+
+# Build & Executables
+*.exe
+*.exe~
+main
+dist/
+node_modules/
+backend/backend.exe
+backend/main
+
+# IDE / System / Temp
+.DS_Store
+.vscode/
+.idea/
+.zcode/
+*.log
+implementation_plan.md
+update.md
+walkthrough.md

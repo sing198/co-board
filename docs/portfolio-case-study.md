@@ -48,7 +48,7 @@ sequenceDiagram
 - Local frontend: 18 tests plus TypeScript and build passed during the latest implementation work.
 - Backend: `go test ./...` passed, including real WebSocket clients, two-user lifecycle, presence deduplication, field patch preservation and stale-write rejection.
 - Local browsers: cross-tab create/move, avatars joining/leaving, save feedback, Undo and missing-board screen observed.
-- Production: Google login with an existing session, board creation, save/reload and a mobile-width layout observed. Independent viewer/editor enforcement and actual backend restart remain unverified: [deployment report](deployment-validation.md).
+- Production: Google login with an existing session, board creation, save/reload and a mobile-width layout observed. A real Render backend restart preserved the QA marker, and a post-restart write survived reload (rechecked 22 September). Independent viewer/editor enforcement remains unverified: [deployment report](deployment-validation.md).
 
 Automated sockets and local SQLite do not substitute for testing the public PostgreSQL deployment.
 

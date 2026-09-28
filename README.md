@@ -108,7 +108,7 @@ Frontend regression tests cover connection recovery, correlated saves, retries, 
 - Field-level conflict checks apply to `EDIT_CARD` patches. Moves, whole checklist values, tags updated through their separate event, and board settings do not provide general collaborative document merging. Old clients do not supply expected values.
 - Presence and WebSocket tickets are process-local. Redis broadcasts mutations but does not make multi-instance presence or ticket routing correct automatically. Use one backend instance for the current validated setup.
 - Guest boards are temporary and subject to cleanup. Guest logout behavior differs between Board and Dashboard; never use the guest demo as permanent storage.
-- Local SQLite needs a persistent disk/volume to survive host replacement. Production persistence across a real restart has **not yet been verified**. A browser reload is not a restart test.
+- Local SQLite needs a persistent disk/volume to survive host replacement. The deployed QA board survived a Render backend restart on 20 September 2026; a post-restart write also survived reload, rechecked on 22 September. This does not verify host replacement or backup recovery. See the [deployment report](docs/deployment-validation.md).
 - Mobile checks use a 390px browser viewport, not a physical-device certification. Google login was exercised with an existing browser Google session, not every fresh-account, MFA or consent path.
 
 See the [dated deployment report](docs/deployment-validation.md) for passed checks, blocked checks and the release gap.

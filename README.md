@@ -8,7 +8,7 @@ A task board for small teams: organize work, move cards between stages, and see 
 
 ![Latest local board](screenshot/current/board.png)
 
-Screenshots show the current local implementation (20 September 2026). The hosted build inspected that day still showed the earlier dashboard and board UI; new local features are not yet verified on production.
+Screenshots show the current local implementation (28 September 2026). The hosted build inspected that day still showed the earlier dashboard and board UI; new local features are not yet verified on production.
 
 ## Try it in 60 seconds
 

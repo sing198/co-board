@@ -26,13 +26,13 @@ import { useAuth } from "../useAuth";
 import { useTheme } from "../useTheme";
 import { useNotifications } from "../useNotifications";
 import { API_URL } from "../config";
-import WorkspaceSidebar from "../components/WorkspaceSidebar";
+import WorkspaceSidebar, { KanbanMark } from "../components/WorkspaceSidebar";
 
 function AvatarImage({ src, name, className, title }: { src: string; name: string; className: string; title?: string }) {
   const [failed, setFailed] = useState(false);
   if (failed || !src) {
     return (
-      <div 
+      <div
         className={`${className} bg-gradient-to-br from-[#4262ff] to-indigo-600 text-white font-extrabold flex items-center justify-center uppercase shadow-xs text-[10px]`}
         title={title || name}
       >
@@ -1295,7 +1295,7 @@ export default function Board() {
             aria-label="Go to dashboard"
             title="Go to Dashboard"
           >
-            <span className="mobile-workspace-symbol"><Layers3 size={22} /></span>
+            <span className="mobile-workspace-symbol"><KanbanMark /></span>
           </button>
 
           <div className={`h-4 w-px ${theme === "dark" ? "bg-[#1e293b]" : "bg-gray-200"}`} />
@@ -1539,10 +1539,10 @@ export default function Board() {
           {user ? (
             <div className={`workspace-mobile-account flex items-center gap-2.5 px-3 py-1 rounded-xl border ${theme === "dark" ? "bg-[#1e293b] border-[#334155]" : "bg-gray-50 border-gray-200"
               }`}>
-              <AvatarImage 
-                src={user.avatarUrl} 
-                name={user.name} 
-                className="w-6 h-6 rounded-full object-cover" 
+              <AvatarImage
+                src={user.avatarUrl}
+                name={user.name}
+                className="w-6 h-6 rounded-full object-cover"
               />
               <span className={`text-xs font-semibold ${theme === "dark" ? "text-slate-200" : "text-slate-700"}`}>{user.name}</span>
               <button
@@ -1567,9 +1567,9 @@ export default function Board() {
       {user?.email === "guest@kanban.demo" && isOwner && <div className="guest-session-notice" role="note"><span><strong>Guest session</strong> · Logging out of this board deletes it. Sign in to keep it.</span><button onClick={() => handleLogin(boardId || "")}>Sign in to save</button></div>}
       <section id="board-overview" className="board-overview" aria-label="Board overview">
         <div className="overview-copy">
-          
+
           <h2>{boardName}</h2>
-          
+
           <div className="overview-meta"><span><Layers3 size={14} /> {columns.length} columns</span><span><UserPlus size={14} /> {swimlanes.length || 1} swimlanes</span><span className="overview-access">{isOwner ? "Owner" : canEdit ? "Editor" : "View only"}</span></div>
         </div>
         <div className="overview-action">
@@ -1844,7 +1844,7 @@ export default function Board() {
                   {/* Swimlane Section Title Row with Collapsible Chevron */}
                   {swimlanes.length > 0 && (
                     <div className="workstream-heading flex items-center gap-2.5 py-1 group/swim">
-                      <button 
+                      <button
                         className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors p-0.5 cursor-pointer"
                         onClick={() => toggleSwimlane(swim)}
                         title={isCollapsed ? "Expand Swimlane" : "Collapse Swimlane"}
@@ -1852,7 +1852,7 @@ export default function Board() {
                         {isCollapsed ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
                       </button>
 
-                      <span 
+                      <span
                         onClick={() => {
                           if (canEdit) openRenameModal("Rename Swimlane", swim, (newName) => renameSwimlane(swim, newName));
                         }}
@@ -2380,7 +2380,7 @@ export default function Board() {
                                       // ถ้ายิง API ไม่ผ่าน ค่อยดึงข้อมูลเดิมจากเซิร์ฟเวอร์มาคืนค่า
                                       fetchBoardMembers();
                                     }
-                                    // **ถ้ายิงผ่าน (res.ok) ไม่ต้องเรียก fetchBoardMembers() แล้ว** 
+                                    // **ถ้ายิงผ่าน (res.ok) ไม่ต้องเรียก fetchBoardMembers() แล้ว**
                                     // เพราะ Optimistic Update ได้อัปเดต state อย่างถูกต้องเรียบร้อยแล้ว
                                   } catch (err) {
                                     console.error("Error updating role:", err);
@@ -2530,8 +2530,8 @@ export default function Board() {
       {showGuestShareModal && (
         <div role="dialog" aria-modal="true" aria-label="Keep or delete guest board" className="fixed inset-0 bg-slate-950/70 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
           <div className={`max-w-md w-full rounded-3xl p-6 border shadow-2xl relative overflow-hidden ${
-            theme === "dark" 
-              ? "bg-[#1e293b]/95 border-[#334155] text-slate-100 shadow-blue-950/40" 
+            theme === "dark"
+              ? "bg-[#1e293b]/95 border-[#334155] text-slate-100 shadow-blue-950/40"
               : "bg-white/95 border-gray-200 text-slate-900 shadow-slate-400/20"
           }`}>
             <div className="absolute -top-16 -right-16 w-36 h-36 bg-blue-500/20 rounded-full blur-2xl pointer-events-none" />
@@ -2542,7 +2542,7 @@ export default function Board() {
                   <UserPlus size={20} />
                 </div>
               </div>
-              <button 
+              <button
                 onClick={() => setShowGuestShareModal(false)}
                 className="p-1 rounded-xl hover:bg-gray-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
               >
@@ -2579,8 +2579,8 @@ export default function Board() {
       {showGuestExitModal && (
         <div role="dialog" aria-modal="true" aria-label="Keep or delete guest board" className="fixed inset-0 bg-slate-950/70 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
           <div className={`max-w-md w-full rounded-3xl p-6 border shadow-2xl relative overflow-hidden ${
-            theme === "dark" 
-              ? "bg-[#1e293b]/95 border-[#334155] text-slate-100 shadow-rose-950/30" 
+            theme === "dark"
+              ? "bg-[#1e293b]/95 border-[#334155] text-slate-100 shadow-rose-950/30"
               : "bg-white/95 border-gray-200 text-slate-900 shadow-slate-400/20"
           }`}>
             <div className="absolute -top-16 -right-16 w-36 h-36 bg-amber-500/20 rounded-full blur-2xl pointer-events-none" />
@@ -2591,7 +2591,7 @@ export default function Board() {
                   <AlertCircle size={20} />
                 </div>
               </div>
-              <button 
+              <button
                 disabled={isDiscardingGuestBoard}
                 onClick={() => { setShowGuestExitModal(false); setGuestLogoutRequested(false); }}
                 className="p-1 rounded-xl hover:bg-gray-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"

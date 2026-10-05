@@ -16,28 +16,38 @@ type User struct {
 
 // Board represents a single Kanban board
 type Board struct {
-	ID          string `gorm:"primarykey;type:uuid" json:"ID"`
-	Name        string `json:"Name"`
-	OwnerID     uint   `json:"OwnerID"` // Who created the board
-	Columns     string `gorm:"default:'TODO,DOING,DONE'" json:"Columns"`
-	Swimlanes   string `gorm:"default:''" json:"Swimlanes"`
-	AccessLevel string `gorm:"default:'edit'" json:"AccessLevel"`
-	Background  string `gorm:"default:'default'" json:"Background"`
-	Cards       []Card `gorm:"foreignKey:BoardID" json:"Cards"`
+	ID           string `gorm:"primarykey;type:uuid" json:"ID"`
+	Name         string `json:"Name"`
+	OwnerID      uint   `json:"OwnerID"` // Who created the board
+	Columns      string `gorm:"default:'TODO,DOING,DONE'" json:"Columns"`
+	Swimlanes    string `gorm:"default:''" json:"Swimlanes"`
+	AccessLevel  string `gorm:"default:'edit'" json:"AccessLevel"`
+	Background   string `gorm:"default:'default'" json:"Background"`
+	Type         string `gorm:"column:board_type;default:'kanban'" json:"Type"`
+	SprintName   string `gorm:"default:''" json:"SprintName"`
+	SprintStart  string `gorm:"default:''" json:"SprintStart"`
+	SprintEnd    string `gorm:"default:''" json:"SprintEnd"`
+	SprintStatus string `gorm:"default:'planning'" json:"SprintStatus"`
+	Cards        []Card `gorm:"foreignKey:BoardID" json:"Cards"`
 }
 
 // Card represents a task card
 type Card struct {
-	ID          uint    `gorm:"primarykey" json:"ID"`
-	BoardID     string  `gorm:"type:uuid;index" json:"BoardID"`
-	Title       string  `json:"Title"`
-	Description string  `gorm:"default:''" json:"Description"`
-	DueDate     string  `gorm:"default:''" json:"DueDate"`
-	Checklist   string  `gorm:"default:''" json:"Checklist"`
-	List        string  `gorm:"default:'TODO'" json:"List"` // TODO, DOING, DONE
-	Swimlane    string  `gorm:"default:'Untitled'" json:"Swimlane"`
-	Position    float64 `gorm:"default:0" json:"Position"`
-	Tags        string  `gorm:"default:''" json:"Tags"` // Comma-separated tags e.g. "Bug,Urgent"
+	ID           uint    `gorm:"primarykey" json:"ID"`
+	BoardID      string  `gorm:"type:uuid;index" json:"BoardID"`
+	Title        string  `json:"Title"`
+	Description  string  `gorm:"default:''" json:"Description"`
+	DueDate      string  `gorm:"default:''" json:"DueDate"`
+	StartDate    string  `gorm:"default:''" json:"StartDate"`
+	Dependencies string  `gorm:"default:''" json:"Dependencies"`
+	ParentID     string  `gorm:"default:''" json:"ParentID"`
+	StoryPoints  int     `gorm:"default:0" json:"StoryPoints"`
+	InSprint     bool    `gorm:"default:false" json:"InSprint"`
+	Checklist    string  `gorm:"default:''" json:"Checklist"`
+	List         string  `gorm:"default:'TODO'" json:"List"` // TODO, DOING, DONE
+	Swimlane     string  `gorm:"default:'Untitled'" json:"Swimlane"`
+	Position     float64 `gorm:"default:0" json:"Position"`
+	Tags         string  `gorm:"default:''" json:"Tags"` // Comma-separated tags e.g. "Bug,Urgent"
 }
 
 // BoardMember records shared access and recent visits

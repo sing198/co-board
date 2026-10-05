@@ -18,22 +18,35 @@ import {
   arrayMove
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Plus, Link as LinkIcon, Edit2, Trash2, LogOut, AlertCircle, Wifi, WifiOff, X, ChevronDown, ChevronRight, Sun, Moon, UserPlus, Globe, Code, Eye, Bell, Check, ArrowLeft, Download, Search, Tag, FileText, Image, Calendar, Clock, CheckSquare, Palette, LayoutDashboard, Layers3 } from "lucide-react";
+import { Plus, Link as LinkIcon, Edit2, Trash2, LogOut, AlertCircle, Wifi, WifiOff, X, ChevronDown, ChevronRight, Sun, Moon, UserPlus, Globe, Code, Eye, Bell, Check, ArrowLeft, Download, Search, Tag, FileText, Image, Calendar, Clock, CheckSquare, Palette, LayoutDashboard, Layers3, GanttChart, Network, Timer } from "lucide-react";
 import { toPng } from "html-to-image";
 
 import { useWebSocket } from "../useWebSocket";
+import type { Card } from "../useWebSocket";
 import { useAuth } from "../useAuth";
 import { useTheme } from "../useTheme";
 import { useNotifications } from "../useNotifications";
 import { API_URL } from "../config";
 import WorkspaceSidebar, { KanbanMark } from "../components/WorkspaceSidebar";
+import BoardTaskViews from "../components/BoardTaskViews";
+import BoardCanvasViews from "../components/BoardCanvasViews";
+import ScrumBoard from "../components/ScrumBoard";
+import TaskPlanningFields from "../components/TaskPlanningFields";
+import CreateTaskDialog from "../components/CreateTaskDialog";
+import type { NewTaskDetails } from "../components/CreateTaskDialog";
+import { defaultBoardView, isBoardView } from "../boardFormats";
+import type { BoardView } from "../boardFormats";
+import { dueBucket, localDate } from "../boardDates";
+
+const VIEW_LABELS: Record<BoardView, string> = { board: "Kanban", list: "Table", due: "Due dates", calendar: "Calendar", timeline: "Timeline", mindmap: "Mind Map", scrum: "Sprint" };
+const VIEW_HINTS: Record<BoardView, string> = { board: "Columns show progress · Swimlanes group related tasks", list: "Every task in one place", due: "See what's due next", calendar: "Plan tasks on a monthly calendar", timeline: "Schedule work over time and see dependencies", mindmap: "Connect ideas into a branching plan", scrum: "Plan and track a sprint with a fixed time window" };
 
 function AvatarImage({ src, name, className, title }: { src: string; name: string; className: string; title?: string }) {
   const [failed, setFailed] = useState(false);
   if (failed || !src) {
     return (
       <div
-        className={`${className} bg-gradient-to-br from-[#a24d2e] to-[#96712e] text-white font-extrabold flex items-center justify-center uppercase shadow-xs text-[10px]`}
+        className={`${className} bg-gradient-to-br from-[#4f63ef] to-[#6366f1] text-white font-extrabold flex items-center justify-center uppercase shadow-xs text-[10px]`}
         title={title || name}
       >
         {name ? name[0].toUpperCase() : "U"}
@@ -55,43 +68,43 @@ function AvatarImage({ src, name, className, title }: { src: string; name: strin
 const COLUMN_STYLES = [
   {
     // Column 1: TODO (Neutral Grey)
-    headerPill: "bg-[#d9c7a4] text-[#4a3a26] font-bold px-3 py-1 rounded-md shadow-2xs",
-    cardBorder: "border-2 border-[#c9b48a] hover:border-[#a08d6b]",
+    headerPill: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 font-bold px-3 py-1 rounded-md",
+    cardBorder: "border border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-500",
   },
   {
     // Column 2: DOING (Soft Pastel Blue)
-    headerPill: "bg-[#c9a86b] text-[#57401d] font-bold px-3 py-1 rounded-md shadow-2xs",
-    cardBorder: "border-2 border-[#c9a86b] hover:border-[#d9a83f]",
+    headerPill: "bg-indigo-50 text-indigo-600 dark:bg-indigo-950/40 dark:text-indigo-300 font-bold px-3 py-1 rounded-md",
+    cardBorder: "border border-slate-200 dark:border-slate-700 hover:border-indigo-300 dark:hover:border-indigo-500",
   },
   {
     // Column 3: DONE (Soft Pastel Green)
-    headerPill: "bg-[#a9b87f] text-[#42502a] font-bold px-3 py-1 rounded-md shadow-2xs",
-    cardBorder: "border-2 border-[#a9b87f] hover:border-[#8a9a5b]",
+    headerPill: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 font-bold px-3 py-1 rounded-md",
+    cardBorder: "border border-slate-200 dark:border-slate-700 hover:border-emerald-300 dark:hover:border-emerald-500",
   },
   {
     // Column 4: Purple/Violet
-    headerPill: "bg-[#c9a68f] text-[#5a3a1a] font-bold px-3 py-1 rounded-md shadow-2xs",
-    cardBorder: "border-2 border-[#c9a68f] hover:border-[#c9946c]",
+    headerPill: "bg-violet-50 text-violet-600 dark:bg-violet-950/40 dark:text-violet-300 font-bold px-3 py-1 rounded-md",
+    cardBorder: "border border-slate-200 dark:border-slate-700 hover:border-violet-300 dark:hover:border-violet-500",
   },
   {
     // Column 5: Warm Yellow/Amber
-    headerPill: "bg-[#e3bd68] text-[#713f12] font-bold px-3 py-1 rounded-md shadow-2xs",
-    cardBorder: "border-2 border-[#e3bd68] hover:border-[#c9a227]",
+    headerPill: "bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 font-bold px-3 py-1 rounded-md",
+    cardBorder: "border border-slate-200 dark:border-slate-700 hover:border-amber-300 dark:hover:border-amber-500",
   },
   {
     // Column 6: Coral/Pink
-    headerPill: "bg-[#d99a7e] text-[#7f1d1d] font-bold px-3 py-1 rounded-md shadow-2xs",
-    cardBorder: "border-2 border-[#d99a7e] hover:border-[#c97b5a]",
+    headerPill: "bg-rose-50 text-rose-600 dark:bg-rose-950/40 dark:text-rose-300 font-bold px-3 py-1 rounded-md",
+    cardBorder: "border border-slate-200 dark:border-slate-700 hover:border-rose-300 dark:hover:border-rose-500",
   },
 ];
 
 const SWIMLANE_TAG_COLORS = [
-  "bg-[#ecd9a0] text-[#713f12] font-bold border border-[#ecd9a0]",
-  "bg-[#e3bd94] text-[#7c2d12] font-bold border border-[#e3bd94]",
-  "bg-[#d2dbb4] text-[#42502a] font-bold border border-[#d2dbb4]",
-  "bg-[#d4dcc0] text-[#57401d] font-bold border border-[#d4dcc0]",
-  "bg-[#e3cdc0] text-[#5a3a1a] font-bold border border-[#e3cdc0]",
-  "bg-[#e8cfc0] text-[#5c2a1a] font-bold border border-[#e8cfc0]",
+  "bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 font-bold border border-blue-100 dark:border-blue-900",
+  "bg-violet-50 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300 font-bold border border-violet-100 dark:border-violet-900",
+  "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 font-bold border border-emerald-100 dark:border-emerald-900",
+  "bg-cyan-50 text-cyan-700 dark:bg-cyan-950/40 dark:text-cyan-300 font-bold border border-cyan-100 dark:border-cyan-900",
+  "bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 font-bold border border-amber-100 dark:border-amber-900",
+  "bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 font-bold border border-rose-100 dark:border-rose-900",
 ];
 
 const adjustHeight = (el: HTMLTextAreaElement | null) => {
@@ -102,21 +115,21 @@ const adjustHeight = (el: HTMLTextAreaElement | null) => {
 
 const TAG_PRESETS = [
   { name: "Bug", bg: "bg-rose-500/15 dark:bg-rose-950/40", text: "text-rose-600 dark:text-rose-400", border: "border-rose-200 dark:border-rose-800/60" },
-  { name: "Feature", bg: "bg-[#a24d2e]/15 dark:bg-[#2a1a0d]/40", text: "text-[#8a4526] dark:text-[#c97a4a]", border: "border-[#ecd3b4] dark:border-[#6b3218]/60" },
+  { name: "Feature", bg: "bg-indigo-50 dark:bg-indigo-950/40", text: "text-indigo-600 dark:text-indigo-300", border: "border-indigo-100 dark:border-indigo-800/60" },
   { name: "Urgent", bg: "bg-amber-500/15 dark:bg-amber-950/40", text: "text-amber-600 dark:text-amber-400", border: "border-amber-200 dark:border-amber-800/60" },
-  { name: "Design", bg: "bg-[#a06a44]/15 dark:bg-[#2e1c0e]/40", text: "text-[#8a5636] dark:text-[#c9946c]", border: "border-[#ecd3c0] dark:border-[#5c3a22]/60" },
-  { name: "Docs", bg: "bg-[#7f8f5a]/15 dark:bg-[#1e2410]/40", text: "text-[#6b7c4a] dark:text-[#9aab6d]", border: "border-[#d6ddba] dark:border-[#42502a]/60" },
+  { name: "Design", bg: "bg-violet-50 dark:bg-violet-950/40", text: "text-violet-600 dark:text-violet-300", border: "border-violet-100 dark:border-violet-800/60" },
+  { name: "Docs", bg: "bg-emerald-50 dark:bg-emerald-950/40", text: "text-emerald-700 dark:text-emerald-300", border: "border-emerald-100 dark:border-emerald-800/60" },
 ];
 
 const COLOR_PALETTES = [
   { bg: "bg-rose-500/15 dark:bg-rose-950/40", text: "text-rose-600 dark:text-rose-400", border: "border-rose-200 dark:border-rose-800/60" },
-  { bg: "bg-[#a24d2e]/15 dark:bg-[#2a1a0d]/40", text: "text-[#8a4526] dark:text-[#c97a4a]", border: "border-[#ecd3b4] dark:border-[#6b3218]/60" },
+  { bg: "bg-indigo-50 dark:bg-indigo-950/40", text: "text-indigo-600 dark:text-indigo-300", border: "border-indigo-100 dark:border-indigo-800/60" },
   { bg: "bg-amber-500/15 dark:bg-amber-950/40", text: "text-amber-600 dark:text-amber-400", border: "border-amber-200 dark:border-amber-800/60" },
-  { bg: "bg-[#a06a44]/15 dark:bg-[#2e1c0e]/40", text: "text-[#8a5636] dark:text-[#c9946c]", border: "border-[#ecd3c0] dark:border-[#5c3a22]/60" },
-  { bg: "bg-[#7f8f5a]/15 dark:bg-[#1e2410]/40", text: "text-[#6b7c4a] dark:text-[#9aab6d]", border: "border-[#d6ddba] dark:border-[#42502a]/60" },
-  { bg: "bg-[#7f8f5a]/15 dark:bg-[#1e2410]/40", text: "text-[#6b7c4a] dark:text-[#a3b26f]", border: "border-[#d6ddba] dark:border-[#42502a]/60" },
-  { bg: "bg-[#b06a56]/15 dark:bg-[#331a10]/40", text: "text-[#985842] dark:text-[#d99a80]", border: "border-[#f0d5c4] dark:border-[#6b3a28]/60" },
-  { bg: "bg-[#a5823a]/15 dark:bg-[#2a1f0a]/40", text: "text-[#96712e] dark:text-[#c9a86b]", border: "border-[#e8d5a8] dark:border-[#5f4718]/60" },
+  { bg: "bg-violet-50 dark:bg-violet-950/40", text: "text-violet-600 dark:text-violet-300", border: "border-violet-100 dark:border-violet-800/60" },
+  { bg: "bg-emerald-50 dark:bg-emerald-950/40", text: "text-emerald-700 dark:text-emerald-300", border: "border-emerald-100 dark:border-emerald-800/60" },
+  { bg: "bg-cyan-50 dark:bg-cyan-950/40", text: "text-cyan-700 dark:text-cyan-300", border: "border-cyan-100 dark:border-cyan-800/60" },
+  { bg: "bg-pink-50 dark:bg-pink-950/40", text: "text-pink-600 dark:text-pink-300", border: "border-pink-100 dark:border-pink-800/60" },
+  { bg: "bg-blue-50 dark:bg-blue-950/40", text: "text-blue-600 dark:text-blue-300", border: "border-blue-100 dark:border-blue-800/60" },
 ];
 
 const getTagColor = (name: string) => {
@@ -134,32 +147,32 @@ const BOARD_BACKGROUND_PRESETS: Record<string, { name: string; class: string; pr
   default: {
     name: "Clean Slate",
     class: "",
-    previewBg: "from-stone-300 to-stone-500",
+    previewBg: "from-slate-300 to-slate-500",
   },
   cyberpunk: {
     name: "Cyberpunk Midnight",
-    class: "bg-gradient-to-br from-[#f5ecd5]/80 via-[#f6ead9]/60 to-[#f6ead9]/70 dark:from-[#140d07] dark:via-[#1c1309] dark:to-[#2a1f0a]",
-    previewBg: "from-[#c9a86b] to-[#8a5636]",
+    class: "bg-gradient-to-br from-indigo-50/80 via-slate-50/60 to-violet-50/70 dark:from-[#0f172a] dark:via-[#172033] dark:to-indigo-950",
+    previewBg: "from-indigo-500 to-violet-700",
   },
   sunset: {
     name: "Sunset Amber",
-    class: "bg-gradient-to-br from-amber-50/80 via-orange-50/60 to-rose-50/70 dark:from-[#1c1309] dark:via-[#33200f] dark:to-[#451a03]",
+    class: "bg-gradient-to-br from-amber-50/80 via-orange-50/60 to-rose-50/70 dark:from-[#0f172a] dark:via-orange-950 dark:to-rose-950",
     previewBg: "from-amber-400 to-rose-500",
   },
   aurora: {
     name: "Emerald Aurora",
-    class: "bg-gradient-to-br from-[#eef0da]/80 via-[#eef0da]/60 to-[#eef0da]/70 dark:from-[#42502a] dark:via-[#1c1309] dark:to-[#1e2410]",
-    previewBg: "from-[#9aab6d] to-[#6b7c4a]",
+    class: "bg-gradient-to-br from-emerald-50/80 via-slate-50/60 to-teal-50/70 dark:from-emerald-950 dark:via-[#0f172a] dark:to-teal-950",
+    previewBg: "from-emerald-400 to-teal-600",
   },
   ocean: {
     name: "Ocean Breeze",
-    class: "bg-gradient-to-br from-[#f5ecd5]/80 via-[#f7efdc]/60 to-[#f5ecd5]/70 dark:from-[#57401d] dark:via-[#1c1309] dark:to-[#57401d]",
-    previewBg: "from-[#d9a83f] to-[#8a4526]",
+    class: "bg-gradient-to-br from-sky-50/80 via-slate-50/60 to-blue-50/70 dark:from-sky-950 dark:via-[#0f172a] dark:to-blue-950",
+    previewBg: "from-sky-400 to-blue-600",
   },
   pastel: {
     name: "Pastel Lavender",
-    class: "bg-gradient-to-br from-[#f6ead9]/80 via-rose-50/60 to-[#f6ead9]/70 dark:from-[#33200f] dark:via-[#1c1309] dark:to-[#3a2410]",
-    previewBg: "from-[#d99a80] to-[#a06a44]",
+    class: "bg-gradient-to-br from-violet-50/80 via-rose-50/60 to-indigo-50/70 dark:from-violet-950 dark:via-[#0f172a] dark:to-indigo-950",
+    previewBg: "from-violet-300 to-indigo-400",
   },
 };
 
@@ -167,16 +180,16 @@ const getDueDateBadge = (dueDateStr?: string) => {
   if (!dueDateStr) return null;
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const target = new Date(dueDateStr);
-  target.setHours(0, 0, 0, 0);
-  const diffDays = Math.ceil((target.getTime() - today.getTime()) / (1000 * 3600 * 24));
+  const target = localDate(dueDateStr);
+  if (!target) return null;
+  const diffDays = Math.round((Date.UTC(target.getFullYear(), target.getMonth(), target.getDate()) - Date.UTC(today.getFullYear(), today.getMonth(), today.getDate())) / 86_400_000);
 
   if (diffDays < 0) {
-    return { label: `Overdue (${dueDateStr})`, bg: "bg-rose-500/10 text-rose-500 border-rose-500/20" };
+    return { label: `Overdue (${dueDateStr})`, bg: "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/30 dark:text-rose-300 dark:border-rose-800/60" };
   } else if (diffDays <= 1) {
-    return { label: `Due Soon (${dueDateStr})`, bg: "bg-amber-500/10 text-amber-500 border-amber-500/20" };
+    return { label: `Due Soon (${dueDateStr})`, bg: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-300 dark:border-amber-800/60" };
   } else {
-    return { label: dueDateStr, bg: "bg-[#a24d2e]/10 text-[#a24d2e] border-[#a24d2e]/20" };
+    return { label: dueDateStr, bg: "bg-[#4f63ef]/10 text-[#4f63ef] dark:text-[#a5b4fc] border-[#4f63ef]/20" };
   }
 };
 
@@ -240,7 +253,7 @@ function DraggableCard({
       <div
         ref={setNodeRef}
         style={style}
-        className={`bg-white dark:bg-[#2a2013] border-2 border-[#a24d2e] p-4 rounded-2xl shadow-lg w-full max-w-full flex flex-col gap-3`}
+        className={`bg-white dark:bg-[#172033] border-2 border-[#4f63ef] p-4 rounded-2xl shadow-lg w-full max-w-full flex flex-col gap-3`}
         onPointerDown={(e) => e.stopPropagation()}
         onMouseDown={(e) => e.stopPropagation()}
       >
@@ -264,7 +277,7 @@ function DraggableCard({
               setIsEditing(false);
             }
           }}
-          className="w-full bg-transparent border-none text-stone-900 dark:text-stone-100 focus:outline-none text-sm font-semibold leading-relaxed resize-none overflow-hidden [overflow-wrap:anywhere] [word-break:break-word] whitespace-pre-wrap pr-6"
+          className="w-full bg-transparent border-none text-slate-900 dark:text-slate-100 focus:outline-none text-sm font-semibold leading-relaxed resize-none overflow-hidden [overflow-wrap:anywhere] [word-break:break-word] whitespace-pre-wrap pr-6"
         />
 
         {swimlaneName && (
@@ -289,16 +302,16 @@ function DraggableCard({
           onOpenDetail(cardData);
         }
       }}
-      className={`board-task-card bg-white dark:bg-[#2a2013] border ${colStyle.cardBorder} p-4 rounded-2xl ${isTagPopoverOpen ? "cursor-default" : "cursor-pointer"} group transition-all duration-150 w-full max-w-full flex flex-col gap-2.5 shadow-xs hover:shadow-md relative`}
+      className={`board-task-card bg-white dark:bg-[#172033] border ${colStyle.cardBorder} p-4 rounded-2xl ${isTagPopoverOpen ? "cursor-default" : "cursor-pointer"} group transition-all duration-150 w-full max-w-full flex flex-col gap-2.5 shadow-xs hover:shadow-md relative`}
     >
-      <div className="task-eyebrow"><span>TSK-{String(id).padStart(3, "0")}</span><span className="task-status-dot" style={{ background: ["#a08d6b", "#96712e", "#7f8f5a"][columnIndex % 3] }} /></div>
-      <button type="button" aria-label={`Open task: ${title}`} onPointerDown={e => e.stopPropagation()} onKeyDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); onOpenDetail?.(cardData); }} className={`task-title-button text-left text-sm font-semibold text-stone-800 dark:text-stone-100 w-full min-w-0 [overflow-wrap:anywhere] [word-break:break-word] whitespace-pre-wrap leading-relaxed ${canEdit ? "pr-6" : ""}`}>
+      <div className="task-eyebrow"><span>TSK-{String(id).padStart(3, "0")}</span><span className="task-status-dot" style={{ background: ["#94a3b8", "#6366f1", "#10b981"][columnIndex % 3] }} /></div>
+      <button type="button" aria-label={`Open task: ${title}`} onPointerDown={e => e.stopPropagation()} onKeyDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); onOpenDetail?.(cardData); }} className={`task-title-button text-left text-sm font-semibold text-slate-800 dark:text-slate-100 w-full min-w-0 [overflow-wrap:anywhere] [word-break:break-word] whitespace-pre-wrap leading-relaxed ${canEdit ? "pr-6" : ""}`}>
         {title}
       </button>
 
       {cardData.Description && <p className="task-description">{cardData.Description}</p>}
       {canEdit && (
-        <div className="absolute top-3 right-3 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-white/90 dark:bg-stone-800/90 backdrop-blur-sm p-1 rounded-lg border border-stone-200 dark:border-stone-700 shadow-xs z-10">
+        <div className="absolute top-3 right-3 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-white/90 dark:bg-slate-800/90 backdrop-blur-sm p-1 rounded-lg border border-slate-200 dark:border-slate-700 shadow-xs z-10">
           <button
             onPointerDown={(e) => e.stopPropagation()}
             onMouseDown={(e) => e.stopPropagation()}
@@ -308,7 +321,7 @@ function DraggableCard({
               editBase.current = title;
               setIsEditing(true);
             }}
-            className="p-1 text-stone-400 hover:text-[#a24d2e] dark:hover:text-[#d9a83f] rounded transition-colors"
+            className="p-1 text-slate-400 hover:text-[#4f63ef] dark:hover:text-[#a5b4fc] rounded transition-colors"
             aria-label="Rename Task" title="Rename Task"
           >
             <Edit2 size={13} />
@@ -320,7 +333,7 @@ function DraggableCard({
               e.stopPropagation();
               onDelete(id);
             }}
-            className="p-1 text-stone-400 hover:text-rose-600 dark:hover:text-rose-400 rounded transition-colors"
+            className="p-1 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 rounded transition-colors"
             aria-label="Delete Task" title="Delete Task"
           >
             <Trash2 size={13} />
@@ -345,8 +358,8 @@ function DraggableCard({
                 return (
                   <span className={`px-2 py-0.5 rounded-lg text-[10px] font-extrabold border flex items-center gap-1 shadow-2xs ${
                     done === items.length
-                      ? "bg-[#7f8f5a]/10 text-[#7f8f5a] border-[#7f8f5a]/20"
-                      : "bg-stone-500/10 text-stone-400 border-stone-500/20"
+                      ? "bg-[#10b981]/10 text-[#10b981] border-[#10b981]/20"
+                      : "bg-slate-500/10 text-slate-400 border-slate-500/20"
                   }`}>
                     <CheckSquare size={10} /> {done}/{items.length}
                   </span>
@@ -384,7 +397,7 @@ function DraggableCard({
                 e.stopPropagation();
                 setIsTagPopoverOpen(!isTagPopoverOpen);
               }}
-              className={`p-1 rounded-md text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-800 transition-opacity flex items-center gap-0.5 text-[10px] font-bold cursor-pointer ${
+              className={`p-1 rounded-md text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-opacity flex items-center gap-0.5 text-[10px] font-bold cursor-pointer ${
                 isTagPopoverOpen ? "opacity-100" : "opacity-0 group-hover:opacity-100"
               }`}
               title="Add / Edit Tags"
@@ -415,9 +428,9 @@ function DraggableCard({
                 <div
                   onPointerDown={(e) => e.stopPropagation()}
                   onMouseDown={(e) => e.stopPropagation()}
-                  className="absolute left-0 top-full mt-2 w-48 p-2.5 bg-white dark:bg-[#2a2013] border border-stone-200 dark:border-stone-700 rounded-2xl shadow-2xl z-50 flex flex-col gap-1.5 text-xs animate-in fade-in zoom-in-95 duration-100 max-h-72 overflow-y-auto"
+                  className="absolute left-0 top-full mt-2 w-48 p-2.5 bg-white dark:bg-[#172033] border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl z-50 flex flex-col gap-1.5 text-xs animate-in fade-in zoom-in-95 duration-100 max-h-72 overflow-y-auto"
                 >
-                  <div className="text-[10px] font-bold text-stone-400 uppercase tracking-wider px-1 pb-1 border-b border-stone-100 dark:border-stone-800">
+                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-1 pb-1 border-b border-slate-100 dark:border-slate-800">
                     Select Tags
                   </div>
 
@@ -437,7 +450,7 @@ function DraggableCard({
                           }
                           onUpdateTags(id, newTags.join(","));
                         }}
-                        className={`flex items-center justify-between px-2.5 py-1.5 rounded-xl text-[11px] font-bold border transition-all cursor-pointer ${preset.bg} ${preset.text} ${preset.border} ${hasTag ? "ring-2 ring-[#a24d2e] shadow-xs" : "opacity-80 hover:opacity-100"}`}
+                        className={`flex items-center justify-between px-2.5 py-1.5 rounded-xl text-[11px] font-bold border transition-all cursor-pointer ${preset.bg} ${preset.text} ${preset.border} ${hasTag ? "ring-2 ring-[#4f63ef] shadow-xs" : "opacity-80 hover:opacity-100"}`}
                       >
                         <span>{preset.name}</span>
                         {hasTag && <Check size={12} />}
@@ -456,7 +469,7 @@ function DraggableCard({
                           const newTags = cardTags.filter(t => t.toLowerCase() !== customTag.toLowerCase());
                           onUpdateTags(id, newTags.join(","));
                         }}
-                        className={`flex items-center justify-between px-2.5 py-1.5 rounded-xl text-[11px] font-bold border transition-all cursor-pointer ring-2 ring-[#a24d2e] shadow-xs ${colorObj?.bg || ''} ${colorObj?.text || ''} ${colorObj?.border || ''}`}
+                        className={`flex items-center justify-between px-2.5 py-1.5 rounded-xl text-[11px] font-bold border transition-all cursor-pointer ring-2 ring-[#4f63ef] shadow-xs ${colorObj?.bg || ''} ${colorObj?.text || ''} ${colorObj?.border || ''}`}
                       >
                         <span>{customTag}</span>
                         <X size={12} className="hover:text-rose-500" />
@@ -465,8 +478,8 @@ function DraggableCard({
                   })}
 
                   {/* Add Custom Tag Input Section */}
-                  <div className="pt-1.5 border-t border-stone-100 dark:border-stone-800 flex flex-col gap-1">
-                    <div className="text-[10px] font-bold text-stone-400 uppercase tracking-wider px-1">
+                  <div className="pt-1.5 border-t border-slate-100 dark:border-slate-800 flex flex-col gap-1">
+                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-1">
                       Custom Tag
                     </div>
                     <div className="flex items-center gap-1">
@@ -485,7 +498,7 @@ function DraggableCard({
                             }
                           }
                         }}
-                        className="w-full bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-lg px-2 py-1 text-[11px] text-stone-900 dark:text-stone-100 focus:outline-none focus:border-[#a24d2e]"
+                        className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1 text-[11px] text-slate-900 dark:text-slate-100 focus:outline-none focus:border-[#4f63ef]"
                       />
                       <button
                         onClick={() => {
@@ -495,7 +508,7 @@ function DraggableCard({
                             setCustomTagInput("");
                           }
                         }}
-                        className="px-2 py-1 bg-[#a24d2e] hover:bg-[#8a4526] text-white text-[11px] font-bold rounded-lg transition-all cursor-pointer flex-shrink-0"
+                        className="px-2 py-1 bg-[#4f63ef] hover:bg-[#4051d6] text-white text-[11px] font-bold rounded-lg transition-all cursor-pointer flex-shrink-0"
                       >
                         +
                       </button>
@@ -547,6 +560,8 @@ const decodeInviteRole = (tokenStr: string | null): "edit" | "view" | null => {
 
 export function CardDetailModal({
   card,
+  cards = [],
+  boardType = "kanban",
   canEdit,
   theme,
   swimlanes,
@@ -557,19 +572,23 @@ export function CardDetailModal({
   onDeleteCard,
 }: {
   card: any;
+  cards?: Card[];
+  boardType?: string;
   canEdit: boolean;
   theme: string;
   swimlanes: string[];
   columns: string[];
   onMove: (cardId: string, column: string) => void;
   onClose: () => void;
-  onEditDetail: (cardId: string, details: any, baseline?: Record<string,string>) => void;
+  onEditDetail: (cardId: string, details: any, baseline?: Record<string,string>) => boolean | void;
   onDeleteCard: (cardId: string, title: string) => void;
 }) {
-  const baseline = useRef<Record<string,string>>({title:card.Title || "",description:card.Description || "",dueDate:card.DueDate || "",checklist:card.Checklist || "",tags:card.Tags || "",swimlane:card.Swimlane || ""});
+  const baseline = useRef<Record<string,string>>({title:card.Title || "",description:card.Description || "",dueDate:card.DueDate || "",startDate:card.StartDate || "",dependencies:card.Dependencies || "",parentId:card.ParentID || "",storyPoints:String(card.StoryPoints || 0),inSprint:String(!!card.InSprint),checklist:card.Checklist || "",tags:card.Tags || "",swimlane:card.Swimlane || ""});
   const saveDetail = (id: string, changes: Record<string,string>) => {
-    onEditDetail(id, changes, { ...baseline.current });
+    const accepted = onEditDetail(id, changes, { ...baseline.current });
+    if (accepted === false) return false;
     Object.assign(baseline.current, changes);
+    return true;
   };
   const dialogRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -579,7 +598,6 @@ export function CardDetailModal({
   }, []);
   const [title, setTitle] = useState(card.Title || "");
   const [description, setDescription] = useState(card.Description || "");
-  const [dueDate, setDueDate] = useState(card.DueDate || "");
   const [checklist, setChecklist] = useState<Array<{ id: string; text: string; done: boolean }>>(() => {
     try {
       const parsed = card.Checklist ? JSON.parse(card.Checklist) : [];
@@ -604,14 +622,12 @@ export function CardDetailModal({
     }
   };
 
-  const badge = getDueDateBadge(dueDate);
-
   const rawSwim = (card.Swimlane || "").trim();
   const effectiveSwimlane = (rawSwim && rawSwim !== "Untitled" && swimlanes.includes(rawSwim)) ? rawSwim : (swimlanes.length > 0 ? swimlanes[0] : "Untitled");
 
   return (
     <div
-      className="fixed inset-0 bg-stone-950/70 backdrop-blur-md z-50 flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-150"
+      className="fixed inset-0 bg-slate-950/70 backdrop-blur-md z-50 flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-150"
       onClick={onClose}
     >
       <div
@@ -626,12 +642,12 @@ export function CardDetailModal({
           }
         }}
         className={`w-full max-w-2xl rounded-3xl border shadow-2xl p-6 flex flex-col gap-5 my-8 max-h-[90vh] overflow-y-auto ${
-          theme === "dark" ? "bg-[#2a2013] border-[#4a3a26] text-stone-100" : "bg-white border-stone-200 text-stone-800"
+          theme === "dark" ? "bg-[#172033] border-[#334155] text-slate-100" : "bg-white border-slate-200 text-slate-800"
         }`}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-start justify-between gap-4 border-b pb-4 border-stone-100 dark:border-stone-800">
+        <div className="flex items-start justify-between gap-4 border-b pb-4 border-slate-100 dark:border-slate-800">
           <div className="flex flex-col gap-1.5 flex-1 min-w-0">
             <input
               type="text"
@@ -639,19 +655,19 @@ export function CardDetailModal({
               readOnly={!canEdit}
               onChange={(e) => setTitle(e.target.value)}
               onBlur={handleSaveTitle}
-              className={`text-lg font-bold bg-transparent border-none focus:outline-none focus:ring-2 focus:ring-[#a24d2e] rounded-lg px-1 py-0.5 w-full ${
-                theme === "dark" ? "text-stone-100" : "text-stone-900"
+              className={`text-lg font-bold bg-transparent border-none focus:outline-none focus:ring-2 focus:ring-[#4f63ef] rounded-lg px-1 py-0.5 w-full ${
+                theme === "dark" ? "text-slate-100" : "text-slate-900"
               }`}
               aria-label="Task title" placeholder="Task title..."
             />
             <div className="flex items-center gap-2 text-xs">
               <span className={`px-2.5 py-0.5 rounded-lg font-bold ${
-                theme === "dark" ? "bg-stone-800 text-stone-300" : "bg-stone-100 text-stone-600"
+                theme === "dark" ? "bg-slate-800 text-slate-300" : "bg-slate-100 text-slate-600"
               }`}>
                 <label>Column: <select aria-label="Move task to column" disabled={!canEdit} value={card.List} onChange={event => onMove(cardId, event.target.value)} className="bg-transparent rounded px-1">{columns.map(column => <option key={column} value={column}>{column}</option>)}</select></label>
               </span>
               {swimlanes.length > 0 ? (
-                <div className="flex items-center gap-1 px-2.5 py-0.5 rounded-lg font-bold bg-amber-500/10 text-amber-500 border border-amber-500/20">
+                <div className="flex items-center gap-1 px-2.5 py-0.5 rounded-lg font-bold bg-indigo-50 text-indigo-700 border border-indigo-100 dark:bg-indigo-950/30 dark:text-indigo-300 dark:border-indigo-800/50">
                   <span className="opacity-75">Swimlane:</span>
                   <select
                     aria-label="Move task to swimlane"
@@ -664,14 +680,14 @@ export function CardDetailModal({
                     className="bg-transparent font-bold focus:outline-none cursor-pointer"
                   >
                     {swimlanes.map((s) => (
-                      <option key={s} value={s} className={theme === "dark" ? "bg-stone-800 text-stone-100" : "bg-white text-stone-800"}>
+                      <option key={s} value={s} className={theme === "dark" ? "bg-slate-800 text-slate-100" : "bg-white text-slate-800"}>
                         {s}
                       </option>
                     ))}
                   </select>
                 </div>
               ) : (
-                <span className="px-2.5 py-0.5 rounded-lg font-bold bg-amber-500/10 text-amber-500 border border-amber-500/20">
+                <span className="px-2.5 py-0.5 rounded-lg font-bold bg-indigo-50 text-indigo-700 border border-indigo-100 dark:bg-indigo-950/30 dark:text-indigo-300 dark:border-indigo-800/50">
                   Swimlane: {effectiveSwimlane}
                 </span>
               )}
@@ -681,42 +697,18 @@ export function CardDetailModal({
           <button
             aria-label="Close task details"
             onClick={onClose}
-            className="p-1.5 text-stone-400 hover:text-stone-600 dark:hover:text-stone-200 rounded-xl transition-colors cursor-pointer"
+            className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-xl transition-colors cursor-pointer"
           >
             <X size={20} />
           </button>
         </div>
 
-        {/* Due Date */}
-        <div className="flex items-center gap-4 flex-wrap">
-          <div className="flex items-center gap-2 text-xs font-bold">
-            <Calendar size={15} className="text-[#a24d2e]" />
-            <span>Due Date:</span>
-            <input
-              aria-label="Due date" type="date"
-              disabled={!canEdit}
-              value={dueDate}
-              onChange={(e) => {
-                setDueDate(e.target.value);
-                saveDetail(cardId, { dueDate: e.target.value });
-              }}
-              className={`px-3 py-1.5 rounded-xl border text-xs font-bold focus:outline-none ${
-                theme === "dark" ? "bg-stone-800 border-stone-700 text-stone-100" : "bg-stone-50 border-stone-200 text-stone-800"
-              }`}
-            />
-          </div>
-
-          {dueDate && badge && (
-            <span className={`px-3 py-1 rounded-xl text-xs font-extrabold border flex items-center gap-1.5 shadow-2xs ${badge.bg}`}>
-              <Clock size={13} /> {badge.label}
-            </span>
-          )}
-        </div>
+        <TaskPlanningFields card={card} cards={cards} boardType={boardType} canEdit={canEdit} onSave={changes => saveDetail(cardId, changes)} />
 
         {/* Description */}
         <div className="flex flex-col gap-2">
-          <div className="flex items-center gap-2 text-xs font-bold text-stone-400 uppercase tracking-wider">
-            <FileText size={14} className="text-[#a24d2e]" /> Description
+          <div className="flex items-center gap-2 text-xs font-bold text-slate-400 uppercase tracking-wider">
+            <FileText size={14} className="text-[#4f63ef] dark:text-[#a5b4fc]" /> Description
           </div>
           <textarea
             rows={3}
@@ -725,8 +717,8 @@ export function CardDetailModal({
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             onBlur={handleSaveDescription}
-            className={`w-full p-3 rounded-2xl border text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#a24d2e] leading-relaxed resize-y ${
-              theme === "dark" ? "bg-stone-900/60 border-stone-700 text-stone-100 placeholder:text-stone-500" : "bg-stone-50 border-stone-200 text-stone-800 placeholder:text-stone-400"
+            className={`w-full p-3 rounded-2xl border text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#4f63ef] leading-relaxed resize-y ${
+              theme === "dark" ? "bg-slate-900/60 border-slate-700 text-slate-100 placeholder:text-slate-500" : "bg-slate-50 border-slate-200 text-slate-800 placeholder:text-slate-400"
             }`}
           />
         </div>
@@ -734,20 +726,20 @@ export function CardDetailModal({
         {/* Checklist */}
         <div className="flex flex-col gap-3">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-xs font-bold text-stone-400 uppercase tracking-wider">
-              <CheckSquare size={14} className="text-[#7f8f5a]" /> Checklist
+            <div className="flex items-center gap-2 text-xs font-bold text-slate-400 uppercase tracking-wider">
+              <CheckSquare size={14} className="text-[#10b981]" /> Checklist
             </div>
             {checklist.length > 0 && (
-              <span className="text-xs font-bold text-[#7f8f5a]">
+              <span className="text-xs font-bold text-[#10b981]">
                 {Math.round((checklist.filter((i) => i.done).length / checklist.length) * 100)}%
               </span>
             )}
           </div>
 
           {checklist.length > 0 && (
-            <div className="w-full h-2 bg-stone-100 dark:bg-stone-800 rounded-full overflow-hidden">
+            <div className="w-full h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
               <div
-                className="h-full bg-[#7f8f5a] transition-all duration-300 rounded-full"
+                className="h-full bg-[#10b981] transition-all duration-300 rounded-full"
                 style={{ width: `${(checklist.filter((i) => i.done).length / checklist.length) * 100}%` }}
               />
             </div>
@@ -765,9 +757,9 @@ export function CardDetailModal({
                     setChecklist(updated);
                     saveDetail(cardId, { checklist: JSON.stringify(updated) });
                   }}
-                  className="w-4 h-4 rounded text-[#8a4526] accent-[#8a4526] cursor-pointer"
+                  className="w-4 h-4 rounded text-[#4051d6] accent-[#4051d6] cursor-pointer"
                 />
-                <span className={`text-xs font-medium flex-1 ${item.done ? "line-through text-stone-400 dark:text-stone-500" : "text-stone-800 dark:text-stone-200"}`}>
+                <span className={`text-xs font-medium flex-1 ${item.done ? "line-through text-slate-400 dark:text-slate-500" : "text-slate-800 dark:text-slate-200"}`}>
                   {item.text}
                 </span>
                 {canEdit && (
@@ -778,7 +770,7 @@ export function CardDetailModal({
                       setChecklist(updated);
                       saveDetail(cardId, { checklist: JSON.stringify(updated) });
                     }}
-                    className="text-stone-400 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity p-0.5 cursor-pointer"
+                    className="text-slate-400 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity p-0.5 cursor-pointer"
                   >
                     <X size={13} />
                   </button>
@@ -803,7 +795,7 @@ export function CardDetailModal({
                     }
                   }}
                   className={`flex-1 px-3 py-1.5 rounded-xl border text-xs focus:outline-none ${
-                    theme === "dark" ? "bg-stone-900/60 border-stone-700 text-stone-100" : "bg-stone-50 border-stone-200 text-stone-800"
+                    theme === "dark" ? "bg-slate-900/60 border-slate-700 text-slate-100" : "bg-slate-50 border-slate-200 text-slate-800"
                   }`}
                 />
                 <button
@@ -815,7 +807,7 @@ export function CardDetailModal({
                       saveDetail(cardId, { checklist: JSON.stringify(updated) });
                     }
                   }}
-                  className="px-3 py-1.5 bg-[#a24d2e] hover:bg-[#8a4526] text-white text-xs font-bold rounded-xl transition-all shadow-xs cursor-pointer"
+                  className="px-3 py-1.5 bg-[#4f63ef] hover:bg-[#4051d6] text-white text-xs font-bold rounded-xl transition-all shadow-xs cursor-pointer"
                 >
                   Add
                 </button>
@@ -825,7 +817,7 @@ export function CardDetailModal({
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between border-t pt-4 border-stone-100 dark:border-stone-800 mt-2">
+        <div className="flex items-center justify-between border-t pt-4 border-slate-100 dark:border-slate-800 mt-2">
           {canEdit && (
             <button
               onClick={() => onDeleteCard(cardId, card.Title)}
@@ -837,7 +829,7 @@ export function CardDetailModal({
 
           <button
             onClick={onClose}
-            className="px-5 py-2 bg-[#a24d2e] hover:bg-[#8a4526] text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-[#a24d2e]/20 cursor-pointer ml-auto"
+            className="px-5 py-2 bg-[#4f63ef] hover:bg-[#4051d6] text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-[#4f63ef]/20 cursor-pointer ml-auto"
           >
             Close
           </button>
@@ -857,6 +849,9 @@ export default function Board() {
   const {
     cards,
     boardName,
+    boardType,
+    sprint,
+    updateSprint,
     columns,
     swimlanes,
     accessLevel,
@@ -889,6 +884,35 @@ export default function Board() {
 
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedTagFilter, setSelectedTagFilter] = useState<string>("All");
+  const [selectedDueFilter, setSelectedDueFilter] = useState("all");
+  const [boardView, setBoardView] = useState<BoardView>(() => {
+    try {
+      const saved = localStorage.getItem(`co_board_view_v2_${boardId}`);
+      return isBoardView(saved) ? saved : "board";
+    } catch { return "board"; }
+  });
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (!boardType) return;
+    try {
+      const saved = localStorage.getItem(`co_board_view_v2_${boardId}`);
+      setBoardView(isBoardView(saved) && (saved !== "scrum" || boardType === "sprint") ? saved : defaultBoardView(boardType));
+    } catch { setBoardView(defaultBoardView(boardType)); }
+  }, [boardId, boardType]);
+  const chooseBoardView = (view: BoardView) => {
+    setBoardView(view);
+    try { localStorage.setItem(`co_board_view_v2_${boardId}`, view); } catch { /* Local preferences are optional. */ }
+  };
+  useEffect(() => {
+    const handleSearchShortcut = (event: KeyboardEvent) => {
+      const element = event.target as HTMLElement | null;
+      if (event.key !== "/" || event.metaKey || event.ctrlKey || event.altKey || element?.closest("input, textarea, select, [contenteditable], [role=dialog]")) return;
+      event.preventDefault();
+      searchInputRef.current?.focus();
+    };
+    window.addEventListener("keydown", handleSearchShortcut);
+    return () => window.removeEventListener("keydown", handleSearchShortcut);
+  }, []);
   const [isExportDropdownOpen, setIsExportDropdownOpen] = useState(false);
   const [isThemePaletteOpen, setIsThemePaletteOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
@@ -912,7 +936,7 @@ export default function Board() {
       setIsExporting(true);
       const dataUrl = await toPng(boardContainerRef.current, { cacheBust: true, quality: 0.95 });
       const link = document.createElement("a");
-      link.download = `${boardName.replace(/[^a-z0-9]/gi, '_').toLowerCase()}-kanban.png`;
+      link.download = `${boardName.replace(/[^a-z0-9]/gi, '_').toLowerCase()}-${boardView}.png`;
       link.href = dataUrl;
       link.click();
     } catch (err) {
@@ -927,10 +951,12 @@ export default function Board() {
   };
 
   const filteredCards = cards.filter((c) => {
-    const matchesSearch = !searchQuery.trim() || c.Title.toLowerCase().includes(searchQuery.toLowerCase().trim());
+    const query = searchQuery.toLowerCase().trim();
+    const matchesSearch = !query || `${c.Title} ${c.Description || ""} TSK-${String(c.ID).padStart(3, "0")}`.toLowerCase().includes(query);
     const cardTags = c.Tags ? c.Tags.split(",").map(t => t.trim().toLowerCase()) : [];
     const matchesTag = selectedTagFilter === "All" || cardTags.includes(selectedTagFilter.toLowerCase());
-    return matchesSearch && matchesTag;
+    const matchesDue = selectedDueFilter === "all" || dueBucket(c.DueDate) === selectedDueFilter;
+    return matchesSearch && matchesTag && matchesDue;
   });
 
   const allBoardTags = React.useMemo(() => {
@@ -948,6 +974,34 @@ export default function Board() {
 
   const [addingToKey, setAddingToKey] = useState<string | null>(null);
   const [newTaskTitle, setNewTaskTitle] = useState("");
+  const [creatingTask, setCreatingTask] = useState<NewTaskDetails | null>(null);
+  const quickAddSubmittedRef = useRef(false);
+  const submitQuickTask = (title: string, column: string, position: number, swimlane: string) => {
+    if (quickAddSubmittedRef.current) return;
+    quickAddSubmittedRef.current = true;
+    if (title.trim()) addCard(title.trim(), column, position, swimlane);
+    setNewTaskTitle("");
+    setAddingToKey(null);
+  };
+  const openFormatTask = (details: NewTaskDetails = {}) => {
+    if (!columns.length || !canEdit || status !== "connected") return;
+    setCreatingTask(details);
+  };
+  const openQuickAdd = () => {
+    if (!columns.length || !canEdit || status !== "connected") return;
+    if (boardView !== "board") { openFormatTask(); return; }
+    quickAddSubmittedRef.current = false;
+    setSearchQuery(""); setSelectedTagFilter("All"); setSelectedDueFilter("all");
+    const swim = swimlanes[0] || "Untitled";
+    setCollapsedSwimlanes(prev => ({ ...prev, [swim]: false }));
+    setAddingToKey(`${columns[0]}:::${swim}`);
+    setNewTaskTitle("");
+  };
+  const moveFromAlternateView = (card: Card, column: string) => {
+    if (column === card.List || status !== "connected" || !canEdit) return;
+    const position = Math.max(0, ...cards.filter(item => item.List === column && (item.Swimlane || "Untitled") === (card.Swimlane || "Untitled")).map(item => item.Position || 0)) + 1000;
+    moveCard(String(card.ID), column, position, card.Swimlane || "Untitled");
+  };
   const navigate = useNavigate();
   const [showGuestShareModal, setShowGuestShareModal] = useState(false);
   const [showGuestExitModal, setShowGuestExitModal] = useState(false);
@@ -1246,14 +1300,15 @@ export default function Board() {
   };
 
   if (!boardId) return null;
-  if (boardError) return <main className="min-h-screen flex items-center justify-center bg-stone-50 dark:bg-stone-950 p-6"><section className="max-w-md text-center space-y-4 dark:text-white"><h1 className="text-2xl font-bold">{boardError === "missing" ? "Board not found" : "You don’t have access to this board"}</h1><p>{boardError === "missing" ? "This board may have been deleted or the link is incorrect." : "Sign in with an account that has access, or ask the owner for an invitation."}</p><div className="flex justify-center gap-4"><button className="new-task-button" onClick={() => navigate("/")}>Back to dashboard</button><button onClick={retryBoard}>Try again</button>{boardError === "forbidden" && <button onClick={() => handleLogin(boardId)}>Sign in</button>}</div></section></main>;
+  if (boardError) return <main className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950 p-6"><section className="max-w-md text-center space-y-4 dark:text-white"><h1 className="text-2xl font-bold">{boardError === "missing" ? "Board not found" : "You don’t have access to this board"}</h1><p>{boardError === "missing" ? "This board may have been deleted or the link is incorrect." : "Sign in with an account that has access, or ask the owner for an invitation."}</p><div className="flex justify-center gap-4"><button className="new-task-button" onClick={() => navigate("/")}>Back to dashboard</button><button onClick={retryBoard}>Try again</button>{boardError === "forbidden" && <button onClick={() => handleLogin(boardId)}>Sign in</button>}</div></section></main>;
+  if (!boardType) return <main className="app-loading"><section className="text-center space-y-4"><p role={errorToast ? "alert" : "status"}>{errorToast || "Loading your board…"}</p>{errorToast && <button className="new-task-button" onClick={retryBoard}>Try again</button>}<button onClick={() => navigate("/")}>Back to dashboard</button></section></main>;
 
 
   const bgPresetClass = BOARD_BACKGROUND_PRESETS[boardBackground]?.class || "";
 
   return (
-    <div className={`board-workspace min-h-screen font-sans relative selection:bg-[#a24d2e]/20 transition-all duration-300 ${
-      bgPresetClass || (theme === "dark" ? "bg-[#140d07] text-[#f7efdc]" : "bg-[#f7efdc] text-stone-900")
+    <div className={`board-workspace min-h-screen font-sans relative selection:bg-[#4f63ef]/20 transition-all duration-300 ${
+      bgPresetClass || (theme === "dark" ? "bg-[#0f172a] text-slate-100" : "bg-[#f8fafc] text-[#172033]")
     }`}>
 
       <div className="mutation-feedback" aria-label="Task save status">
@@ -1266,7 +1321,7 @@ export default function Board() {
         onAllBoards={() => navigate("/")}>
         <div className="sidebar-section-label">SWIMLANES</div>
         {(swimlanes.length ? swimlanes : ["All tasks"]).map((name, index) => (
-          <button key={name} onClick={() => document.getElementById(`workstream-${index}`)?.scrollIntoView({ block: "start" })} className="sidebar-stream"><i style={{ background: ["#a5823a", "#efa86c", "#8a9a5b"][index % 3] }} />{name}</button>
+          <button key={name} onClick={() => document.getElementById(`workstream-${index}`)?.scrollIntoView({ block: "start" })} className="sidebar-stream"><i style={{ background: ["#818cf8", "#7dd3fc", "#6ee7b7"][index % 3] }} />{name}</button>
         ))}
       </WorkspaceSidebar>
       {status !== "connected" && (
@@ -1284,7 +1339,7 @@ export default function Board() {
       )}
 
       {/* Sleek Top Navigation Header */}
-      <header className={`board-topbar px-6 py-3.5 border-b flex items-center justify-between backdrop-blur-md sticky top-0 z-40 transition-colors ${theme === "dark" ? "bg-[#1c1309]/95 border-[#2a2013]" : "bg-white border-stone-200 shadow-xs"
+      <header className={`board-topbar px-6 py-3.5 border-b flex items-center justify-between backdrop-blur-md sticky top-0 z-40 transition-colors ${theme === "dark" ? "bg-[#0f172a]/95 border-[#334155]" : "bg-white border-slate-200 shadow-xs"
         }`}>
 
         {/* Header Left: Brand Logo & Board Title */}
@@ -1298,7 +1353,7 @@ export default function Board() {
             <span className="mobile-workspace-symbol"><KanbanMark /></span>
           </button>
 
-          <div className={`h-4 w-px ${theme === "dark" ? "bg-[#2a2013]" : "bg-stone-200"}`} />
+          <div className={`h-4 w-px ${theme === "dark" ? "bg-[#172033]" : "bg-slate-200"}`} />
 
           {isEditingBoardName ? (
             <input
@@ -1320,7 +1375,7 @@ export default function Board() {
                 }
               }}
               autoFocus
-              className={`border text-sm font-extrabold px-2 py-1 rounded-lg focus:outline-none shadow-xs ${theme === "dark" ? "bg-[#2a2013] border-[#a24d2e] text-stone-100" : "bg-white border-[#a24d2e] text-stone-900"
+              className={`border text-sm font-extrabold px-2 py-1 rounded-lg focus:outline-none shadow-xs ${theme === "dark" ? "bg-[#172033] border-[#4f63ef] text-slate-100" : "bg-white border-[#4f63ef] text-slate-900"
                 }`}
             />
           ) : (
@@ -1331,11 +1386,11 @@ export default function Board() {
                   setIsEditingBoardName(true);
                 }
               }}
-              className={`board-title text-sm font-extrabold transition-colors flex items-center gap-2 ${theme === "dark" ? "text-stone-100" : "text-stone-900"
-                } ${isOwner ? "hover:text-[#a24d2e] dark:hover:text-[#d9a83f] cursor-pointer" : ""}`}
+              className={`board-title text-sm font-extrabold transition-colors flex items-center gap-2 ${theme === "dark" ? "text-slate-100" : "text-slate-900"
+                } ${isOwner ? "hover:text-[#4f63ef] dark:hover:text-[#a5b4fc] cursor-pointer" : ""}`}
             >
               {boardName}
-              {isOwner && <span className="text-[10px] font-normal text-stone-400 opacity-0 group-hover:opacity-100">(click to edit)</span>}
+              {isOwner && <span className="text-[10px] font-normal text-slate-400 opacity-0 group-hover:opacity-100">(click to edit)</span>}
             </h1>
           )}
         </div>
@@ -1350,8 +1405,8 @@ export default function Board() {
           <button
             onClick={toggleTheme}
             className={`p-1.5 rounded-xl border transition-colors cursor-pointer ${theme === "dark"
-              ? "bg-[#2a2013] text-amber-400 hover:bg-[#4a3a26] border-[#4a3a26]"
-              : "bg-stone-100 text-stone-700 hover:bg-stone-200 border-stone-200"
+              ? "bg-[#172033] text-amber-400 hover:bg-[#334155] border-[#334155]"
+              : "bg-slate-100 text-slate-700 hover:bg-slate-200 border-slate-200"
               }`}
             title={theme === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode"}
           >
@@ -1359,7 +1414,7 @@ export default function Board() {
           </button>
 
           <div role="status" className={`workspace-connection px-3 py-1 rounded-full text-xs font-semibold flex items-center gap-1.5 border transition-all ${status === "connected"
-            ? theme === "dark" ? "bg-[#1e2410]/60 border-[#42502a]/80 text-[#9aab6d]" : "bg-[#eef0da] border-[#d6ddba] text-[#5a6a38]"
+            ? theme === "dark" ? "bg-[#022c22]/60 border-[#064e3b]/80 text-[#6ee7b7]" : "bg-[#ecfdf5] border-[#a7f3d0] text-[#047857]"
             : status === "connecting"
               ? "bg-amber-50 border-amber-200 text-amber-700 animate-pulse"
               : "bg-rose-50 border-rose-200 text-rose-700 animate-pulse"
@@ -1373,14 +1428,14 @@ export default function Board() {
             <div className="relative">
               <button
                 onClick={() => setIsViewOnlyPopoverOpen(!isViewOnlyPopoverOpen)}
-                className="px-3 py-1.5 bg-[#a24d2e] hover:bg-[#8a4526] text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-[#a24d2e]/20 flex items-center gap-1.5 cursor-pointer"
+                className="px-3 py-1.5 bg-[#4f63ef] hover:bg-[#4051d6] text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-[#4f63ef]/20 flex items-center gap-1.5 cursor-pointer"
               >
                 <Eye size={13} /> View only <ChevronDown size={13} />
               </button>
 
               {/* View-Only Request Access Popover (Miro Screenshot 1 & 2) */}
               {isViewOnlyPopoverOpen && (
-                <div className={`absolute right-0 mt-2 w-72 rounded-2xl border shadow-xl p-4 z-50 animate-in fade-in slide-in-from-top-2 duration-150 ${theme === "dark" ? "bg-[#2a2013] border-[#4a3a26] text-stone-100" : "bg-white border-stone-200 text-stone-800"
+                <div className={`absolute right-0 mt-2 w-72 rounded-2xl border shadow-xl p-4 z-50 animate-in fade-in slide-in-from-top-2 duration-150 ${theme === "dark" ? "bg-[#172033] border-[#334155] text-slate-100" : "bg-white border-slate-200 text-slate-800"
                   }`}>
                   <p className="text-xs leading-relaxed mb-3">
                     {user && user.email !== "guest@kanban.demo"
@@ -1390,18 +1445,18 @@ export default function Board() {
 
                   {user && user.email !== "guest@kanban.demo" ? (
                     accessRequestStatus === "approved" ? (
-                      <div className="p-2.5 bg-[#eef0da] dark:bg-[#1e2410]/40 border border-[#d6ddba] dark:border-[#42502a] text-[#5a6a38] dark:text-[#c2cda0] rounded-xl text-xs font-bold flex items-center gap-1.5">
+                      <div className="p-2.5 bg-[#ecfdf5] dark:bg-[#022c22]/40 border border-[#a7f3d0] dark:border-[#064e3b] text-[#047857] dark:text-[#a7f3d0] rounded-xl text-xs font-bold flex items-center gap-1.5">
                         <Check size={14} /> Editor access granted!
                       </div>
                     ) : accessRequestStatus === "pending" ? (
-                      <div className="p-2.5 bg-[#f7efdc] dark:bg-[#2a1a0d]/40 border border-[#ecd3b4] dark:border-[#6b3218] text-[#7a3a1e] dark:text-[#d9a06b] rounded-xl text-xs font-bold flex items-center gap-1.5">
+                      <div className="p-2.5 bg-[#eef2ff] dark:bg-[#172033]/40 border border-[#c7d2fe] dark:border-[#3730a3] text-[#4338ca] dark:text-[#a5b4fc] rounded-xl text-xs font-bold flex items-center gap-1.5">
                         <Check size={14} /> Request sent to owner
                       </div>
                     ) : (
                       <button
                         onClick={handleRequestAccess}
                         disabled={isRequestingAccess}
-                        className="w-full py-2 bg-[#a24d2e] hover:bg-[#8a4526] text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-[#a24d2e]/20 cursor-pointer disabled:opacity-50"
+                        className="w-full py-2 bg-[#4f63ef] hover:bg-[#4051d6] text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-[#4f63ef]/20 cursor-pointer disabled:opacity-50"
                       >
                         {isRequestingAccess ? "Sending request..." : "Request editor rights"}
                       </button>
@@ -1409,7 +1464,7 @@ export default function Board() {
                   ) : (
                     <button
                       onClick={() => handleLogin(boardId || "")}
-                      className="w-full py-2 bg-[#a24d2e] hover:bg-[#8a4526] text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-[#a24d2e]/20 cursor-pointer"
+                      className="w-full py-2 bg-[#4f63ef] hover:bg-[#4051d6] text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-[#4f63ef]/20 cursor-pointer"
                     >
                       Log in to Request Edit Access
                     </button>
@@ -1425,14 +1480,14 @@ export default function Board() {
               <button
                 onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}
                 className={`p-1.5 rounded-xl border transition-all cursor-pointer relative ${theme === "dark"
-                  ? "bg-[#2a2013] text-stone-200 hover:bg-[#4a3a26] border-[#4a3a26]"
-                  : "bg-stone-100 text-stone-700 hover:bg-stone-200 border-stone-200"
+                  ? "bg-[#172033] text-slate-200 hover:bg-[#334155] border-[#334155]"
+                  : "bg-slate-100 text-slate-700 hover:bg-slate-200 border-slate-200"
                   }`}
                 aria-label="Notifications" title="Notifications"
               >
                 <Bell size={16} />
                 {unreadCount > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-[#8a4526] text-white text-[10px] font-extrabold w-4 h-4 rounded-full flex items-center justify-center border-2 border-white dark:border-[#1c1309] shadow-xs">
+                  <span className="absolute -top-1 -right-1 bg-[#4051d6] text-white text-[10px] font-extrabold w-4 h-4 rounded-full flex items-center justify-center border-2 border-white dark:border-[#0f172a] shadow-xs">
                     {unreadCount}
                   </span>
                 )}
@@ -1440,20 +1495,20 @@ export default function Board() {
 
               {/* Notifications Dropdown Panel (Miro Screenshot 4 & 5) */}
               {isNotificationsOpen && (
-                <div className={`absolute right-0 mt-2 w-80 md:w-96 rounded-2xl border shadow-xl p-4 z-50 animate-in fade-in slide-in-from-top-2 duration-150 ${theme === "dark" ? "bg-[#2a2013] border-[#4a3a26] text-stone-100" : "bg-white border-stone-200 text-stone-800"
+                <div className={`absolute right-0 mt-2 w-80 md:w-96 rounded-2xl border shadow-xl p-4 z-50 animate-in fade-in slide-in-from-top-2 duration-150 ${theme === "dark" ? "bg-[#172033] border-[#334155] text-slate-100" : "bg-white border-slate-200 text-slate-800"
                   }`}>
-                  <div className="flex items-center justify-between border-b pb-3 mb-3 border-stone-100 dark:border-[#4a3a26]">
+                  <div className="flex items-center justify-between border-b pb-3 mb-3 border-slate-100 dark:border-[#334155]">
                     <h3 className="text-sm font-bold flex items-center gap-2">
                       Notifications
                       {unreadCount > 0 && (
-                        <span className="bg-[#f0e2c8] text-[#7a3a1e] dark:bg-[#3a2410]/60 dark:text-[#d9a06b] text-[10px] px-2 py-0.5 rounded-full font-bold">
+                        <span className="bg-[#e0e7ff] text-[#4338ca] dark:bg-[#243052]/60 dark:text-[#a5b4fc] text-[10px] px-2 py-0.5 rounded-full font-bold">
                           {unreadCount} unread
                         </span>
                       )}
                     </h3>
                     <button
                       onClick={() => setIsNotificationsOpen(false)}
-                      className="text-stone-400 hover:text-stone-600 dark:hover:text-stone-200 cursor-pointer"
+                      className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
                     >
                       <X size={16} />
                     </button>
@@ -1461,7 +1516,7 @@ export default function Board() {
 
                   <div className="max-h-80 overflow-y-auto space-y-3 pr-1">
                     {notifications.length === 0 ? (
-                      <div className="text-center py-6 text-stone-400 text-xs">
+                      <div className="text-center py-6 text-slate-400 text-xs">
                         No notifications yet
                       </div>
                     ) : (
@@ -1469,8 +1524,8 @@ export default function Board() {
                         <div
                           key={item.id}
                           className={`p-3 rounded-xl border transition-all ${item.status === "pending"
-                            ? theme === "dark" ? "bg-[#2a1a0d]/20 border-[#6b3218]/40" : "bg-[#f7efdc]/50 border-[#f0e2c8]"
-                            : theme === "dark" ? "bg-stone-900/40 border-stone-800" : "bg-stone-50 border-stone-100"
+                            ? theme === "dark" ? "bg-[#172033]/20 border-[#3730a3]/40" : "bg-[#eef2ff]/50 border-[#e0e7ff]"
+                            : theme === "dark" ? "bg-slate-900/40 border-slate-800" : "bg-slate-50 border-slate-100"
                             }`}
                         >
                           <div className="flex items-start gap-2.5">
@@ -1481,7 +1536,7 @@ export default function Board() {
                             />
                             <div className="flex-1 min-w-0">
                               <p className="text-xs leading-snug">
-                                <span className="font-bold">{item.userName}</span> requests access to your board <span className="font-semibold text-[#a24d2e]">{item.boardName}</span>
+                                <span className="font-bold">{item.userName}</span> requests access to your board <span className="font-semibold text-[#4f63ef] dark:text-[#a5b4fc]">{item.boardName}</span>
                               </p>
 
                               {/* Notification Actions */}
@@ -1490,23 +1545,23 @@ export default function Board() {
                                   <>
                                     <button
                                       onClick={() => respondToAccess(item.id, "approve")}
-                                      className="px-3 py-1 bg-[#a24d2e] hover:bg-[#8a4526] text-white text-xs font-bold rounded-lg transition-all cursor-pointer shadow-xs"
+                                      className="px-3 py-1 bg-[#4f63ef] hover:bg-[#4051d6] text-white text-xs font-bold rounded-lg transition-all cursor-pointer shadow-xs"
                                     >
                                       Give access
                                     </button>
                                     <button
                                       onClick={() => respondToAccess(item.id, "dismiss")}
-                                      className="px-3 py-1 bg-stone-100 hover:bg-stone-200 dark:bg-stone-800 dark:hover:bg-stone-700 text-stone-600 dark:text-stone-300 text-xs font-semibold rounded-lg transition-all cursor-pointer"
+                                      className="px-3 py-1 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs font-semibold rounded-lg transition-all cursor-pointer"
                                     >
                                       Dismiss
                                     </button>
                                   </>
                                 ) : item.status === "approved" ? (
-                                  <span className="text-xs font-bold text-[#6b7c4a] dark:text-[#9aab6d] flex items-center gap-1">
+                                  <span className="text-xs font-bold text-[#059669] dark:text-[#6ee7b7] flex items-center gap-1">
                                     <Check size={14} /> Request approved
                                   </span>
                                 ) : (
-                                  <span className="text-xs font-medium text-stone-400">
+                                  <span className="text-xs font-medium text-slate-400">
                                     Request dismissed
                                   </span>
                                 )}
@@ -1530,24 +1585,24 @@ export default function Board() {
                 setIsShareModalOpen(true);
               }
             }}
-            className={`workspace-share px-4 py-1.5 rounded-xl text-white text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${theme === "dark" ? "bg-[#8f4226] hover:bg-[#8a4526] shadow-md shadow-[#a24d2e]/20" : "bg-[#a24d2e] hover:bg-[#8a4526] shadow-md shadow-[#a24d2e]/20"
+            className={`workspace-share px-4 py-1.5 rounded-xl text-white text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${theme === "dark" ? "bg-[#4f63ef] hover:bg-[#4051d6] shadow-md shadow-[#4f63ef]/20" : "bg-[#4f63ef] hover:bg-[#4051d6] shadow-md shadow-[#4f63ef]/20"
               }`}
           >
             <LinkIcon size={13} /> Share
           </button>
 
           {user ? (
-            <div className={`workspace-mobile-account flex items-center gap-2.5 px-3 py-1 rounded-xl border ${theme === "dark" ? "bg-[#2a2013] border-[#4a3a26]" : "bg-stone-50 border-stone-200"
+            <div className={`workspace-mobile-account flex items-center gap-2.5 px-3 py-1 rounded-xl border ${theme === "dark" ? "bg-[#172033] border-[#334155]" : "bg-slate-50 border-slate-200"
               }`}>
               <AvatarImage
                 src={user.avatarUrl}
                 name={user.name}
                 className="w-6 h-6 rounded-full object-cover"
               />
-              <span className={`text-xs font-semibold ${theme === "dark" ? "text-stone-200" : "text-stone-700"}`}>{user.name}</span>
+              <span className={`text-xs font-semibold ${theme === "dark" ? "text-slate-200" : "text-slate-700"}`}>{user.name}</span>
               <button
                 onClick={handleWorkspaceLogout}
-                className="text-stone-400 hover:text-rose-600 transition-colors ml-1 cursor-pointer"
+                className="text-slate-400 hover:text-rose-600 transition-colors ml-1 cursor-pointer"
                 aria-label="Logout" title="Logout"
               >
                 <LogOut size={13} />
@@ -1556,7 +1611,7 @@ export default function Board() {
           ) : (
             <button
               onClick={() => handleLogin(boardId || "")}
-              className="px-3.5 py-1.5 bg-[#a24d2e] hover:bg-[#8a4526] text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-[#a24d2e]/20"
+              className="px-3.5 py-1.5 bg-[#4f63ef] hover:bg-[#4051d6] text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-[#4f63ef]/20"
             >
               Sign In
             </button>
@@ -1570,46 +1625,62 @@ export default function Board() {
 
           <h2>{boardName}</h2>
 
-          <div className="overview-meta"><span><Layers3 size={14} /> {columns.length} columns</span><span><UserPlus size={14} /> {swimlanes.length || 1} swimlanes</span><span className="overview-access">{isOwner ? "Owner" : canEdit ? "Editor" : "View only"}</span></div>
+          <div className="overview-meta"><span><Layers3 size={14} /> {VIEW_LABELS[defaultBoardView(boardType)]} board</span>{(boardView === "board" || boardView === "scrum") && <><span>{columns.length} columns</span><span><UserPlus size={14} /> {swimlanes.length || 1} swimlanes</span></>}<span className="overview-access">{isOwner ? "Owner" : canEdit ? "Editor" : "View only"}</span></div>
         </div>
         <div className="overview-action">
-          {canEdit && columns.length > 0 && <button className="new-task-button" disabled={status !== "connected"} onClick={() => {
-            setSearchQuery(""); setSelectedTagFilter("All");
-            const swim = swimlanes[0] || "Untitled";
-            setCollapsedSwimlanes(prev => ({ ...prev, [swim]: false }));
-            setAddingToKey(`${columns[0]}:::${swim}`); setNewTaskTitle("");
-          }}><Plus size={17} /> New task</button>}
+          {canEdit && columns.length > 0 && <button className="new-task-button" disabled={status !== "connected"} onClick={openQuickAdd}><Plus size={17} /> {boardView === "mindmap" ? "New idea" : "New task"}</button>}
           <div className="overview-task-count"><strong>{cards.length}</strong><span>tasks on this board</span></div>
         </div>
       </section>
-      <div className="board-view-tabs"><span><LayoutDashboard size={15} /> Board <span>{cards.length}</span></span><p>Columns show progress · Swimlanes group related tasks</p></div>
+      <div className="board-view-tabs">
+        <div className="board-view-switch" role="group" aria-label="Board view">
+          <button aria-pressed={boardView === "board"} onClick={() => chooseBoardView("board")}><LayoutDashboard size={15} /> Kanban</button>
+          <button aria-pressed={boardView === "list"} onClick={() => chooseBoardView("list")}><FileText size={15} /> Table</button>
+          <button aria-pressed={boardView === "calendar"} onClick={() => chooseBoardView("calendar")}><Calendar size={15} /> Calendar</button>
+          <button aria-pressed={boardView === "timeline"} onClick={() => chooseBoardView("timeline")}><GanttChart size={15} /> Timeline</button>
+          <button aria-pressed={boardView === "mindmap"} onClick={() => chooseBoardView("mindmap")}><Network size={15} /> Mind Map</button>
+          {boardType === "sprint" && <button aria-pressed={boardView === "scrum"} onClick={() => chooseBoardView("scrum")}><Timer size={15} /> Sprint</button>}
+          <button aria-pressed={boardView === "due"} onClick={() => chooseBoardView("due")}><Calendar size={15} /> Due dates</button>
+        </div>
+        <p>{VIEW_HINTS[boardView]}</p>
+      </div>
 
       {/* Secondary Toolbar: Search, Filter Chips & Export PNG/PDF */}
       <div className={`board-toolbar px-6 py-2.5 border-b flex flex-wrap items-center justify-between gap-3 ${
-        theme === "dark" ? "bg-[#241708]/80 border-[#2a2013]" : "bg-stone-50 border-stone-200"
+        theme === "dark" ? "bg-[#0f172a]/80 border-[#334155]" : "bg-slate-50 border-slate-200"
       }`}>
         {/* Left: Search input & Tag filters */}
         <div className="board-filter-group flex items-center gap-2 flex-wrap min-w-0 flex-1">
           <div className={`board-search flex items-center gap-2 border rounded-xl px-3 py-1.5 min-w-[200px] md:min-w-[260px] ${
-            theme === "dark" ? "bg-[#2a2013] border-[#4a3a26]" : "bg-white border-stone-200 shadow-2xs"
+            theme === "dark" ? "bg-[#172033] border-[#334155]" : "bg-white border-slate-200 shadow-2xs"
           }`}>
-            <Search size={14} className="text-stone-400 flex-shrink-0" />
+            <Search size={14} className="text-slate-400 flex-shrink-0" />
             <input
+              ref={searchInputRef}
               type="text"
               aria-label="Search tasks"
-              placeholder="Search tasks…"
+              placeholder="Search tasks…  /"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className={`w-full bg-transparent text-xs focus:outline-none placeholder:text-stone-400 ${
-                theme === "dark" ? "text-stone-100" : "text-stone-800"
+              className={`w-full bg-transparent text-xs focus:outline-none placeholder:text-slate-400 ${
+                theme === "dark" ? "text-slate-100" : "text-slate-800"
               }`}
             />
             {searchQuery && (
-              <button aria-label="Clear search" onClick={() => setSearchQuery("")} className="text-stone-400 hover:text-stone-600 dark:hover:text-stone-200">
+              <button aria-label="Clear search" onClick={() => setSearchQuery("")} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
                 <X size={13} />
               </button>
             )}
           </div>
+
+          <select aria-label="Filter by due date" value={selectedDueFilter} onChange={event => setSelectedDueFilter(event.target.value)} className="board-due-filter">
+            <option value="all">All due dates</option>
+            <option value="overdue">Overdue</option>
+            <option value="today">Today</option>
+            <option value="upcoming">Next 7 days</option>
+            <option value="later">Later</option>
+            <option value="none">No due date</option>
+          </select>
 
           <div className="board-filter-chips flex items-center gap-1.5 overflow-x-auto py-0.5 max-w-full">
             <button
@@ -1617,8 +1688,8 @@ export default function Board() {
               onClick={() => setSelectedTagFilter("All")}
               className={`px-2.5 py-1 rounded-xl text-xs font-bold transition-all border cursor-pointer ${
                 selectedTagFilter === "All"
-                  ? "bg-[#a24d2e] text-white border-[#a24d2e] shadow-2xs"
-                  : theme === "dark" ? "bg-[#2a2013] text-stone-300 border-[#4a3a26] hover:bg-stone-800" : "bg-white text-stone-600 border-stone-200 hover:bg-stone-100"
+                  ? "bg-[#4f63ef] text-white border-[#4f63ef] shadow-2xs"
+                  : theme === "dark" ? "bg-[#172033] text-slate-300 border-[#334155] hover:bg-slate-800" : "bg-white text-slate-600 border-slate-200 hover:bg-slate-100"
               }`}
             >
               All tasks
@@ -1632,7 +1703,7 @@ export default function Board() {
                   aria-pressed={active}
                   onClick={() => setSelectedTagFilter(active ? "All" : tagName)}
                   className={`px-2.5 py-1 rounded-xl text-xs font-extrabold border transition-all cursor-pointer ${colorObj?.bg || ''} ${colorObj?.text || ''} ${
-                    active ? "ring-2 ring-[#a24d2e] shadow-2xs" : (colorObj?.border || '') + " opacity-80 hover:opacity-100"
+                    active ? "ring-2 ring-[#4f63ef] shadow-2xs" : (colorObj?.border || '') + " opacity-80 hover:opacity-100"
                   }`}
                 >
                   {tagName}
@@ -1650,20 +1721,20 @@ export default function Board() {
               onClick={() => setIsThemePaletteOpen(!isThemePaletteOpen)}
               className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all border flex items-center gap-1.5 cursor-pointer ${
                 theme === "dark"
-                  ? "bg-[#2a2013] hover:bg-[#4a3a26] text-stone-200 border-[#4a3a26]"
-                  : "bg-white hover:bg-stone-100 text-stone-700 border-stone-200 shadow-2xs"
+                  ? "bg-[#172033] hover:bg-[#334155] text-slate-200 border-[#334155]"
+                  : "bg-white hover:bg-slate-100 text-slate-700 border-slate-200 shadow-2xs"
               }`}
               title="Change Board Background Wallpaper"
             >
-              <Palette size={14} className="text-[#c9946c]" />
+              <Palette size={14} className="text-[#4f63ef] dark:text-[#a5b4fc]" />
               <span>Theme</span>
             </button>
 
             {isThemePaletteOpen && (
               <div className={`absolute right-0 mt-2 w-56 rounded-2xl border shadow-xl p-2.5 z-50 animate-in fade-in zoom-in-95 duration-100 ${
-                theme === "dark" ? "bg-[#2a2013] border-[#4a3a26] text-stone-100" : "bg-white border-stone-200 text-stone-800"
+                theme === "dark" ? "bg-[#172033] border-[#334155] text-slate-100" : "bg-white border-slate-200 text-slate-800"
               }`}>
-                <div className="text-[10px] font-bold text-stone-400 uppercase tracking-wider px-2 pb-1.5 mb-1.5 border-b border-stone-100 dark:border-stone-800">
+                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2 pb-1.5 mb-1.5 border-b border-slate-100 dark:border-slate-800">
                   Board Wallpapers
                 </div>
                 <div className="flex flex-col gap-1">
@@ -1676,13 +1747,13 @@ export default function Board() {
                       }}
                       className={`flex items-center gap-2.5 w-full px-2.5 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
                         boardBackground === bgKey
-                          ? "bg-[#a24d2e]/10 text-[#a24d2e] border border-[#a24d2e]/30"
-                          : "hover:bg-stone-100 dark:hover:bg-stone-800 text-stone-600 dark:text-stone-300"
+                          ? "bg-[#4f63ef]/10 text-[#4f63ef] dark:text-[#a5b4fc] border border-[#4f63ef]/30"
+                          : "hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300"
                       }`}
                     >
                       <div className={`w-4 h-4 rounded-full bg-gradient-to-tr ${bgItem.previewBg} border border-white/20`} />
                       <span>{bgItem.name}</span>
-                      {boardBackground === bgKey && <Check size={12} className="ml-auto text-[#a24d2e]" />}
+                      {boardBackground === bgKey && <Check size={12} className="ml-auto text-[#4f63ef] dark:text-[#a5b4fc]" />}
                     </button>
                   ))}
                 </div>
@@ -1697,8 +1768,8 @@ export default function Board() {
             disabled={isExporting}
             className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all border flex items-center gap-1.5 cursor-pointer ${
               theme === "dark"
-                ? "bg-[#2a2013] hover:bg-[#4a3a26] text-stone-200 border-[#4a3a26]"
-                : "bg-white hover:bg-stone-100 text-stone-700 border-stone-200 shadow-2xs"
+                ? "bg-[#172033] hover:bg-[#334155] text-slate-200 border-[#334155]"
+                : "bg-white hover:bg-slate-100 text-slate-700 border-slate-200 shadow-2xs"
             }`}
           >
             <Download size={14} />
@@ -1708,16 +1779,16 @@ export default function Board() {
 
           {isExportDropdownOpen && (
             <div className={`absolute right-0 mt-2 w-48 rounded-xl border shadow-xl p-1.5 z-50 animate-in fade-in zoom-in-95 duration-100 ${
-              theme === "dark" ? "bg-[#2a2013] border-[#4a3a26] text-stone-100" : "bg-white border-stone-200 text-stone-800"
+              theme === "dark" ? "bg-[#172033] border-[#334155] text-slate-100" : "bg-white border-slate-200 text-slate-800"
             }`}>
               <button
                 onClick={() => {
                   setIsExportDropdownOpen(false);
                   handleExportPNG();
                 }}
-                className="w-full text-left px-3 py-2 rounded-lg text-xs font-bold flex items-center gap-2 hover:bg-[#f7efdc] dark:hover:bg-[#2a1a0d]/40 text-stone-700 dark:text-stone-200 transition-colors cursor-pointer"
+                className="w-full text-left px-3 py-2 rounded-lg text-xs font-bold flex items-center gap-2 hover:bg-[#eef2ff] dark:hover:bg-[#172033]/40 text-slate-700 dark:text-slate-200 transition-colors cursor-pointer"
               >
-                <Image size={15} className="text-[#a24d2e]" />
+                <Image size={15} className="text-[#4f63ef] dark:text-[#a5b4fc]" />
                 Export as PNG Image
               </button>
               <button
@@ -1725,9 +1796,9 @@ export default function Board() {
                   setIsExportDropdownOpen(false);
                   handleExportPDF();
                 }}
-                className="w-full text-left px-3 py-2 rounded-lg text-xs font-bold flex items-center gap-2 hover:bg-[#f6ead9] dark:hover:bg-[#2e1c0e]/40 text-stone-700 dark:text-stone-200 transition-colors cursor-pointer"
+                className="w-full text-left px-3 py-2 rounded-lg text-xs font-bold flex items-center gap-2 hover:bg-[#f5f3ff] dark:hover:bg-[#1e1b4b]/40 text-slate-700 dark:text-slate-200 transition-colors cursor-pointer"
               >
-                <FileText size={15} className="text-[#a06a44]" />
+                <FileText size={15} className="text-[#8b5cf6]" />
                 Print / Export as PDF
               </button>
             </div>
@@ -1738,23 +1809,23 @@ export default function Board() {
 
       {/* MIRO KANBAN CANVAS */}
       <div className="board-results" aria-live="polite">
-        <span><strong>Board view</strong> · {filteredCards.length} of {cards.length} tasks</span>
-        {(searchQuery || selectedTagFilter !== "All") ? (
-          <button onClick={() => { setSearchQuery(""); setSelectedTagFilter("All"); }}>Clear filters ×</button>
-        ) : <span>Drag to move · Click to open</span>}
+        <span><strong>{VIEW_LABELS[boardView]} view</strong> · {filteredCards.length} of {cards.length} {boardView === "mindmap" ? "ideas" : "tasks"}</span>
+        {(searchQuery || selectedTagFilter !== "All" || selectedDueFilter !== "all") ? (
+          <button onClick={() => { setSearchQuery(""); setSelectedTagFilter("All"); setSelectedDueFilter("all"); }}>Clear filters ×</button>
+        ) : <span>{boardView === "board" ? "Drag to move · Click to open" : boardView === "list" || boardView === "scrum" ? "Click a task to open · Use the status menu to move" : "Click to open · Edit dates and relationships in task details"}</span>}
       </div>
-      {filteredCards.length === 0 && cards.length > 0 && (
+      {boardView === "board" && filteredCards.length === 0 && cards.length > 0 && (
         <div className="board-no-results" role="status">No matching tasks. Try another search or clear your filters.</div>
       )}
-      <div className="board-scroll" role="region" aria-label="Task board, scroll horizontally to see more columns" tabIndex={0}>
+      {boardView === "board" ? <div className="board-scroll" role="region" aria-label="Task board, scroll horizontally to see more columns" tabIndex={0}>
       <main id="board-content" ref={boardContainerRef} className="board-canvas p-6 md:p-8 w-full max-w-[1920px] mx-auto relative z-10 flex flex-col gap-6" style={{ minWidth: Math.max(columns.length * 290 + 64, 354) }}>
 
         {/* Unauthenticated Edit Prompt Banner (Shown ONLY if logging in will grant edit access) */}
         {!user && canEditIfLoggedIn && (
-          <div className={`border rounded-2xl p-4 flex items-center justify-between shadow-xs ${theme === "dark" ? "bg-[#2a1a0d]/40 border-[#6b3218]/60 text-stone-100" : "bg-[#f7efdc] border-[#ecd3b4] text-stone-800"
+          <div className={`border rounded-2xl p-4 flex items-center justify-between shadow-xs ${theme === "dark" ? "bg-[#172033]/40 border-[#3730a3]/60 text-slate-100" : "bg-[#eef2ff] border-[#c7d2fe] text-slate-800"
             }`}>
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-xl bg-[#f0e2c8] dark:bg-[#3a2410]/60 text-[#a24d2e] dark:text-[#d9a83f] flex items-center justify-center font-bold text-sm">
+              <div className="w-8 h-8 rounded-xl bg-[#e0e7ff] dark:bg-[#243052]/60 text-[#4f63ef] dark:text-[#a5b4fc] flex items-center justify-center font-bold text-sm">
                 🔐
               </div>
               <div>
@@ -1764,7 +1835,7 @@ export default function Board() {
             </div>
             <button
               onClick={() => handleLogin(boardId || "")}
-              className="px-4 py-2 bg-[#a24d2e] hover:bg-[#8a4526] text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-[#a24d2e]/20 flex-shrink-0 cursor-pointer"
+              className="px-4 py-2 bg-[#4f63ef] hover:bg-[#4051d6] text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-[#4f63ef]/20 flex-shrink-0 cursor-pointer"
             >
               Log in to Edit
             </button>
@@ -1773,12 +1844,12 @@ export default function Board() {
 
         {/* View-Only Mode Indicator Badge (Shown when accessing via an explicit View-Only link) */}
         {(inviteRole === "view" || (!canEditIfLoggedIn && !canEdit)) && (
-          <div className={`border rounded-2xl p-3.5 flex items-center justify-between shadow-xs ${theme === "dark" ? "bg-stone-900/60 border-stone-800 text-stone-300" : "bg-stone-50 border-stone-200 text-stone-600"
+          <div className={`border rounded-2xl p-3.5 flex items-center justify-between shadow-xs ${theme === "dark" ? "bg-slate-900/60 border-slate-800 text-slate-300" : "bg-slate-50 border-slate-200 text-slate-600"
             }`}>
             <div className="flex items-center gap-2.5">
               <span className="text-sm">👁️</span>
               <p className="text-xs font-semibold">
-                You are viewing this board in <span className="font-bold text-amber-500">Read-Only Mode</span>.
+                You are viewing this board in <span className="font-bold text-amber-700 dark:text-amber-300">Read-Only Mode</span>.
               </p>
             </div>
           </div>
@@ -1798,21 +1869,21 @@ export default function Board() {
                     <span className={`px-3 py-1 rounded-xl text-xs font-bold ${colStyle.headerPill}`}>
                       {col}
                     </span>
-                    <span className={`text-xs font-semibold ${theme === "dark" ? "text-stone-400" : "text-stone-500"}`}>{totalColCards}</span>
+                    <span className={`text-xs font-semibold ${theme === "dark" ? "text-slate-400" : "text-slate-500"}`}>{totalColCards}</span>
                   </div>
 
                   {canEdit && (
                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button
                         onClick={() => openRenameModal("Rename Column", col, (newName) => renameColumn(col, newName))}
-                        className="p-1 text-stone-400 hover:text-[#a24d2e] rounded transition-colors"
+                        className="p-1 text-slate-400 hover:text-[#4f63ef] dark:hover:text-[#a5b4fc] rounded transition-colors"
                         aria-label="Rename Column" title="Rename Column"
                       >
                         <Edit2 size={12} />
                       </button>
                       <button
                         onClick={() => openConfirmModal("Delete Column?", `Are you sure you want to delete column "${col}" and all its tasks?`, () => deleteColumn(col))}
-                        className="p-1 text-stone-400 hover:text-rose-600 rounded transition-colors"
+                        className="p-1 text-slate-400 hover:text-rose-600 rounded transition-colors"
                         aria-label="Delete Column" title="Delete Column"
                       >
                         <Trash2 size={12} />
@@ -1845,7 +1916,7 @@ export default function Board() {
                   {swimlanes.length > 0 && (
                     <div className="workstream-heading flex items-center gap-2.5 py-1 group/swim">
                       <button
-                        className="text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 transition-colors p-0.5 cursor-pointer"
+                        className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors p-0.5 cursor-pointer"
                         onClick={() => toggleSwimlane(swim)}
                         title={isCollapsed ? "Expand Swimlane" : "Collapse Swimlane"}
                       >
@@ -1862,7 +1933,7 @@ export default function Board() {
                         {swim}
                       </span>
 
-                      <span className={`text-xs font-semibold ${theme === "dark" ? "text-stone-400" : "text-stone-500"}`}>
+                      <span className={`text-xs font-semibold ${theme === "dark" ? "text-slate-400" : "text-slate-500"}`}>
                         ({totalSwimCards})
                       </span>
 
@@ -1870,14 +1941,14 @@ export default function Board() {
                         <div className="flex items-center gap-1 opacity-0 group-hover/swim:opacity-100 transition-opacity ml-1">
                           <button
                             onClick={() => openRenameModal("Rename Swimlane", swim, (newName) => renameSwimlane(swim, newName))}
-                            className={`p-1 text-stone-400 hover:text-[#a24d2e] rounded transition-colors cursor-pointer ${theme === "dark" ? "hover:bg-stone-800" : "hover:bg-stone-100"}`}
+                            className={`p-1 text-slate-400 hover:text-[#4f63ef] dark:hover:text-[#a5b4fc] rounded transition-colors cursor-pointer ${theme === "dark" ? "hover:bg-slate-800" : "hover:bg-slate-100"}`}
                             aria-label="Rename Swimlane" title="Rename Swimlane"
                           >
                             <Edit2 size={13} />
                           </button>
                           <button
                             onClick={() => openConfirmModal("Delete Swimlane?", `Are you sure you want to delete swimlane "${swim}"?`, () => deleteSwimlane(swim))}
-                            className="p-1 text-stone-400 hover:text-rose-600 rounded hover:bg-rose-500/10 transition-colors cursor-pointer"
+                            className="p-1 text-slate-400 hover:text-rose-600 rounded hover:bg-rose-500/10 transition-colors cursor-pointer"
                             aria-label="Delete Swimlane" title="Delete Swimlane"
                           >
                             <Trash2 size={13} />
@@ -1936,13 +2007,14 @@ export default function Board() {
                             {canEdit && !isAdding && (
                               <button
                                 onClick={() => {
+                                  quickAddSubmittedRef.current = false;
                                   setAddingToKey(dropKey);
                                   setNewTaskTitle("");
                                 }}
                                 className={`mt-3 w-full py-2.5 px-4 rounded-xl text-xs font-bold transition-all duration-200 flex items-center justify-center gap-1.5 cursor-pointer opacity-100 ${
                                   theme === "dark"
-                                    ? "bg-stone-800/80 hover:bg-stone-700 text-stone-200 border border-stone-700/60"
-                                    : "bg-stone-100 hover:bg-stone-200/80 text-stone-700 border border-stone-200/80 shadow-2xs"
+                                    ? "bg-slate-800/80 hover:bg-slate-700 text-slate-200 border border-slate-700/60"
+                                    : "bg-slate-100 hover:bg-slate-200/80 text-slate-700 border border-slate-200/80 shadow-2xs"
                                 }`}
                               >
                                 <Plus size={14} /> Add task
@@ -1952,7 +2024,7 @@ export default function Board() {
                             {/* Inline Draft Card Creation Box (Clean Auto-Save on Blur/Enter, No Buttons) */}
                             {canEdit && isAdding && (
                               <div className={`mt-3 border-2 p-4 rounded-2xl flex flex-col gap-3 shadow-md w-full transition-all ${
-                                theme === "dark" ? "bg-[#2a2013] border-[#a24d2e]" : "bg-white border-[#c97a4a]"
+                                theme === "dark" ? "bg-[#172033] border-[#4f63ef]" : "bg-white border-[#a5b4fc]"
                               }`}>
                                 <textarea
                                   ref={(el) => adjustHeight(el)}
@@ -1964,27 +2036,16 @@ export default function Board() {
                                     setNewTaskTitle(e.target.value);
                                     adjustHeight(e.target);
                                   }}
-                                  onBlur={() => {
-                                    if (newTaskTitle.trim()) {
-                                      const lastPos = swimCards[swimCards.length - 1]?.Position ?? 0;
-                                      addCard(newTaskTitle.trim(), col, lastPos + 1000, swim || "Untitled");
-                                    }
-                                    setNewTaskTitle("");
-                                    setAddingToKey(null);
-                                  }}
+                                  onBlur={() => submitQuickTask(newTaskTitle, col, (swimCards[swimCards.length - 1]?.Position ?? 0) + 1000, swim || "Untitled")}
                                   className={`w-full bg-transparent border-none focus:outline-none text-xs font-semibold leading-relaxed resize-none overflow-hidden [overflow-wrap:anywhere] [word-break:break-word] whitespace-pre-wrap ${
-                                    theme === "dark" ? "text-stone-100 placeholder:text-stone-500" : "text-stone-900 placeholder:text-stone-400"
+                                    theme === "dark" ? "text-slate-100 placeholder:text-slate-500" : "text-slate-900 placeholder:text-slate-400"
                                   }`}
                                   onKeyDown={(e) => {
                                     if (e.key === "Enter" && !e.shiftKey) {
                                       e.preventDefault();
-                                      if (newTaskTitle.trim()) {
-                                        const lastPos = swimCards[swimCards.length - 1]?.Position ?? 0;
-                                        addCard(newTaskTitle.trim(), col, lastPos + 1000, swim || "Untitled");
-                                      }
-                                      setNewTaskTitle("");
-                                      setAddingToKey(null);
+                                      submitQuickTask(newTaskTitle, col, (swimCards[swimCards.length - 1]?.Position ?? 0) + 1000, swim || "Untitled");
                                     } else if (e.key === "Escape") {
+                                      quickAddSubmittedRef.current = true;
                                       setAddingToKey(null);
                                       setNewTaskTitle("");
                                     }
@@ -2010,7 +2071,7 @@ export default function Board() {
 
                   {/* Soft Separator Line Between Swimlanes */}
                   {swimlanes.length > 0 && swimIdx < swimlanes.length - 1 && (
-                    <div className={`border-b my-2 w-full ${theme === "dark" ? "border-[#2a2013]" : "border-stone-200"}`} />
+                    <div className={`border-b my-2 w-full ${theme === "dark" ? "border-[#334155]" : "border-slate-200"}`} />
                   )}
                 </div>
               );
@@ -2018,11 +2079,23 @@ export default function Board() {
           </div>
         </DndContext>
       </main>
-      </div>
+      </div> : <div ref={boardContainerRef} className="task-view-export">
+        {(boardView === "list" || boardView === "due") ? <BoardTaskViews cards={filteredCards} totalCards={cards.length} columns={columns} swimlanes={swimlanes} canEdit={canEdit} connected={status === "connected"} mode={boardView} onOpen={handleOpenCardDetail} onMove={moveFromAlternateView} onCreate={openQuickAdd} />
+        : boardView === "scrum" ? <ScrumBoard cards={filteredCards} allCards={cards} columns={columns} sprint={sprint} saving={operations.some(operation => operation.label === "Update sprint" && operation.state === "saving")} canEdit={canEdit} connected={status === "connected"} onOpen={handleOpenCardDetail} onMove={moveFromAlternateView} onEdit={(card, changes) => editCardDetail(String(card.ID), changes)} onUpdateSprint={updateSprint} onCreate={openQuickAdd} />
+        : <BoardCanvasViews cards={filteredCards} allCards={cards} totalCards={cards.length} boardName={boardName} mode={boardView} canEdit={canEdit} connected={status === "connected"} onOpen={handleOpenCardDetail} onCreate={openFormatTask} />}
+      </div>}
+
+      {creatingTask && <CreateTaskDialog columns={columns} initial={creatingTask} parentName={cards.find(card => String(card.ID) === creatingTask.parentId)?.Title} idea={boardView === "mindmap"} connected={status === "connected"} onClose={() => setCreatingTask(null)} onSave={(title, column, details) => {
+        if (!canEdit || status !== "connected") return false;
+        if (!addCard(title, column, Math.max(0, ...cards.filter(card => card.List === column).map(card => card.Position || 0)) + 1000, swimlanes[0] || "Untitled", details)) return false;
+        setSearchQuery(""); setSelectedTagFilter("All"); setSelectedDueFilter("all");
+        setCreatingTask(null);
+        return true;
+      }} />}
 
       {/* Miro Floating Toolbar at Bottom Center */}
-      {canEdit && (
-        <div className={`board-create-toolbar fixed bottom-6 left-1/2 -transtone-x-1/2 z-40 backdrop-blur-xl px-3 py-1.5 rounded-2xl border shadow-xl flex items-center gap-1.5 ${theme === "dark" ? "bg-[#1c1309]/95 border-[#2a2013] text-stone-200" : "bg-white/95 border-stone-200 text-stone-700"
+      {canEdit && boardView === "board" && (
+        <div className={`board-create-toolbar fixed bottom-6 left-1/2 -translate-x-1/2 z-40 backdrop-blur-xl px-3 py-1.5 rounded-2xl border shadow-xl flex items-center gap-1.5 ${theme === "dark" ? "bg-[#0f172a]/95 border-[#334155] text-slate-200" : "bg-white/95 border-slate-200 text-slate-700"
           }`}>
           <button
             onClick={() => {
@@ -2039,7 +2112,7 @@ export default function Board() {
               }
               addSwimlane(name);
             }}
-            className={`p-2 rounded-xl transition-all flex items-center gap-2 font-semibold text-xs group cursor-pointer ${theme === "dark" ? "hover:bg-[#2a2013] text-stone-300 hover:text-white" : "hover:bg-stone-100 text-stone-600 hover:text-stone-900"
+            className={`p-2 rounded-xl transition-all flex items-center gap-2 font-semibold text-xs group cursor-pointer ${theme === "dark" ? "hover:bg-[#172033] text-slate-300 hover:text-white" : "hover:bg-slate-100 text-slate-600 hover:text-slate-900"
               }`}
             disabled={status !== "connected"}
             title="Add Swimlane (Horizontal Row)"
@@ -2052,7 +2125,7 @@ export default function Board() {
             <span>Add swimlane</span>
           </button>
 
-          <div className={`h-5 w-[1px] ${theme === "dark" ? "bg-[#2a2013]" : "bg-stone-200"}`} />
+          <div className={`h-5 w-[1px] ${theme === "dark" ? "bg-[#172033]" : "bg-slate-200"}`} />
 
           <button
             onClick={() => {
@@ -2063,7 +2136,7 @@ export default function Board() {
               }
               addColumn(name);
             }}
-            className={`p-2 rounded-xl transition-all flex items-center gap-2 font-semibold text-xs group cursor-pointer ${theme === "dark" ? "hover:bg-[#2a2013] text-stone-300 hover:text-white" : "hover:bg-stone-100 text-stone-600 hover:text-stone-900"
+            className={`p-2 rounded-xl transition-all flex items-center gap-2 font-semibold text-xs group cursor-pointer ${theme === "dark" ? "hover:bg-[#172033] text-slate-300 hover:text-white" : "hover:bg-slate-100 text-slate-600 hover:text-slate-900"
               }`}
             disabled={status !== "connected"}
             title="Add Column (Vertical Column)"
@@ -2080,23 +2153,23 @@ export default function Board() {
 
       {/* Custom Light Glassmorphic Modal Card Box (Centered on screen) */}
       {modalConfig.isOpen && (
-        <div className="fixed inset-0 z-50 bg-stone-950/60 backdrop-blur-md flex items-center justify-center p-4">
-          <div ref={confirmationRef} role="dialog" aria-modal="true" aria-label={modalConfig.title} className={`rounded-2xl shadow-2xl p-6 w-full max-w-sm flex flex-col gap-4 relative border animate-in fade-in zoom-in-95 duration-150 ${theme === "dark" ? "bg-[#1c1309] border-[#2a2013] text-stone-100" : "bg-white border-stone-200 text-stone-900"
+        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-md flex items-center justify-center p-4">
+          <div ref={confirmationRef} role="dialog" aria-modal="true" aria-label={modalConfig.title} className={`rounded-2xl shadow-2xl p-6 w-full max-w-sm flex flex-col gap-4 relative border animate-in fade-in zoom-in-95 duration-150 ${theme === "dark" ? "bg-[#0f172a] border-[#334155] text-slate-100" : "bg-white border-slate-200 text-slate-900"
             }`}>
 
             {/* Modal Header */}
-            <div className={`flex items-center justify-between border-b pb-3 ${theme === "dark" ? "border-[#2a2013]" : "border-stone-100"}`}>
+            <div className={`flex items-center justify-between border-b pb-3 ${theme === "dark" ? "border-[#334155]" : "border-slate-100"}`}>
               <h3 className="text-sm font-bold flex items-center gap-2">
                 {modalConfig.type === "confirm" ? (
                   <AlertCircle size={17} className="text-rose-500" />
                 ) : (
-                  <Edit2 size={17} className="text-[#a24d2e]" />
+                  <Edit2 size={17} className="text-[#4f63ef] dark:text-[#a5b4fc]" />
                 )}
                 {modalConfig.title}
               </h3>
               <button
                 aria-label="Close confirmation" onClick={closeModal}
-                className={`transition-colors p-1 rounded-lg ${theme === "dark" ? "text-stone-400 hover:text-white hover:bg-stone-800" : "text-stone-400 hover:text-stone-700 hover:bg-stone-100"}`}
+                className={`transition-colors p-1 rounded-lg ${theme === "dark" ? "text-slate-400 hover:text-white hover:bg-slate-800" : "text-slate-400 hover:text-slate-700 hover:bg-slate-100"}`}
               >
                 <X size={15} />
               </button>
@@ -2104,12 +2177,12 @@ export default function Board() {
 
             {/* Modal Content Body */}
             {modalConfig.type === "confirm" ? (
-              <p className="text-xs text-stone-600 leading-relaxed">
+              <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
                 {modalConfig.description}
               </p>
             ) : (
               <div className="flex flex-col gap-1.5">
-                <label className="text-[11px] font-bold text-stone-500 uppercase tracking-wider">Name</label>
+                <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Name</label>
                 <input
                   aria-label="Name" autoFocus
                   type="text"
@@ -2122,7 +2195,7 @@ export default function Board() {
                       closeModal();
                     }
                   }}
-                  className="w-full bg-white border border-stone-300 focus:border-[#a24d2e] rounded-xl px-3.5 py-2 text-xs text-stone-900 focus:outline-none transition-colors shadow-xs"
+                  className="w-full bg-white dark:bg-[#172033] border border-slate-300 dark:border-slate-700 focus:border-[#4f63ef] rounded-xl px-3.5 py-2 text-xs text-slate-900 dark:text-slate-100 focus:outline-none transition-colors shadow-xs"
                 />
               </div>
             )}
@@ -2131,7 +2204,7 @@ export default function Board() {
             <div className="flex items-center justify-end gap-2 pt-2">
               <button
                 data-cancel onClick={closeModal}
-                className="px-3.5 py-1.5 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-semibold transition-colors"
+                className="px-3.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold transition-colors"
               >
                 Cancel
               </button>
@@ -2146,7 +2219,7 @@ export default function Board() {
                 }}
                 className={`px-4 py-1.5 rounded-xl text-xs font-bold transition-all shadow-sm ${modalConfig.type === "confirm"
                   ? "bg-rose-600 hover:bg-rose-700 text-white shadow-rose-600/20"
-                  : "bg-[#a24d2e] hover:bg-[#8a4526] text-white shadow-[#a24d2e]/20"
+                  : "bg-[#4f63ef] hover:bg-[#4051d6] text-white shadow-[#4f63ef]/20"
                   }`}
               >
                 {modalConfig.type === "confirm" ? "Delete" : "Save"}
@@ -2158,27 +2231,27 @@ export default function Board() {
 
       {/* MIRO OFFICIAL SHARE MODAL DIALOG */}
       {isShareModalOpen && (
-        <div className="fixed inset-0 z-[100] bg-stone-950/60 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in zoom-in-95 duration-150">
-          <div className={`rounded-2xl border shadow-2xl p-6 max-w-lg w-full flex flex-col gap-5 relative transition-colors ${theme === "dark" ? "bg-[#1c1309] border-[#2a2013] text-stone-100" : "bg-white border-stone-200 text-stone-900"
+        <div className="fixed inset-0 z-[100] bg-slate-950/60 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in zoom-in-95 duration-150">
+          <div className={`rounded-2xl border shadow-2xl p-6 max-w-lg w-full flex flex-col gap-5 relative transition-colors ${theme === "dark" ? "bg-[#0f172a] border-[#334155] text-slate-100" : "bg-white border-slate-200 text-slate-900"
             }`}>
 
             {/* Top Close Button */}
             <button
               onClick={() => setIsShareModalOpen(false)}
-              className={`absolute top-5 right-5 p-1.5 rounded-xl transition-colors cursor-pointer ${theme === "dark" ? "text-stone-400 hover:text-white hover:bg-stone-800" : "text-stone-400 hover:text-stone-700 hover:bg-stone-100"
+              className={`absolute top-5 right-5 p-1.5 rounded-xl transition-colors cursor-pointer ${theme === "dark" ? "text-slate-400 hover:text-white hover:bg-slate-800" : "text-slate-400 hover:text-slate-700 hover:bg-slate-100"
                 }`}
             >
               <X size={18} />
             </button>
 
             {/* Top Modal Navigation Tabs (Invite, Embed) */}
-            <div className={`flex items-center gap-6 border-b text-sm font-semibold pb-2.5 ${theme === "dark" ? "border-[#2a2013]" : "border-stone-200"
+            <div className={`flex items-center gap-6 border-b text-sm font-semibold pb-2.5 ${theme === "dark" ? "border-[#334155]" : "border-slate-200"
               }`}>
               <button
                 onClick={() => setShareTab("invite")}
                 className={`pb-2.5 -mb-3 transition-colors cursor-pointer ${shareTab === "invite"
-                  ? "text-[#a24d2e] dark:text-[#d9a83f] font-bold border-b-2 border-[#a24d2e] dark:border-[#d9a83f]"
-                  : "text-stone-400 hover:text-stone-600 dark:hover:text-stone-300"
+                  ? "text-[#4f63ef] dark:text-[#a5b4fc] font-bold border-b-2 border-[#4f63ef] dark:border-[#a5b4fc]"
+                  : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
                   }`}
               >
                 Invite
@@ -2186,8 +2259,8 @@ export default function Board() {
               <button
                 onClick={() => setShareTab("embed")}
                 className={`pb-2.5 -mb-3 transition-colors cursor-pointer ${shareTab === "embed"
-                  ? "text-[#a24d2e] dark:text-[#d9a83f] font-bold border-b-2 border-[#a24d2e] dark:border-[#d9a83f]"
-                  : "text-stone-400 hover:text-stone-600 dark:hover:text-stone-300"
+                  ? "text-[#4f63ef] dark:text-[#a5b4fc] font-bold border-b-2 border-[#4f63ef] dark:border-[#a5b4fc]"
+                  : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
                   }`}
               >
                 Embed
@@ -2198,11 +2271,11 @@ export default function Board() {
             {shareTab === "invite" && (
               <>
                 {/* Middle Invite Link Bar (Grey Container Box) */}
-                <div className={`flex items-center justify-between gap-2 border rounded-xl p-2 pl-3 ${theme === "dark" ? "bg-[#241708] border-[#4a3a26]" : "bg-[#efe5cd] border-stone-200"
+                <div className={`flex items-center justify-between gap-2 border rounded-xl p-2 pl-3 ${theme === "dark" ? "bg-[#0f172a] border-[#334155]" : "bg-[#f8fafc] border-slate-200"
                   }`}>
                   <div className="flex items-center gap-2 min-w-0 flex-1">
-                    <LinkIcon size={16} className="text-stone-500 flex-shrink-0" />
-                    <span className={`text-xs truncate font-medium ${theme === "dark" ? "text-stone-300" : "text-stone-600"}`}>
+                    <LinkIcon size={16} className="text-slate-500 flex-shrink-0" />
+                    <span className={`text-xs truncate font-medium ${theme === "dark" ? "text-slate-300" : "text-slate-600"}`}>
                       {`${window.location.origin}/b/${boardId}?inviteToken=${shareLinkRole === "edit" ? editInviteToken : viewInviteToken}`}
                     </span>
                   </div>
@@ -2211,7 +2284,7 @@ export default function Board() {
                     <select
                       value={shareLinkRole}
                       onChange={(e) => setShareLinkRole(e.target.value as "edit" | "view")}
-                      className={`border text-xs font-semibold rounded-lg px-2.5 py-1.5 focus:outline-none cursor-pointer ${theme === "dark" ? "bg-[#2a2013] border-[#4a3a26] text-stone-200" : "bg-white border-stone-200 text-stone-800"
+                      className={`border text-xs font-semibold rounded-lg px-2.5 py-1.5 focus:outline-none cursor-pointer ${theme === "dark" ? "bg-[#172033] border-[#334155] text-slate-200" : "bg-white border-slate-200 text-slate-800"
                         }`}
                     >
                       <option value="edit">Can edit</option>
@@ -2226,7 +2299,7 @@ export default function Board() {
                         setCopySuccessToast(true);
                         setTimeout(() => setCopySuccessToast(false), 3000);
                       }}
-                      className="px-3.5 py-1.5 bg-[#a24d2e] hover:bg-[#8a4526] text-white text-xs font-bold rounded-lg transition-all shadow-sm flex-shrink-0 cursor-pointer"
+                      className="px-3.5 py-1.5 bg-[#4f63ef] hover:bg-[#4051d6] text-white text-xs font-bold rounded-lg transition-all shadow-sm flex-shrink-0 cursor-pointer"
                     >
                       {copySuccessToast ? "Copied! ✓" : "Copy team invite link"}
                     </button>
@@ -2237,7 +2310,7 @@ export default function Board() {
                   <>
                     {/* BOARD ACCESS Section */}
                     <div className="flex flex-col gap-3 pt-2">
-                      <span className="text-[11px] font-bold uppercase tracking-wider text-stone-400">
+                      <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
                         BOARD ACCESS
                       </span>
 
@@ -2252,16 +2325,16 @@ export default function Board() {
                                   key={m.id || idx}
                                   src={m.avatarUrl}
                                   name={m.name}
-                                  className="w-6 h-6 rounded-full ring-2 ring-white dark:ring-[#1c1309] object-cover"
+                                  className="w-6 h-6 rounded-full ring-2 ring-white dark:ring-[#0f172a] object-cover"
                                 />
                               ))
                             ) : (
-                              <div className="w-6 h-6 rounded-full bg-amber-400 flex items-center justify-center text-[10px] font-bold text-stone-900">
+                              <div className="w-6 h-6 rounded-full bg-amber-400 flex items-center justify-center text-[10px] font-bold text-slate-900">
                                 👤
                               </div>
                             )}
                           </div>
-                          <span className={`text-xs font-medium truncate ${theme === "dark" ? "text-stone-200" : "text-stone-800"}`}>
+                          <span className={`text-xs font-medium truncate ${theme === "dark" ? "text-slate-200" : "text-slate-800"}`}>
                             <span className="font-bold">{boardMembers.length || 1} team members</span> have access
                           </span>
                         </div>
@@ -2269,7 +2342,7 @@ export default function Board() {
                         {isOwner && (
                           <button
                             onClick={() => setShareView("manage_access")}
-                            className="text-xs font-bold text-[#a24d2e] dark:text-[#d9a83f] hover:underline cursor-pointer flex-shrink-0"
+                            className="text-xs font-bold text-[#4f63ef] dark:text-[#a5b4fc] hover:underline cursor-pointer flex-shrink-0"
                           >
                             Manage access
                           </button>
@@ -2279,8 +2352,8 @@ export default function Board() {
                       {/* Anyone with the link Row */}
                       <div className="flex items-center justify-between py-1">
                         <div className="flex items-center gap-3">
-                          <Globe size={16} className="text-stone-500 flex-shrink-0" />
-                          <span className={`text-xs font-semibold ${theme === "dark" ? "text-stone-200" : "text-stone-800"}`}>
+                          <Globe size={16} className="text-slate-500 flex-shrink-0" />
+                          <span className={`text-xs font-semibold ${theme === "dark" ? "text-slate-200" : "text-slate-800"}`}>
                             Anyone with the link
                           </span>
                         </div>
@@ -2289,7 +2362,7 @@ export default function Board() {
                           <select
                             value={accessLevel}
                             onChange={(e) => updateBoardAccess(e.target.value as "edit" | "view" | "private")}
-                            className={`border text-xs font-semibold rounded-lg px-2.5 py-1 focus:outline-none cursor-pointer ${theme === "dark" ? "bg-[#2a2013] border-[#4a3a26] text-stone-200" : "bg-white border-stone-200 text-stone-800"
+                            className={`border text-xs font-semibold rounded-lg px-2.5 py-1 focus:outline-none cursor-pointer ${theme === "dark" ? "bg-[#172033] border-[#334155] text-slate-200" : "bg-white border-slate-200 text-slate-800"
                               }`}
                           >
                             <option value="edit">Can edit</option>
@@ -2297,7 +2370,7 @@ export default function Board() {
                             <option value="private">No access</option>
                           </select>
                         ) : (
-                          <span className="text-xs font-semibold text-stone-500 capitalize">
+                          <span className="text-xs font-semibold text-slate-500 capitalize">
                             {accessLevel === "edit" ? "Can edit" : accessLevel === "view" ? "Viewer" : "No access"}
                           </span>
                         )}
@@ -2308,21 +2381,21 @@ export default function Board() {
                   /* MANAGE BOARD ACCESS VIEW (Miro Screenshot 2) */
                   <div className="flex flex-col gap-4">
                     {/* Header with Back button */}
-                    <div className="flex items-center justify-between border-b pb-3 border-stone-100 dark:border-[#2a2013]">
+                    <div className="flex items-center justify-between border-b pb-3 border-slate-100 dark:border-[#334155]">
                       <button
                         onClick={() => setShareView("main")}
-                        className="flex items-center gap-1 text-xs font-bold text-stone-500 hover:text-stone-800 dark:hover:text-stone-200 cursor-pointer"
+                        className="flex items-center gap-1 text-xs font-bold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 cursor-pointer"
                       >
                         <ArrowLeft size={16} /> Back
                       </button>
-                      <h3 className="text-sm font-bold text-stone-900 dark:text-stone-100">
+                      <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
                         Manage board access
                       </h3>
                       <div className="w-12" />
                     </div>
 
                     {/* Members List */}
-                    <div className="max-h-72 overflow-y-auto space-y-3 pr-1 divide-y divide-stone-100 dark:divide-[#2a2013]/60">
+                    <div className="max-h-72 overflow-y-auto space-y-3 pr-1 divide-y divide-slate-100 dark:divide-[#334155]/60">
                       {boardMembers.map((member) => (
                         <div key={member.id} className="flex items-center justify-between pt-3 first:pt-0">
                           <div className="flex items-center gap-3 min-w-0">
@@ -2332,10 +2405,10 @@ export default function Board() {
                               className="w-8 h-8 rounded-full flex-shrink-0 object-cover"
                             />
                             <div className="min-w-0">
-                              <p className="text-xs font-bold text-stone-900 dark:text-stone-100 truncate">
+                              <p className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate">
                                 {member.name}
                               </p>
-                              <p className="text-[11px] text-stone-400 truncate">
+                              <p className="text-[11px] text-slate-400 truncate">
                                 {member.email}
                               </p>
                             </div>
@@ -2344,7 +2417,7 @@ export default function Board() {
                           {/* Role Selector (Editor / Viewer) */}
                           <div className="flex-shrink-0">
                             {member.isOwner ? (
-                              <span className="text-xs font-bold text-stone-400 px-3 py-1">Owner</span>
+                              <span className="text-xs font-bold text-slate-400 px-3 py-1">Owner</span>
                             ) : (
                               <select
                                 // บังคับอ่านค่าจาก member.role ตรงๆ ("edit" -> "Editor", อื่นๆ -> "Viewer")
@@ -2388,8 +2461,8 @@ export default function Board() {
                                   }
                                 }}
                                 className={`border text-xs font-bold rounded-xl px-3 py-1.5 focus:outline-none cursor-pointer ${theme === "dark"
-                                  ? "bg-[#2a2013] border-[#4a3a26] text-stone-200"
-                                  : "bg-white border-stone-200 text-stone-800"
+                                  ? "bg-[#172033] border-[#334155] text-slate-200"
+                                  : "bg-white border-slate-200 text-slate-800"
                                   }`}
                               >
                                 <option value="Editor">Editor</option>
@@ -2402,10 +2475,10 @@ export default function Board() {
                     </div>
 
                     {/* Bottom Action Button */}
-                    <div className="pt-3 border-t flex justify-between items-center border-stone-100 dark:border-[#2a2013]">
+                    <div className="pt-3 border-t flex justify-between items-center border-slate-100 dark:border-[#334155]">
                       <button
                         onClick={() => setShareView("main")}
-                        className="px-6 py-2 bg-[#a24d2e] hover:bg-[#8a4526] text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-[#a24d2e]/20 cursor-pointer"
+                        className="px-6 py-2 bg-[#4f63ef] hover:bg-[#4051d6] text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-[#4f63ef]/20 cursor-pointer"
                       >
                         Done
                       </button>
@@ -2414,7 +2487,7 @@ export default function Board() {
                 )}
 
                 {/* Bottom Copy Board Link */}
-                <div className={`pt-4 border-t flex items-center gap-2 ${theme === "dark" ? "border-[#2a2013]" : "border-stone-200"
+                <div className={`pt-4 border-t flex items-center gap-2 ${theme === "dark" ? "border-[#334155]" : "border-slate-200"
                   }`}>
                   <button
                     onClick={() => {
@@ -2423,7 +2496,7 @@ export default function Board() {
                       setCopySuccessToast(true);
                       setTimeout(() => setCopySuccessToast(false), 3000);
                     }}
-                    className="text-[#a24d2e] dark:text-[#d9a83f] hover:underline text-xs font-bold flex items-center gap-2 cursor-pointer"
+                    className="text-[#4f63ef] dark:text-[#a5b4fc] hover:underline text-xs font-bold flex items-center gap-2 cursor-pointer"
                   >
                     <LinkIcon size={16} /> Copy board link
                   </button>
@@ -2435,41 +2508,41 @@ export default function Board() {
             {shareTab === "embed" && (
               <div className="flex flex-col gap-4">
                 {/* Blue Info Notice Box */}
-                <div className="flex items-start gap-3 bg-[#f7efdc]/80 dark:bg-[#2a1a0d]/40 border border-[#ecd3b4] dark:border-[#6b3218]/60 rounded-xl p-3.5 text-xs">
-                  <Eye size={16} className="text-[#8a4526] dark:text-[#c97a4a] flex-shrink-0 mt-0.5" />
-                  <p className="text-stone-700 dark:text-stone-300 leading-relaxed">
-                    <strong className="font-bold text-stone-900 dark:text-stone-100">This board is shared by link.</strong> Anyone can view the board. Change who can see it in the <button onClick={() => setShareTab("invite")} className="text-[#8a4526] dark:text-[#c97a4a] underline font-semibold cursor-pointer">invite section</button>.
+                <div className="flex items-start gap-3 bg-[#eef2ff]/80 dark:bg-[#172033]/40 border border-[#c7d2fe] dark:border-[#3730a3]/60 rounded-xl p-3.5 text-xs">
+                  <Eye size={16} className="text-[#4051d6] dark:text-[#a5b4fc] flex-shrink-0 mt-0.5" />
+                  <p className="text-slate-700 dark:text-slate-300 leading-relaxed">
+                    <strong className="font-bold text-slate-900 dark:text-slate-100">This board is shared by link.</strong> Anyone can view the board. Change who can see it in the <button onClick={() => setShareTab("invite")} className="text-[#4051d6] dark:text-[#a5b4fc] underline font-semibold cursor-pointer">invite section</button>.
                   </p>
                 </div>
 
                 {/* Settings Row */}
                 <div className="flex items-center justify-between text-xs font-medium">
                   <div className="flex items-center gap-2">
-                    <span className="text-stone-500">Start view:</span>
-                    <span className={`px-2.5 py-1 rounded-lg border font-bold flex items-center gap-1.5 ${theme === "dark" ? "bg-[#2a2013] border-[#4a3a26] text-stone-200" : "bg-stone-100 border-stone-200 text-stone-800"
+                    <span className="text-slate-500">Start view:</span>
+                    <span className={`px-2.5 py-1 rounded-lg border font-bold flex items-center gap-1.5 ${theme === "dark" ? "bg-[#172033] border-[#334155] text-slate-200" : "bg-slate-100 border-slate-200 text-slate-800"
                       }`}>
                       📺 Board <ChevronDown size={14} />
                     </span>
                   </div>
 
-                  <label className="flex items-center gap-2 cursor-pointer select-none text-stone-700 dark:text-stone-300 font-semibold">
-                    <input type="checkbox" defaultChecked className="rounded border-stone-300 text-[#8a4526] focus:ring-[#a24d2e]" />
+                  <label className="flex items-center gap-2 cursor-pointer select-none text-slate-700 dark:text-slate-300 font-semibold">
+                    <input type="checkbox" defaultChecked className="rounded border-slate-300 text-[#4051d6] focus:ring-[#4f63ef]" />
                     View only
                   </label>
                 </div>
 
                 {/* Embedded Board Preview Box */}
-                <div className={`h-40 rounded-xl border p-4 flex flex-col justify-center items-center gap-2 text-center relative overflow-hidden ${theme === "dark" ? "bg-[#140d07] border-[#4a3a26]" : "bg-stone-100 border-stone-200"
+                <div className={`h-40 rounded-xl border p-4 flex flex-col justify-center items-center gap-2 text-center relative overflow-hidden ${theme === "dark" ? "bg-[#0f172a] border-[#334155]" : "bg-slate-100 border-slate-200"
                   }`}>
-                  <div className="w-full max-w-xs h-24 border rounded-lg p-2 bg-white dark:bg-[#2a2013] dark:border-stone-700 shadow-xs flex flex-col gap-1.5 opacity-80">
+                  <div className="w-full max-w-xs h-24 border rounded-lg p-2 bg-white dark:bg-[#172033] dark:border-slate-700 shadow-xs flex flex-col gap-1.5 opacity-80">
                     <div className="flex gap-2">
-                      <div className="w-1/3 h-4 bg-stone-200 dark:bg-stone-700 rounded" />
-                      <div className="w-1/3 h-4 bg-[#f0e2c8] dark:bg-[#3a2410]/50 rounded" />
-                      <div className="w-1/3 h-4 bg-[#eef0da] dark:bg-[#2e381a]/50 rounded" />
+                      <div className="w-1/3 h-4 bg-slate-200 dark:bg-slate-700 rounded" />
+                      <div className="w-1/3 h-4 bg-[#e0e7ff] dark:bg-[#243052]/50 rounded" />
+                      <div className="w-1/3 h-4 bg-[#ecfdf5] dark:bg-[#064e3b]/50 rounded" />
                     </div>
-                    <div className="w-full h-12 bg-stone-50 dark:bg-stone-800 rounded border border-dashed border-stone-200 dark:border-stone-700" />
+                    <div className="w-full h-12 bg-slate-50 dark:bg-slate-800 rounded border border-dashed border-slate-200 dark:border-slate-700" />
                   </div>
-                  <span className="text-[11px] font-bold text-stone-400 uppercase tracking-wider">Live Embed Preview</span>
+                  <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Live Embed Preview</span>
                 </div>
 
                 {/* Action Buttons */}
@@ -2481,7 +2554,7 @@ export default function Board() {
                       setCopySuccessToast(true);
                       setTimeout(() => setCopySuccessToast(false), 3000);
                     }}
-                    className="flex-1 py-2.5 bg-[#a24d2e] hover:bg-[#8a4526] text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-[#a24d2e]/20 flex items-center justify-center gap-2 cursor-pointer"
+                    className="flex-1 py-2.5 bg-[#4f63ef] hover:bg-[#4051d6] text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-[#4f63ef]/20 flex items-center justify-center gap-2 cursor-pointer"
                   >
                     <Code size={15} /> {copySuccessToast ? "Copied HTML! ✓" : "Copy code"}
                   </button>
@@ -2493,7 +2566,7 @@ export default function Board() {
                       setCopySuccessToast(true);
                       setTimeout(() => setCopySuccessToast(false), 3000);
                     }}
-                    className={`flex-1 py-2.5 border text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer ${theme === "dark" ? "bg-[#2a2013] border-[#4a3a26] text-stone-200 hover:bg-stone-800" : "bg-white border-stone-300 text-[#8a4526] hover:bg-stone-50"
+                    className={`flex-1 py-2.5 border text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer ${theme === "dark" ? "bg-[#172033] border-[#334155] text-slate-200 hover:bg-slate-800" : "bg-white border-slate-300 text-[#4051d6] hover:bg-slate-50"
                       }`}
                   >
                     <LinkIcon size={15} /> Copy link
@@ -2510,7 +2583,9 @@ export default function Board() {
       {currentCardDetail && (
         <CardDetailModal
           card={currentCardDetail}
-          canEdit={canEdit}
+          cards={cards}
+          boardType={boardType}
+          canEdit={canEdit && status === "connected"}
           theme={theme}
           columns={columns}
           onMove={(id, column) => moveCard(id, column, Math.max(0, ...cards.filter(c => c.List === column).map(c => c.Position || 0)) + 1000)}
@@ -2528,23 +2603,23 @@ export default function Board() {
 
       {/* Guest Share Prompt Modal */}
       {showGuestShareModal && (
-        <div role="dialog" aria-modal="true" aria-label="Keep or delete guest board" className="fixed inset-0 bg-stone-950/70 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
+        <div role="dialog" aria-modal="true" aria-label="Keep or delete guest board" className="fixed inset-0 bg-slate-950/70 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
           <div className={`max-w-md w-full rounded-3xl p-6 border shadow-2xl relative overflow-hidden ${
             theme === "dark"
-              ? "bg-[#2a2013]/95 border-[#4a3a26] text-stone-100 shadow-[#2a1a0d]/40"
-              : "bg-white/95 border-stone-200 text-stone-900 shadow-stone-400/20"
+              ? "bg-[#172033]/95 border-[#334155] text-slate-100 shadow-[#172033]/40"
+              : "bg-white/95 border-slate-200 text-slate-900 shadow-slate-400/20"
           }`}>
-            <div className="absolute -top-16 -right-16 w-36 h-36 bg-[#a24d2e]/20 rounded-full blur-2xl pointer-events-none" />
+            <div className="absolute -top-16 -right-16 w-36 h-36 bg-[#4f63ef]/20 rounded-full blur-2xl pointer-events-none" />
 
             <div className="flex items-center justify-between mb-4 relative z-10">
-              <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-[#8a4526] to-[#a5823a] p-[1.5px] shadow-lg shadow-[#a24d2e]/20">
-                <div className="w-full h-full bg-[#1c1309] rounded-[14px] flex items-center justify-center text-[#c97a4a]">
+              <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-[#4051d6] to-[#818cf8] p-[1.5px] shadow-lg shadow-[#4f63ef]/20">
+                <div className="w-full h-full bg-[#0f172a] rounded-[14px] flex items-center justify-center text-[#a5b4fc]">
                   <UserPlus size={20} />
                 </div>
               </div>
               <button
                 onClick={() => setShowGuestShareModal(false)}
-                className="p-1 rounded-xl hover:bg-stone-100 dark:hover:bg-stone-800 text-stone-400 hover:text-stone-600 dark:hover:text-stone-200 cursor-pointer"
+                className="p-1 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
               >
                 <X size={18} />
               </button>
@@ -2553,20 +2628,20 @@ export default function Board() {
             <h3 className="text-lg font-extrabold tracking-tight mb-2">
               Sign in to Share Board
             </h3>
-            <p className="text-xs text-stone-500 dark:text-stone-400 leading-relaxed mb-6">
-              You are currently exploring in <strong className="text-[#a24d2e] font-semibold">Guest Mode</strong>. Sign in with your Google account to invite collaborators, manage editor rights, and generate real-time share links.
+            <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed mb-6">
+              You are currently exploring in <strong className="text-[#4f63ef] dark:text-[#a5b4fc] font-semibold">Guest Mode</strong>. Sign in with your Google account to invite collaborators, manage editor rights, and generate real-time share links.
             </p>
 
             <div className="flex flex-col gap-2.5">
               <button
                 onClick={() => handleLogin(boardId || "")}
-                className="w-full py-2.5 bg-gradient-to-r from-[#8a4526] to-[#96712e] hover:from-[#a24d2e] hover:to-[#a5823a] text-white font-bold text-xs rounded-xl shadow-lg shadow-[#a24d2e]/25 hover:shadow-[#a24d2e]/40 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                className="w-full py-2.5 bg-[#4f63ef] hover:bg-[#4051d6] text-white font-bold text-xs rounded-xl shadow-sm transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
                 <Globe size={15} /> Continue with Google
               </button>
               <button
                 onClick={() => setShowGuestShareModal(false)}
-                className="w-full py-2 bg-transparent hover:bg-stone-100 dark:hover:bg-stone-800 text-stone-600 dark:text-stone-400 text-xs font-semibold rounded-xl transition-all cursor-pointer"
+                className="w-full py-2 bg-transparent hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400 text-xs font-semibold rounded-xl transition-all cursor-pointer"
               >
                 {isOwner || userRole === "editor" ? "Keep Editing as Guest" : "Keep Viewing as Guest"}
               </button>
@@ -2577,24 +2652,20 @@ export default function Board() {
 
       {/* Guest Exit & Save Prompt Modal */}
       {showGuestExitModal && (
-        <div role="dialog" aria-modal="true" aria-label="Keep or delete guest board" className="fixed inset-0 bg-stone-950/70 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
+        <div role="dialog" aria-modal="true" aria-label="Keep or delete guest board" className="fixed inset-0 bg-slate-950/70 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
           <div className={`max-w-md w-full rounded-3xl p-6 border shadow-2xl relative overflow-hidden ${
             theme === "dark"
-              ? "bg-[#2a2013]/95 border-[#4a3a26] text-stone-100 shadow-rose-950/30"
-              : "bg-white/95 border-stone-200 text-stone-900 shadow-stone-400/20"
+              ? "bg-[#172033]/95 border-[#334155] text-slate-100 shadow-rose-950/30"
+              : "bg-white/95 border-slate-200 text-slate-900 shadow-slate-400/20"
           }`}>
-            <div className="absolute -top-16 -right-16 w-36 h-36 bg-amber-500/20 rounded-full blur-2xl pointer-events-none" />
-
             <div className="flex items-center justify-between mb-4 relative z-10">
-              <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-amber-500 to-orange-600 p-[1.5px] shadow-lg shadow-amber-500/20">
-                <div className="w-full h-full bg-[#1c1309] rounded-[14px] flex items-center justify-center text-amber-400">
-                  <AlertCircle size={20} />
-                </div>
+              <div className="w-10 h-10 rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 flex items-center justify-center text-amber-700 dark:text-amber-300">
+                <AlertCircle size={20} />
               </div>
               <button
                 disabled={isDiscardingGuestBoard}
                 onClick={() => { setShowGuestExitModal(false); setGuestLogoutRequested(false); }}
-                className="p-1 rounded-xl hover:bg-stone-100 dark:hover:bg-stone-800 text-stone-400 hover:text-stone-600 dark:hover:text-stone-200 cursor-pointer"
+                className="p-1 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
               >
                 <X size={18} />
               </button>
@@ -2603,7 +2674,7 @@ export default function Board() {
             <h3 className="text-lg font-extrabold tracking-tight mb-2">
               Keep this board before leaving?
             </h3>
-            <p className="text-xs text-stone-500 dark:text-stone-400 leading-relaxed mb-6">
+            <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed mb-6">
               This board belongs to your <strong>Guest session</strong>. Sign in to keep it. Choosing “Delete board & leave” permanently deletes this board and all its tasks.
             </p>
 
@@ -2612,7 +2683,7 @@ export default function Board() {
               <button
                 disabled={isDiscardingGuestBoard}
                 onClick={() => handleLogin(boardId || "")}
-                className="w-full py-2.5 bg-gradient-to-r from-[#8a4526] to-[#96712e] hover:from-[#a24d2e] hover:to-[#a5823a] text-white font-bold text-xs rounded-xl shadow-lg shadow-[#a24d2e]/25 hover:shadow-[#a24d2e]/40 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                className="w-full py-2.5 bg-[#4f63ef] hover:bg-[#4051d6] text-white font-bold text-xs rounded-xl shadow-sm transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
                 <Check size={15} /> Sign In to Save Board
               </button>
@@ -2644,7 +2715,7 @@ export default function Board() {
               <button
                 disabled={isDiscardingGuestBoard}
                 onClick={() => { setShowGuestExitModal(false); setGuestLogoutRequested(false); }}
-                className="w-full py-1.5 bg-transparent hover:bg-stone-100 dark:hover:bg-stone-800 text-stone-500 dark:text-stone-400 text-xs font-medium rounded-xl transition-all cursor-pointer"
+                className="w-full py-1.5 bg-transparent hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 text-xs font-medium rounded-xl transition-all cursor-pointer"
               >
                 Stay on Board
               </button>

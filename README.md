@@ -1,6 +1,6 @@
-# Collaborative Kanban Board
+# co-board
 
-A task board for small teams: organize work, move cards between stages, and see changes across connected browsers without refreshing.
+A collaborative workspace for small teams: create a Kanban, sortable Table, Calendar, Timeline/Gantt, Mind Map or Scrum board, and see changes across connected browsers without refreshing.
 
 **React + TypeScript · Go + Gin · WebSocket · GORM · Redis Pub/Sub**
 
@@ -8,7 +8,7 @@ A task board for small teams: organize work, move cards between stages, and see 
 
 ![Latest local board](screenshot/current/board.png)
 
-Screenshots show the current local implementation (28 September 2026). The hosted build inspected that day still showed the earlier dashboard and board UI; new local features are not yet verified on production.
+Screenshots show the local implementation on 5 October 2026, including the clean white/slate/blue theme and alternate board views. Production was last inspected on 28 September 2026 and may run an earlier revision; the latest local changes are not yet verified there.
 
 ## Try it in 60 seconds
 
@@ -24,7 +24,10 @@ Each demo creates a separate board rather than modifying a shared sample. Guest 
 ## What to explore
 
 - **Live collaboration:** WebSocket events update connected clients; Redis Pub/Sub distributes board events between backend instances.
-- **Board organization:** draggable cards, custom columns, swimlanes, tags, due dates and checklists.
+- **Distinct board formats:** choose Kanban, Table, Calendar, Timeline/Gantt, Mind Map or Scrum at creation. Content opens the Calendar; To-do opens the Table. Each format has a different initial workspace and its own preview.
+- **Planning:** Calendar places tasks on their due dates; Timeline draws start-to-due ranges and dependency arrows; Mind Map connects parent and child ideas. Dates and relationships persist in the database and sync through WebSocket events.
+- **Sprint workspace:** configure a named sprint with start/end dates, select tasks from a separate backlog, estimate story points, start the sprint and confirm completion. Progress uses all sprint tasks even when the visible list is filtered.
+- **Board views:** switch between Kanban, a sortable Table, Calendar, Timeline, Mind Map and Due dates; Scrum boards also include Sprint. The chosen view is remembered per board. Search task titles, descriptions, or IDs; filter by due status; press `/` to focus search. Table and Due dates include a status selector for moving tasks without dragging. Creating a task in another format keeps that format open.
 - **Access control:** owner, editor and viewer roles, invite links, and access requests.
 - **Connection recovery:** mutations are blocked while disconnected or refreshing. Reconnect fetches server state; server error messages trigger a refresh to reconcile optimistic changes.
 - **Save feedback:** task mutations carry request IDs; successful server events confirm saves. Failed unsent/rejected changes can be retried. Uncertain sends require review, not automatic replay.
@@ -33,8 +36,11 @@ Each demo creates a separate board rather than modifying a shared sample. Guest 
 - **Undo:** task deletion waits six seconds before sending. Leaving the board during that window cancels the scheduled deletion.
 - **Live presence:** avatars update on joins/leaves, with signed-in users deduplicated across tabs on one backend instance.
 - **Guest demo:** a populated board without Google sign-in. Google OAuth is available when configured.
+- **Workspace feedback:** failed board loads show a retry action, and rename/delete errors stay in their dialog so the action can be retried without losing input.
 
 ![Latest local dashboard](screenshot/current/dashboard.png)
+
+Board view examples: [Format picker](screenshot/current/board-templates.png) · [Table](screenshot/current/board-list.png) · [Calendar](screenshot/current/board-calendar.png) · [Timeline](screenshot/current/board-timeline.png) · [Mind Map](screenshot/current/board-mindmap.png) · [Sprint](screenshot/current/board-sprint.png). See the [board format guide](docs/board-formats.md) for workflows and limits.
 
 ## Architecture
 
@@ -99,10 +105,12 @@ cd backend
 go test ./...
 ```
 
-Frontend regression tests cover connection recovery, correlated saves, retries, uncertain sends, Undo, terminal 403/404 handling and accessible task controls. Backend tests cover WebSocket broadcasting, positioning, permissions and demo creation, including transaction rollback, two-user mutation/presence flows and stale-field rejection. See [manual demo checks](docs/portfolio-case-study.md#manual-demo-checks) for browser-level validation.
+Frontend regression tests cover calendar date boundaries, clipped timeline ranges, mind-map hierarchy recovery, sprint controls, schedule validation, table sorting, connection recovery, correlated saves, retries, uncertain sends, Undo, terminal 403/404 handling and accessible task controls. Backend tests cover WebSocket broadcasting, positioning, permissions and demo creation, including transaction rollback, two-user mutation/presence flows and stale-field rejection. See [manual demo checks](docs/portfolio-case-study.md#manual-demo-checks) for browser-level validation.
 
 ## Engineering notes and limitations
 
+- Timeline dependencies are visual planning links; dates are not automatically shifted, and critical-path calculations are not implemented. Calendar uses due dates, not start-to-end event spans.
+- Scrum currently tracks one sprint per board, including its completed state. Multi-sprint history, velocity and burndown reports are not implemented.
 - Task confirmations are correlated server events after successful database writes, not exactly-once delivery. A lost confirmation leaves the result uncertain; refresh and inspect before repeating a create.
 - The app has no durable offline queue. Reconnect fetches server state; event/snapshot ordering and high contention still need stronger consistency work.
 - Field-level conflict checks apply to `EDIT_CARD` patches. Moves, whole checklist values, tags updated through their separate event, and board settings do not provide general collaborative document merging. Old clients do not supply expected values.

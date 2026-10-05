@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { API_URL } from "../config";
 import WorkspaceSidebar, { KanbanMark } from "../components/WorkspaceSidebar";
+import { BoardFormatPreview } from "../components/BoardCanvasViews";
 import { useNotifications } from "../useNotifications";
 
 type UserPresence = {
@@ -34,18 +35,33 @@ type UserPresence = {
 type Board = {
   ID: string;
   Name: string;
+  Type?: string;
   Cards: any[];
   OwnerID?: number;
   IsOwner?: boolean;
   OnlineUsers?: UserPresence[];
 };
 
+const BOARD_TYPES = [
+  { id: "kanban", label: "Kanban", hint: "Move work through visual stages" },
+  { id: "todo", label: "To-do", hint: "A focused list for everyday tasks" },
+  { id: "table", label: "Table", hint: "Scan task details in rows" },
+  { id: "calendar", label: "Calendar", hint: "See work on its due date" },
+  { id: "timeline", label: "Timeline", hint: "Plan work across date ranges" },
+  { id: "mindmap", label: "Mind Map", hint: "Explore connected tasks" },
+  { id: "sprint", label: "Scrum", hint: "Plan a backlog and track a sprint" },
+  { id: "content", label: "Content", hint: "Plan an editorial calendar" },
+];
+
+const boardTypeLabel = (type?: string) =>
+  BOARD_TYPES.find((t) => t.id === (type || "kanban"))?.label ?? "Kanban";
+
 function AvatarImage({ src, name, className, title }: { src: string; name: string; className: string; title?: string }) {
   const [failed, setFailed] = useState(false);
   if (failed || !src) {
     return (
       <div
-        className={`${className} bg-gradient-to-br from-[#a24d2e] to-[#96712e] text-white font-extrabold flex items-center justify-center uppercase shadow-xs text-[10px]`}
+        className={`${className} bg-gradient-to-br from-[#4f63ef] to-[#818cf8] text-white font-extrabold flex items-center justify-center uppercase shadow-xs text-[10px]`}
         title={title || name}
       >
         {name ? name[0].toUpperCase() : "U"}
@@ -76,6 +92,7 @@ export default function Dashboard() {
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [boards, setBoards] = useState<Board[]>([]);
   const [isLoadingBoards, setIsLoadingBoards] = useState(true);
+  const [boardLoadError, setBoardLoadError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState<"all" | "my" | "shared" | "starred">("all");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
@@ -83,14 +100,21 @@ export default function Dashboard() {
   const [renameModalData, setRenameModalData] = useState<{ boardId: string; name: string } | null>(null);
   const [renameInputValue, setRenameInputValue] = useState("");
   const [isSavingRename, setIsSavingRename] = useState(false);
+  const [renameError, setRenameError] = useState<string | null>(null);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [newBoardName, setNewBoardName] = useState("");
+  const [newBoardType, setNewBoardType] = useState("kanban");
+  const [isCreatingBoard, setIsCreatingBoard] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
 
   const [deleteModalData, setDeleteModalData] = useState<{ boardId: string; name: string } | null>(null);
   const [isDeletingBoard, setIsDeletingBoard] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const navigate = useNavigate();
 
   const renderOnlineAvatars = (users?: UserPresence[], size: "sm" | "md" = "sm") => {
     if (!users || users.length === 0) {
-      return <span className="text-[10px] text-stone-400 opacity-60">0 online</span>;
+      return <span className="text-[10px] text-slate-400 opacity-60">0 online</span>;
     }
 
     // Filter out lingering Guest User presence if current user is logged in with a real Google account
@@ -104,7 +128,7 @@ export default function Dashboard() {
     });
 
     if (filteredUsers.length === 0) {
-      return <span className="text-[10px] text-stone-400 opacity-60">0 online</span>;
+      return <span className="text-[10px] text-slate-400 opacity-60">0 online</span>;
     }
 
     // Strict client-side deduplication by ID, Name, or Guest!
@@ -153,7 +177,7 @@ export default function Dashboard() {
           return isGuest ? (
             <div
               key={u.id || `guest-${i}`}
-              className={`inline-flex ${imgSize} rounded-full ring-2 ring-white dark:ring-[#2a2013] bg-stone-200 dark:bg-stone-700 text-stone-600 dark:text-stone-200 items-center justify-center shadow-xs font-bold`}
+              className={`inline-flex ${imgSize} rounded-full ring-2 ring-white dark:ring-[#172033] bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-200 items-center justify-center shadow-xs font-bold`}
               title="Guest Visitor (Online)"
             >
               👤
@@ -163,13 +187,13 @@ export default function Dashboard() {
               key={u.id || `avatar-${i}`}
               src={u.avatarUrl}
               name={u.name || "User"}
-              className={`inline-block ${imgSize} rounded-full ring-2 ring-white dark:ring-[#2a2013] object-cover`}
+              className={`inline-block ${imgSize} rounded-full ring-2 ring-white dark:ring-[#172033] object-cover`}
               title={`${u.name || "User"} (Online)`}
             />
           );
         })}
         {remainingCount > 0 && (
-          <div className={`inline-flex ${imgSize} rounded-full ring-2 ring-white dark:ring-[#2a2013] bg-stone-800 text-white font-bold items-center justify-center text-[10px]`}>
+          <div className={`inline-flex ${imgSize} rounded-full ring-2 ring-white dark:ring-[#172033] bg-slate-800 text-white font-bold items-center justify-center text-[10px]`}>
             +{remainingCount}
           </div>
         )}
@@ -211,12 +235,13 @@ export default function Dashboard() {
           Authorization: `Bearer ${(sessionStorage.getItem("kanban_jwt") || localStorage.getItem("kanban_jwt"))}`,
         },
       });
-      if (res.ok) {
-        const data = await res.json();
-        setBoards(data || []);
-      }
+      if (!res.ok) throw new Error("Could not load boards. Check your connection and try again.");
+      const data = await res.json();
+      setBoards(data || []);
+      setBoardLoadError(null);
     } catch (err) {
       console.error("Failed to fetch boards", err);
+      setBoardLoadError(err instanceof Error ? err.message : "Could not load boards. Please try again.");
     } finally {
       setIsLoadingBoards(false);
     }
@@ -247,6 +272,9 @@ export default function Dashboard() {
   };
 
   const createNewBoard = async () => {
+    if (isCreatingBoard) return;
+    setIsCreatingBoard(true);
+    setCreateError(null);
     try {
       const res = await fetch(`${API_URL}/api/boards`, {
         method: "POST",
@@ -254,14 +282,19 @@ export default function Dashboard() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${(sessionStorage.getItem("kanban_jwt") || localStorage.getItem("kanban_jwt"))}`,
         },
-        body: JSON.stringify({ name: "Untitled Board" }),
+        body: JSON.stringify({ name: newBoardName.trim() || "Untitled board", template: newBoardType }),
       });
-      if (res.ok) {
-        const newBoard = await res.json();
-        navigate(`/b/${newBoard.ID}`);
-      }
+      if (!res.ok) throw new Error("Could not create the board. Please try again.");
+      const newBoard = await res.json();
+      setBoards((prev) => [newBoard, ...prev]);
+      setShowCreateModal(false);
+      setNewBoardName("");
+      setNewBoardType("kanban");
+      navigate(`/b/${newBoard.ID}`);
     } catch (err) {
-      console.error("Failed to create board", err);
+      setCreateError(err instanceof Error ? err.message : "Failed to create board");
+    } finally {
+      setIsCreatingBoard(false);
     }
   };
 
@@ -270,13 +303,15 @@ export default function Dashboard() {
     e.stopPropagation();
     setRenameModalData({ boardId: id, name });
     setRenameInputValue(name);
+    setRenameError(null);
   };
 
   const handleSaveRename = async () => {
-    if (!renameModalData || !renameInputValue.trim()) return;
+    if (!renameModalData || !renameInputValue.trim() || isSavingRename) return;
 
     try {
       setIsSavingRename(true);
+      setRenameError(null);
       const res = await fetch(`${API_URL}/api/boards/${renameModalData.boardId}`, {
         method: "PUT",
         headers: {
@@ -285,14 +320,14 @@ export default function Dashboard() {
         },
         body: JSON.stringify({ name: renameInputValue.trim() }),
       });
-      if (res.ok) {
-        setBoards(boards.map(b => b.ID === renameModalData.boardId ? { ...b, Name: renameInputValue.trim() } : b));
-      }
+      if (!res.ok) throw new Error("Could not rename this board. Please try again.");
+      setBoards(prev => prev.map(b => b.ID === renameModalData.boardId ? { ...b, Name: renameInputValue.trim() } : b));
+      setRenameModalData(null);
     } catch (err) {
       console.error("Failed to rename board", err);
+      setRenameError(err instanceof Error ? err.message : "Could not rename this board. Please try again.");
     } finally {
       setIsSavingRename(false);
-      setRenameModalData(null);
     }
   };
 
@@ -300,27 +335,29 @@ export default function Dashboard() {
     e.preventDefault();
     e.stopPropagation();
     setDeleteModalData({ boardId: id, name });
+    setDeleteError(null);
   };
 
   const handleConfirmDelete = async () => {
-    if (!deleteModalData) return;
+    if (!deleteModalData || isDeletingBoard) return;
 
     try {
       setIsDeletingBoard(true);
+      setDeleteError(null);
       const res = await fetch(`${API_URL}/api/boards/${deleteModalData.boardId}`, {
         method: "DELETE",
         headers: {
           Authorization: `Bearer ${(sessionStorage.getItem("kanban_jwt") || localStorage.getItem("kanban_jwt"))}`,
         },
       });
-      if (res.ok) {
-        setBoards(boards.filter(b => b.ID !== deleteModalData.boardId));
-      }
+      if (!res.ok) throw new Error("Could not delete this board. Please try again.");
+      setBoards(prev => prev.filter(b => b.ID !== deleteModalData.boardId));
+      setDeleteModalData(null);
     } catch (err) {
       console.error("Failed to delete board", err);
+      setDeleteError(err instanceof Error ? err.message : "Could not delete this board. Please try again.");
     } finally {
       setIsDeletingBoard(false);
-      setDeleteModalData(null);
     }
   };
 
@@ -345,39 +382,39 @@ export default function Dashboard() {
 
   if (!user) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-[#17100a] via-[#241708] to-[#17100a] text-white flex items-center justify-center font-sans overflow-hidden p-6 relative selection:bg-[#a24d2e]/30">
+      <div className="min-h-screen bg-gradient-to-br from-[#f8fafc] via-white to-[#eef2ff] text-[#172033] flex items-center justify-center font-sans overflow-hidden p-6 relative selection:bg-[#4f63ef]/20">
         {/* Glowing Background Ambient Orbs */}
-        <div className="absolute top-1/4 left-1/3 w-[500px] h-[500px] bg-[#8a4526]/15 rounded-full blur-[140px] pointer-events-none" />
-        <div className="absolute bottom-1/4 right-1/3 w-[450px] h-[450px] bg-[#96712e]/15 rounded-full blur-[120px] pointer-events-none" />
+        <div className="absolute top-1/4 left-1/3 w-[500px] h-[500px] bg-[#4f63ef]/10 rounded-full blur-[140px] pointer-events-none" />
+        <div className="absolute bottom-1/4 right-1/3 w-[450px] h-[450px] bg-[#818cf8]/10 rounded-full blur-[120px] pointer-events-none" />
 
-        <div className="max-w-md w-full bg-[#1c1309]/80 backdrop-blur-2xl p-8 sm:p-10 flex flex-col items-center relative z-10 text-center border border-stone-700/50 shadow-2xl rounded-3xl gap-6">
+        <div className="max-w-md w-full bg-white/95 backdrop-blur-2xl p-8 sm:p-10 flex flex-col items-center relative z-10 text-center border border-[#e2e8f0] shadow-xl rounded-3xl gap-6">
 
           {/* Logo Badge */}
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-[#8f4226] via-[#8a6a2e] to-[#d9a83f] p-[2px] shadow-lg shadow-[#a24d2e]/30">
-              <div className="w-full h-full bg-[#1c1309] rounded-[14px] flex items-center justify-center p-2 gap-1">
-                <div className="w-2 h-full rounded-xs bg-gradient-to-b from-[#c97a4a] to-[#8a4526] shadow-2xs" />
-                <div className="w-2 h-4/5 rounded-xs bg-gradient-to-b from-[#e3bd68] to-[#a5823a] shadow-2xs" />
-                <div className="w-2 h-3/5 rounded-xs bg-gradient-to-b from-[#c9a86b] to-[#a06a44] shadow-2xs" />
+            <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-[#4051d6] via-[#6366f1] to-[#a5b4fc] p-[2px] shadow-lg shadow-[#4f63ef]/30">
+              <div className="w-full h-full bg-[#0f172a] rounded-[14px] flex items-center justify-center p-2 gap-1">
+                <div className="w-2 h-full rounded-xs bg-gradient-to-b from-[#60a5fa] to-[#4051d6] shadow-2xs" />
+                <div className="w-2 h-4/5 rounded-xs bg-gradient-to-b from-[#818cf8] to-[#6366f1] shadow-2xs" />
+                <div className="w-2 h-3/5 rounded-xs bg-gradient-to-b from-[#818cf8] to-[#8b5cf6] shadow-2xs" />
               </div>
             </div>
             <div className="text-left">
-              <h1 className="text-2xl font-extrabold tracking-tight text-white flex items-center gap-2">
-                Kanban Board
+              <h1 className="text-2xl font-extrabold tracking-tight text-[#172033] flex items-center gap-2">
+                co-board
               </h1>
             </div>
           </div>
 
-          <p className="text-stone-400 text-xs leading-relaxed max-w-xs">
-            Collaborative Kanban workspace with live updates, custom swimlanes, and role-based permissions.
+          <p className="text-[#64748b] text-xs leading-relaxed max-w-xs">
+            Plan your work with Kanban, tables, calendars, timelines, mind maps and sprints — with live collaboration.
           </p>
 
-          {demoError && <p role="alert" className="text-sm text-rose-300">{demoError}</p>}
+          {demoError && <p role="alert" className="text-sm text-rose-600">{demoError}</p>}
           {/* Action Buttons Stack */}
           <div className="w-full flex flex-col gap-3 pt-2">
             <button
               onClick={() => login("default")}
-              className="w-full py-3.5 px-4 rounded-xl bg-white text-stone-900 font-bold hover:bg-stone-100 transition-all flex items-center justify-center gap-3 shadow-lg hover:shadow-xl hover:scale-[1.02] active:scale-[0.98] text-sm cursor-pointer"
+              className="w-full py-3.5 px-4 rounded-xl bg-white text-[#172033] border border-[#e2e8f0] font-bold hover:bg-[#f8fafc] transition-all flex items-center justify-center gap-3 shadow-sm hover:shadow-md hover:scale-[1.02] active:scale-[0.98] text-sm cursor-pointer"
             >
               <svg className="w-5 h-5" viewBox="0 0 24 24"><path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" /><path fill="currentColor" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" /><path fill="currentColor" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" /><path fill="currentColor" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" /></svg>
               Continue with Google
@@ -386,7 +423,7 @@ export default function Dashboard() {
             <button
               onClick={startDemo}
               disabled={isStartingDemo}
-              className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-[#8a4526] to-[#96712e] text-white font-bold hover:from-[#a24d2e] hover:to-[#a5823a] transition-all flex items-center justify-center gap-2 shadow-lg shadow-[#a24d2e]/25 hover:scale-[1.02] active:scale-[0.98] text-sm cursor-pointer"
+              className="w-full py-3.5 px-4 rounded-xl bg-[#4f63ef] text-white font-bold hover:bg-[#4051d6] transition-all flex items-center justify-center gap-2 shadow-md shadow-[#4f63ef]/20 hover:scale-[1.02] active:scale-[0.98] text-sm cursor-pointer"
             >
               <Sparkles size={16} />
               {isStartingDemo ? "Preparing your board…" : "Try a demo — no sign-up"}
@@ -398,7 +435,7 @@ export default function Dashboard() {
   }
 
   return (
-    <div className={`board-workspace dashboard-workspace min-h-screen font-sans flex flex-col transition-colors duration-200 selection:bg-[#a24d2e]/20 ${theme === "dark" ? "bg-[#140d07] text-[#f7efdc]" : "bg-[#f7efdc] text-stone-900"
+    <div className={`board-workspace dashboard-workspace min-h-screen font-sans flex flex-col transition-colors duration-200 selection:bg-[#4f63ef]/20 ${theme === "dark" ? "bg-[#0f172a] text-[#f8fafc]" : "bg-[#f8fafc] text-slate-900"
       }`}>
 
       <WorkspaceSidebar onLogout={handleWorkspaceLogout} user={user} activePage="dashboard" boardCount={boards.length} role="Personal workspace"
@@ -409,9 +446,9 @@ export default function Dashboard() {
         <button className="sidebar-stream" onClick={() => setActiveTab("starred")}><Star size={15} /> Starred</button>
       </WorkspaceSidebar>
       {demoError && <div role="alert" className="bg-rose-100 text-rose-900 p-4">{demoError} <button onClick={startDemo} disabled={isStartingDemo} className="underline">Retry demo</button></div>}
-      {isStartingDemo && <div role="status" className="bg-[#f0e2c8] text-[#3a2410] p-4">Preparing your demo board…</div>}
+      {isStartingDemo && <div role="status" className="bg-[#eef2ff] text-[#172033] p-4">Preparing your demo board…</div>}
       {/* HEADER */}
-      <header className={`board-topbar dashboard-topbar px-8 py-4 border-b flex items-center justify-between backdrop-blur-md sticky top-0 z-20 transition-colors ${theme === "dark" ? "bg-[#1c1309]/95 border-[#2a2013]" : "bg-white border-stone-200 shadow-xs"
+      <header className={`board-topbar dashboard-topbar px-8 py-4 border-b flex items-center justify-between backdrop-blur-md sticky top-0 z-20 transition-colors ${theme === "dark" ? "bg-[#0f172a]/95 border-[#334155]" : "bg-white border-slate-200 shadow-xs"
         }`}>
         <div className="board-brand flex items-center gap-3"><span className="mobile-workspace-symbol"><KanbanMark /></span><h1 className="board-title">All boards</h1></div>
         <div className="dashboard-top-actions flex items-center gap-3">
@@ -419,22 +456,22 @@ export default function Dashboard() {
           <button
             onClick={toggleTheme}
             className={`p-2.5 rounded-xl border transition-colors cursor-pointer ${theme === "dark"
-              ? "bg-[#2a2013] text-amber-400 hover:bg-[#4a3a26] border-[#4a3a26]"
-              : "bg-stone-100 text-stone-700 hover:bg-stone-200 border-stone-200"
+              ? "bg-[#172033] text-[#a5b4fc] hover:bg-[#334155] border-[#334155]"
+              : "bg-slate-100 text-slate-700 hover:bg-slate-200 border-slate-200"
               }`}
             title={theme === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode"}
           >
             {theme === "dark" ? <Sun size={17} /> : <Moon size={17} />}
           </button>
 
-          <div className={`workspace-mobile-account flex items-center gap-3 px-3.5 py-1.5 rounded-xl border ${theme === "dark" ? "bg-[#2a2013] border-[#4a3a26]" : "bg-stone-50 border-stone-200"
+          <div className={`workspace-mobile-account flex items-center gap-3 px-3.5 py-1.5 rounded-xl border ${theme === "dark" ? "bg-[#172033] border-[#334155]" : "bg-slate-50 border-slate-200"
             }`}>
             <AvatarImage
               src={user.avatarUrl}
               name={user.name}
               className="w-6 h-6 rounded-full object-cover"
             />
-            <span className={`text-xs font-semibold ${theme === "dark" ? "text-stone-200" : "text-stone-700"}`}>
+            <span className={`text-xs font-semibold ${theme === "dark" ? "text-slate-200" : "text-slate-700"}`}>
               {user.name}
             </span>
           </div>
@@ -444,14 +481,14 @@ export default function Dashboard() {
             <button
               onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}
               className={`p-2 rounded-xl border transition-all cursor-pointer relative ${theme === "dark"
-                ? "bg-[#2a2013] text-stone-200 hover:bg-[#4a3a26] border-[#4a3a26]"
-                : "bg-stone-100 text-stone-700 hover:bg-stone-200 border-stone-200"
+                ? "bg-[#172033] text-slate-200 hover:bg-[#334155] border-[#334155]"
+                : "bg-slate-100 text-slate-700 hover:bg-slate-200 border-slate-200"
                 }`}
               title="Notifications"
             >
               <Bell size={17} />
               {unreadCount > 0 && (
-                <span className="absolute -top-1 -right-1 bg-[#8a4526] text-white text-[10px] font-extrabold w-4.5 h-4.5 rounded-full flex items-center justify-center border-2 border-white dark:border-[#1c1309] shadow-xs">
+                <span className="absolute -top-1 -right-1 bg-[#4051d6] text-white text-[10px] font-extrabold w-4.5 h-4.5 rounded-full flex items-center justify-center border-2 border-white dark:border-[#0f172a] shadow-xs">
                   {unreadCount}
                 </span>
               )}
@@ -459,20 +496,20 @@ export default function Dashboard() {
 
             {/* Notifications Dropdown Panel (Miro Screenshot 4 & 5) */}
             {isNotificationsOpen && (
-              <div className={`absolute right-0 mt-2 w-80 md:w-96 rounded-2xl border shadow-xl p-4 z-50 animate-in fade-in slide-in-from-top-2 duration-150 ${theme === "dark" ? "bg-[#2a2013] border-[#4a3a26] text-stone-100" : "bg-white border-stone-200 text-stone-800"
+              <div className={`absolute right-0 mt-2 w-80 md:w-96 rounded-2xl border shadow-xl p-4 z-50 animate-in fade-in slide-in-from-top-2 duration-150 ${theme === "dark" ? "bg-[#172033] border-[#334155] text-slate-100" : "bg-white border-slate-200 text-slate-800"
                 }`}>
-                <div className="flex items-center justify-between border-b pb-3 mb-3 border-stone-100 dark:border-[#4a3a26]">
+                <div className="flex items-center justify-between border-b pb-3 mb-3 border-slate-100 dark:border-[#334155]">
                   <h3 className="text-sm font-bold flex items-center gap-2">
                     Notifications
                     {unreadCount > 0 && (
-                      <span className="bg-[#f0e2c8] text-[#7a3a1e] dark:bg-[#3a2410]/60 dark:text-[#d9a06b] text-[10px] px-2 py-0.5 rounded-full font-bold">
+                      <span className="bg-[#eef2ff] text-[#4051d6] dark:bg-[#172033]/60 dark:text-[#a5b4fc] text-[10px] px-2 py-0.5 rounded-full font-bold">
                         {unreadCount} unread
                       </span>
                     )}
                   </h3>
                   <button
                     onClick={() => setIsNotificationsOpen(false)}
-                    className="text-stone-400 hover:text-stone-600 dark:hover:text-stone-200 cursor-pointer"
+                    className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
                   >
                     <X size={16} />
                   </button>
@@ -480,7 +517,7 @@ export default function Dashboard() {
 
                 <div className="max-h-80 overflow-y-auto space-y-3 pr-1">
                   {notifications.length === 0 ? (
-                    <div className="text-center py-6 text-stone-400 text-xs">
+                    <div className="text-center py-6 text-slate-400 text-xs">
                       No notifications yet
                     </div>
                   ) : (
@@ -488,8 +525,8 @@ export default function Dashboard() {
                       <div
                         key={item.id}
                         className={`p-3 rounded-xl border transition-all ${item.status === "pending"
-                          ? theme === "dark" ? "bg-[#2a1a0d]/20 border-[#6b3218]/40" : "bg-[#f7efdc]/50 border-[#f0e2c8]"
-                          : theme === "dark" ? "bg-stone-900/40 border-stone-800" : "bg-stone-50 border-stone-100"
+                          ? theme === "dark" ? "bg-[#243052]/20 border-[#4f63ef]/40" : "bg-[#f8fafc]/50 border-[#eef2ff]"
+                          : theme === "dark" ? "bg-slate-900/40 border-slate-800" : "bg-slate-50 border-slate-100"
                           }`}
                       >
                         <div className="flex items-start gap-2.5">
@@ -500,7 +537,7 @@ export default function Dashboard() {
                           />
                           <div className="flex-1 min-w-0">
                             <p className="text-xs leading-snug">
-                              <span className="font-bold">{item.userName}</span> requests access to your board <span className="font-semibold text-[#a24d2e]">{item.boardName}</span>
+                              <span className="font-bold">{item.userName}</span> requests access to your board <span className="font-semibold text-[#4f63ef] dark:text-[#a5b4fc]">{item.boardName}</span>
                             </p>
 
                             {/* Notification Actions */}
@@ -509,23 +546,23 @@ export default function Dashboard() {
                                 <>
                                   <button
                                     onClick={() => respondToAccess(item.id, "approve")}
-                                    className="px-3 py-1 bg-[#a24d2e] hover:bg-[#8a4526] text-white text-xs font-bold rounded-lg transition-all cursor-pointer shadow-xs"
+                                    className="px-3 py-1 bg-[#4f63ef] hover:bg-[#4051d6] text-white text-xs font-bold rounded-lg transition-all cursor-pointer shadow-xs"
                                   >
                                     Give access
                                   </button>
                                   <button
                                     onClick={() => respondToAccess(item.id, "dismiss")}
-                                    className="px-3 py-1 bg-stone-100 hover:bg-stone-200 dark:bg-stone-800 dark:hover:bg-stone-700 text-stone-600 dark:text-stone-300 text-xs font-semibold rounded-lg transition-all cursor-pointer"
+                                    className="px-3 py-1 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs font-semibold rounded-lg transition-all cursor-pointer"
                                   >
                                     Dismiss
                                   </button>
                                 </>
                               ) : item.status === "approved" ? (
-                                <span className="text-xs font-bold text-[#6b7c4a] dark:text-[#9aab6d] flex items-center gap-1">
+                                <span className="text-xs font-bold text-[#16a34a] dark:text-[#22c55e] flex items-center gap-1">
                                   <Check size={14} /> Request approved
                                 </span>
                               ) : (
-                                <span className="text-xs font-medium text-stone-400">
+                                <span className="text-xs font-medium text-slate-400">
                                   Request dismissed
                                 </span>
                               )}
@@ -546,7 +583,7 @@ export default function Dashboard() {
             }}
             className={`workspace-mobile-account p-2 rounded-xl border transition-colors ${theme === "dark"
               ? "bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border-transparent"
-              : "bg-stone-100 hover:bg-rose-50 text-stone-500 hover:text-rose-600 border-stone-200"
+              : "bg-slate-100 hover:bg-rose-50 text-slate-500 hover:text-rose-600 border-slate-200"
               }`}
             title="Logout"
           >
@@ -557,24 +594,24 @@ export default function Dashboard() {
 
       <section className="board-overview" aria-label="Workspace overview">
         <div className="overview-copy"><div className="board-eyebrow"><span /> YOUR SPACE TO MAKE THINGS HAPPEN</div><h2>My workspace</h2><p>All your projects, one place. Pick a board and keep things moving.</p><div className="overview-meta"><span><Layers3 size={14} /> {boards.length} boards</span><span><Star size={14} /> {boards.filter(b => starredIds.includes(b.ID)).length} starred</span></div></div>
-        <div className="overview-action"><button className="new-task-button" onClick={createNewBoard}><Plus size={17} /> New board</button><div className="overview-task-count"><strong>{boards.reduce((n,b) => n + (b.Cards?.length || 0), 0)}</strong><span>tasks across your boards</span></div></div>
+        <div className="overview-action"><button className="new-task-button" onClick={() => setShowCreateModal(true)}><Plus size={17} /> New board</button><div className="overview-task-count"><strong>{boards.reduce((n,b) => n + (b.Cards?.length || 0), 0)}</strong><span>tasks across your boards</span></div></div>
       </section>
       {/* MAIN CONTAINER */}
       <main className="dashboard-main max-w-7xl w-full mx-auto px-8 py-8 flex-1 space-y-8">
 
         {/* ACTION BAR: SEARCH, TABS, VIEW TOGGLE */}
-        <div className={`dashboard-controls flex flex-col md:flex-row md:items-center justify-between gap-4 pb-5 border-b ${theme === "dark" ? "border-[#2a2013]" : "border-stone-200"
+        <div className={`dashboard-controls flex flex-col md:flex-row md:items-center justify-between gap-4 pb-5 border-b ${theme === "dark" ? "border-[#334155]" : "border-slate-200"
           }`}>
 
           {/* Tabs */}
-          <div className={`dashboard-tabs flex items-center gap-2 w-fit flex-wrap p-1.5 rounded-2xl border ${theme === "dark" ? "bg-[#1c1309] border-[#2a2013]" : "bg-stone-100/80 border-stone-200"
+          <div className={`dashboard-tabs flex items-center gap-2 w-fit flex-wrap p-1.5 rounded-2xl border ${theme === "dark" ? "bg-[#0f172a] border-[#334155]" : "bg-slate-100/80 border-slate-200"
             }`}>
             <button
               aria-pressed={activeTab === "all"}
               onClick={() => setActiveTab("all")}
               className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${activeTab === "all"
-                ? theme === "dark" ? "bg-[#8f4226] text-white shadow-md shadow-[#a24d2e]/20" : "bg-[#a24d2e] text-white shadow-md shadow-[#a24d2e]/20"
-                : theme === "dark" ? "bg-[#2a2013] border border-[#4a3a26] text-stone-300 hover:bg-[#4a3a26]" : "bg-white border border-stone-200 text-stone-600 hover:bg-stone-50 hover:text-stone-900"
+                ? theme === "dark" ? "bg-[#4051d6] text-white shadow-md shadow-[#4f63ef]/20" : "bg-[#4f63ef] text-white shadow-md shadow-[#4f63ef]/20"
+                : theme === "dark" ? "bg-[#172033] border border-[#334155] text-slate-300 hover:bg-[#334155]" : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900"
                 }`}
             >
               All boards ({boards.length})
@@ -583,8 +620,8 @@ export default function Dashboard() {
               aria-pressed={activeTab === "my"}
               onClick={() => setActiveTab("my")}
               className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${activeTab === "my"
-                ? theme === "dark" ? "bg-[#8f4226] text-white shadow-md shadow-[#a24d2e]/20" : "bg-[#a24d2e] text-white shadow-md shadow-[#a24d2e]/20"
-                : theme === "dark" ? "bg-[#2a2013] border border-[#4a3a26] text-stone-300 hover:bg-[#4a3a26]" : "bg-white border border-stone-200 text-stone-600 hover:bg-stone-50 hover:text-stone-900"
+                ? theme === "dark" ? "bg-[#4051d6] text-white shadow-md shadow-[#4f63ef]/20" : "bg-[#4f63ef] text-white shadow-md shadow-[#4f63ef]/20"
+                : theme === "dark" ? "bg-[#172033] border border-[#334155] text-slate-300 hover:bg-[#334155]" : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900"
                 }`}
             >
               My boards ({boards.filter(b => b.IsOwner).length})
@@ -593,8 +630,8 @@ export default function Dashboard() {
               aria-pressed={activeTab === "shared"}
               onClick={() => setActiveTab("shared")}
               className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${activeTab === "shared"
-                ? theme === "dark" ? "bg-[#8f4226] text-white shadow-md shadow-[#a24d2e]/20" : "bg-[#a24d2e] text-white shadow-md shadow-[#a24d2e]/20"
-                : theme === "dark" ? "bg-[#2a2013] border border-[#4a3a26] text-stone-300 hover:bg-[#4a3a26]" : "bg-white border border-stone-200 text-stone-600 hover:bg-stone-50 hover:text-stone-900"
+                ? theme === "dark" ? "bg-[#4051d6] text-white shadow-md shadow-[#4f63ef]/20" : "bg-[#4f63ef] text-white shadow-md shadow-[#4f63ef]/20"
+                : theme === "dark" ? "bg-[#172033] border border-[#334155] text-slate-300 hover:bg-[#334155]" : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900"
                 }`}
             >
               Shared with me ({boards.filter(b => !b.IsOwner).length})
@@ -603,8 +640,8 @@ export default function Dashboard() {
               aria-pressed={activeTab === "starred"}
               onClick={() => setActiveTab("starred")}
               className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${activeTab === "starred"
-                ? theme === "dark" ? "bg-[#8f4226] text-white shadow-md shadow-[#a24d2e]/20" : "bg-[#a24d2e] text-white shadow-md shadow-[#a24d2e]/20"
-                : theme === "dark" ? "bg-[#2a2013] border border-[#4a3a26] text-stone-300 hover:bg-[#4a3a26]" : "bg-white border border-stone-200 text-stone-600 hover:bg-stone-50 hover:text-stone-900"
+                ? theme === "dark" ? "bg-[#4051d6] text-white shadow-md shadow-[#4f63ef]/20" : "bg-[#4f63ef] text-white shadow-md shadow-[#4f63ef]/20"
+                : theme === "dark" ? "bg-[#172033] border border-[#334155] text-slate-300 hover:bg-[#334155]" : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900"
                 }`}
             >
               <Star size={14} className={activeTab === "starred" ? "fill-current" : ""} />
@@ -617,7 +654,7 @@ export default function Dashboard() {
 
             {/* Search Input */}
             <div className="relative w-64">
-              <Search className={`absolute left-3.5 top-2.5 ${theme === "dark" ? "text-stone-400" : "text-stone-400"}`} size={16} />
+              <Search className={`absolute left-3.5 top-2.5 ${theme === "dark" ? "text-slate-400" : "text-slate-400"}`} size={16} />
               <input
                 type="text"
                 aria-label="Search boards"
@@ -625,20 +662,20 @@ export default function Dashboard() {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className={`w-full rounded-xl pl-10 pr-4 py-2 text-xs focus:outline-none transition-colors ${theme === "dark"
-                  ? "bg-[#1c1309] border border-[#2a2013] text-stone-200 focus:border-[#8f4226] placeholder:text-stone-500"
-                  : "bg-white border border-stone-200 text-stone-800 focus:border-[#a24d2e] placeholder:text-stone-400 shadow-xs"
+                  ? "bg-[#0f172a] border border-[#334155] text-slate-200 focus:border-[#4051d6] placeholder:text-slate-500"
+                  : "bg-white border border-slate-200 text-slate-800 focus:border-[#4f63ef] placeholder:text-slate-400 shadow-xs"
                   }`}
               />
             </div>
 
             {/* Grid / List Switcher */}
-            <div className={`flex items-center rounded-xl p-1 shadow-xs border ${theme === "dark" ? "bg-[#1c1309] border-[#2a2013]" : "bg-white border-stone-200"
+            <div className={`flex items-center rounded-xl p-1 shadow-xs border ${theme === "dark" ? "bg-[#0f172a] border-[#334155]" : "bg-white border-slate-200"
               }`}>
               <button
                 aria-pressed={viewMode === "grid"}
                 onClick={() => setViewMode("grid")}
-                className={`p-1.5 rounded-lg text-stone-500 hover:text-stone-900 dark:hover:text-white transition-colors cursor-pointer ${viewMode === "grid"
-                  ? theme === "dark" ? "bg-[#2a2013] text-[#d9a83f] font-bold" : "bg-stone-100 text-[#a24d2e] font-bold"
+                className={`p-1.5 rounded-lg text-slate-500 hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer ${viewMode === "grid"
+                  ? theme === "dark" ? "bg-[#172033] text-[#a5b4fc] font-bold" : "bg-slate-100 text-[#4f63ef] dark:text-[#a5b4fc] font-bold"
                   : ""
                   }`}
                 title="Grid View"
@@ -648,8 +685,8 @@ export default function Dashboard() {
               <button
                 aria-pressed={viewMode === "list"}
                 onClick={() => setViewMode("list")}
-                className={`p-1.5 rounded-lg text-stone-500 hover:text-stone-900 dark:hover:text-white transition-colors cursor-pointer ${viewMode === "list"
-                  ? theme === "dark" ? "bg-[#2a2013] text-[#d9a83f] font-bold" : "bg-stone-100 text-[#a24d2e] font-bold"
+                className={`p-1.5 rounded-lg text-slate-500 hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer ${viewMode === "list"
+                  ? theme === "dark" ? "bg-[#172033] text-[#a5b4fc] font-bold" : "bg-slate-100 text-[#4f63ef] dark:text-[#a5b4fc] font-bold"
                   : ""
                   }`}
                 title="List View"
@@ -661,30 +698,36 @@ export default function Dashboard() {
         </div>
 
         {/* BOARD LISTING */}
+        {boardLoadError && (
+          <div role="alert" className={`flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-3 text-xs ${theme === "dark" ? "border-rose-800 bg-rose-950/30 text-rose-200" : "border-rose-200 bg-rose-50 text-rose-800"}`}>
+            <span>{boardLoadError}{boards.length > 0 ? " Showing the last loaded boards." : ""}</span>
+            <button type="button" onClick={() => fetchBoards(true)} disabled={isLoadingBoards} className="rounded-lg border border-current px-3 py-1.5 font-bold disabled:opacity-50">{isLoadingBoards ? "Retrying…" : "Retry"}</button>
+          </div>
+        )}
         {isLoadingBoards ? (
           <div className="dashboard-grid grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {[1, 2, 3, 4].map(n => (
-              <div key={n} className={`h-56 rounded-2xl p-5 border animate-pulse flex flex-col justify-between ${theme === "dark" ? "bg-[#2a2013]/60 border-[#4a3a26]" : "bg-white border-stone-200"
+              <div key={n} className={`h-56 rounded-2xl p-5 border animate-pulse flex flex-col justify-between ${theme === "dark" ? "bg-[#172033]/60 border-[#334155]" : "bg-white border-slate-200"
                 }`}>
-                <div className={`h-28 rounded-xl ${theme === "dark" ? "bg-stone-800/80" : "bg-stone-100"}`} />
+                <div className={`h-28 rounded-xl ${theme === "dark" ? "bg-slate-800/80" : "bg-slate-100"}`} />
                 <div className="space-y-2 pt-3">
-                  <div className={`h-4 w-2/3 rounded ${theme === "dark" ? "bg-stone-800" : "bg-stone-200"}`} />
-                  <div className={`h-3 w-1/3 rounded ${theme === "dark" ? "bg-stone-800" : "bg-stone-200"}`} />
+                  <div className={`h-4 w-2/3 rounded ${theme === "dark" ? "bg-slate-800" : "bg-slate-200"}`} />
+                  <div className={`h-3 w-1/3 rounded ${theme === "dark" ? "bg-slate-800" : "bg-slate-200"}`} />
                 </div>
               </div>
             ))}
           </div>
-        ) : filteredBoards.length === 0 ? (
-          <div className={`dashboard-empty text-center py-20 border-2 border-dashed rounded-3xl ${theme === "dark" ? "border-[#2a2013] bg-[#1c1309]/50" : "border-stone-200 bg-white/60"
+        ) : boardLoadError && boards.length === 0 ? null : filteredBoards.length === 0 ? (
+          <div className={`dashboard-empty text-center py-20 border-2 border-dashed rounded-3xl ${theme === "dark" ? "border-[#334155] bg-[#0f172a]/50" : "border-slate-200 bg-white/60"
             }`}>
-            <FolderKanban className={`mx-auto mb-3 ${theme === "dark" ? "text-stone-500" : "text-stone-400"}`} size={48} />
-            <h3 className={`text-lg font-bold mb-1 ${theme === "dark" ? "text-stone-200" : "text-stone-800"}`}>No boards found</h3>
-            <p className={`text-xs max-w-sm mx-auto mb-6 ${theme === "dark" ? "text-stone-400" : "text-stone-500"}`}>
+            <FolderKanban className={`mx-auto mb-3 ${theme === "dark" ? "text-slate-500" : "text-slate-400"}`} size={48} />
+            <h3 className={`text-lg font-bold mb-1 ${theme === "dark" ? "text-slate-200" : "text-slate-800"}`}>No boards found</h3>
+            <p className={`text-xs max-w-sm mx-auto mb-6 ${theme === "dark" ? "text-slate-400" : "text-slate-500"}`}>
               {searchQuery ? "No boards match your search. Try a different name." : activeTab === "starred" ? "Star a board to find it here quickly." : activeTab === "shared" ? "Boards shared with you will appear here." : "Create a board to start managing tasks."}
             </p>
             <button
-              onClick={searchQuery || activeTab !== "all" ? () => { setSearchQuery(""); setActiveTab("all"); } : createNewBoard}
-              className={`px-5 py-2.5 rounded-xl text-white text-xs font-bold transition-all hover:scale-105 active:scale-95 ${theme === "dark" ? "bg-[#8f4226] hover:bg-[#8a4526] shadow-md shadow-[#a24d2e]/20" : "bg-[#a24d2e] hover:bg-[#8a4526] shadow-md shadow-[#a24d2e]/20"
+              onClick={searchQuery || activeTab !== "all" ? () => { setSearchQuery(""); setActiveTab("all"); } : () => setShowCreateModal(true)}
+              className={`px-5 py-2.5 rounded-xl text-white text-xs font-bold transition-all hover:scale-105 active:scale-95 ${theme === "dark" ? "bg-[#4051d6] hover:bg-[#4051d6] shadow-md shadow-[#4f63ef]/20" : "bg-[#4f63ef] hover:bg-[#4051d6] shadow-md shadow-[#4f63ef]/20"
                 }`}
             >
               {searchQuery || activeTab !== "all" ? "View all boards" : "+ Create New Board"}
@@ -697,29 +740,27 @@ export default function Dashboard() {
               const isStarred = starredIds.includes(board.ID);
               return (
                 <Link key={board.ID} to={`/b/${board.ID}`} className="block group">
-                  <div className={`dashboard-board-card h-56 rounded-2xl p-5 flex flex-col justify-between border transition-all duration-200 hover:-transtone-y-1 hover:shadow-lg relative overflow-hidden shadow-xs ${theme === "dark"
-                    ? "bg-[#2a2013] border-[#4a3a26] group-hover:border-[#a24d2e]/50"
-                    : "bg-white border-stone-200 group-hover:border-[#a24d2e]/50"
+                  <div className={`dashboard-board-card h-56 rounded-2xl p-5 flex flex-col justify-between border transition-all duration-200 hover:-translate-y-1 hover:shadow-lg relative overflow-hidden shadow-xs ${theme === "dark"
+                    ? "bg-[#172033] border-[#334155] group-hover:border-[#4f63ef]/50"
+                    : "bg-white border-slate-200 group-hover:border-[#4f63ef]/50"
                     }`}>
 
                     {/* Top Card Thumbnail Header */}
                     <div className={`dashboard-board-preview h-28 rounded-xl p-3 border relative flex items-center justify-center overflow-hidden ${theme === "dark"
-                      ? "bg-gradient-to-br from-stone-900 via-[#1c1309] to-[#2a1a0d]/30 border-[#4a3a26]"
-                      : "bg-gradient-to-br from-amber-100/70 via-stone-100 to-[#f7efdc]/50 border-stone-100"
+                      ? "bg-gradient-to-br from-slate-900 via-[#0f172a] to-[#243052]/30 border-[#334155]"
+                      : "bg-gradient-to-br from-[#eef2ff] via-[#f8fafc] to-white border-[#e2e8f0]"
                       }`}>
-                      <div className={`w-full h-full rounded-lg shadow-xs border p-2 flex gap-1.5 opacity-90 group-hover:scale-105 transition-transform ${theme === "dark" ? "bg-[#1c1309]/90 border-[#4a3a26]" : "bg-white/80 border-stone-200/60"
+                      <div className={`w-full h-full rounded-lg shadow-xs border p-2 opacity-90 group-hover:scale-105 transition-transform ${theme === "dark" ? "bg-[#0f172a]/90 border-[#334155]" : "bg-white/80 border-slate-200/60"
                         }`}>
-                        <div className={`w-1/3 h-full rounded ${theme === "dark" ? "bg-stone-800" : "bg-stone-100/80"}`} />
-                        <div className={`w-1/3 h-full rounded ${theme === "dark" ? "bg-stone-800" : "bg-stone-100/80"}`} />
-                        <div className={`w-1/3 h-full rounded ${theme === "dark" ? "bg-stone-800" : "bg-stone-100/80"}`} />
+                        <BoardFormatPreview format={board.Type || "kanban"} />
                       </div>
 
                       {/* Action buttons overlay */}
                       <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-20">
                         <button
                           onClick={(e) => toggleStar(e, board.ID)}
-                          className={`p-1.5 rounded-lg transition-colors border shadow-xs ${theme === "dark" ? "bg-[#1c1309]/90 border-[#4a3a26]" : "bg-white/90 border-stone-200"
-                            } ${isStarred ? "text-amber-500" : "text-stone-400 hover:text-amber-500"}`}
+                          className={`p-1.5 rounded-lg transition-colors border shadow-xs ${theme === "dark" ? "bg-[#0f172a]/90 border-[#334155]" : "bg-white/90 border-slate-200"
+                            } ${isStarred ? "text-[#4f63ef] dark:text-[#a5b4fc]" : "text-slate-400 hover:text-[#4f63ef] dark:hover:text-[#a5b4fc]"}`}
                           title="Star Board"
                         >
                           <Star size={13} fill={isStarred ? "currentColor" : "none"} />
@@ -728,7 +769,7 @@ export default function Dashboard() {
                           <>
                             <button
                               onClick={(e) => openRenameModal(e, board.ID, board.Name)}
-                              className={`p-1.5 rounded-lg transition-colors border shadow-xs ${theme === "dark" ? "bg-[#1c1309]/90 border-[#4a3a26] text-stone-400 hover:text-[#d9a83f]" : "bg-white/90 border-stone-200 text-stone-500 hover:text-[#8a4526]"
+                              className={`p-1.5 rounded-lg transition-colors border shadow-xs ${theme === "dark" ? "bg-[#0f172a]/90 border-[#334155] text-slate-400 hover:text-[#a5b4fc]" : "bg-white/90 border-slate-200 text-slate-500 hover:text-[#4051d6]"
                                 }`}
                               title="Rename"
                             >
@@ -736,7 +777,7 @@ export default function Dashboard() {
                             </button>
                             <button
                               onClick={(e) => openDeleteModal(e, board.ID, board.Name)}
-                              className={`p-1.5 rounded-lg transition-colors border shadow-xs ${theme === "dark" ? "bg-[#1c1309]/90 border-[#4a3a26] text-stone-400 hover:text-rose-400" : "bg-white/90 border-stone-200 text-stone-500 hover:text-rose-600"
+                              className={`p-1.5 rounded-lg transition-colors border shadow-xs ${theme === "dark" ? "bg-[#0f172a]/90 border-[#334155] text-slate-400 hover:text-rose-400" : "bg-white/90 border-slate-200 text-slate-500 hover:text-rose-600"
                                 }`}
                               title="Delete"
                             >
@@ -749,21 +790,27 @@ export default function Dashboard() {
 
                     {/* Card Title & Badges */}
                     <div className="pt-3">
-                      <div className="flex items-center justify-between gap-2 mb-1">
-                        <h3 className={`text-sm font-bold truncate transition-colors ${theme === "dark" ? "text-stone-100 group-hover:text-[#d9a83f]" : "text-stone-900 group-hover:text-[#a24d2e]"
+                      <div className="dashboard-card-details flex flex-col items-start gap-2 mb-2">
+                        <h3 className={`text-sm font-bold transition-colors ${theme === "dark" ? "text-slate-100 group-hover:text-[#a5b4fc]" : "text-slate-900 group-hover:text-[#4f63ef]"
                           }`}>
                           {board.Name || "Untitled Board"}
                         </h3>
-                        <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold flex-shrink-0 ${board.IsOwner
-                          ? theme === "dark" ? "bg-[#a24d2e]/20 text-[#d9a06b] border border-[#a24d2e]/30" : "bg-[#f7efdc] text-[#7a3a1e] border border-[#ecd3b4]"
-                          : theme === "dark" ? "bg-amber-500/20 text-amber-300 border border-amber-500/30" : "bg-amber-50 text-amber-700 border border-amber-200"
-                          }`}>
-                          {board.IsOwner ? "Owner" : "Shared"}
-                        </span>
+                        <div className="flex items-center gap-1 flex-shrink-0">
+                          <span className={`px-2 py-0.5 rounded-md text-[10px] font-semibold ${theme === "dark" ? "bg-[#243052] text-[#c7d2fe]" : "bg-[#eef2ff] text-[#4051d6]"
+                            }`}>
+                            {boardTypeLabel(board.Type)}
+                          </span>
+                          <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold flex-shrink-0 ${board.IsOwner
+                            ? theme === "dark" ? "bg-[#4f63ef]/20 text-[#a5b4fc] border border-[#4f63ef]/30" : "bg-[#f8fafc] text-[#4051d6] border border-[#c7d2fe]"
+                            : theme === "dark" ? "bg-violet-500/15 text-violet-300 border border-violet-500/30" : "bg-violet-50 text-violet-700 border border-violet-200"
+                            }`}>
+                            {board.IsOwner ? "Owner" : "Shared"}
+                          </span>
+                        </div>
                       </div>
                     </div>
 
-                    <div className={`flex items-center justify-between text-xs pt-2 border-t ${theme === "dark" ? "border-[#4a3a26] text-stone-400" : "border-stone-100 text-stone-500"
+                    <div className={`flex items-center justify-between text-xs pt-2 border-t ${theme === "dark" ? "border-[#334155] text-slate-400" : "border-slate-100 text-slate-500"
                       }`}>
                       <span className="text-[11px] font-semibold">
                         {board.Cards?.length || 0} tasks
@@ -779,10 +826,10 @@ export default function Dashboard() {
           </div>
         ) : (
           /* LIST VIEW */
-          <div className={`dashboard-list border rounded-2xl overflow-hidden shadow-xs ${theme === "dark" ? "bg-[#2a2013] border-[#4a3a26]" : "bg-white border-stone-200"
+          <div className={`dashboard-list border rounded-2xl overflow-hidden shadow-xs ${theme === "dark" ? "bg-[#172033] border-[#334155]" : "bg-white border-slate-200"
             }`}>
             {/* Table Header */}
-            <div className={`dashboard-list-heading grid grid-cols-12 px-6 py-3 border-b text-xs font-bold ${theme === "dark" ? "bg-[#1c1309]/60 border-[#4a3a26] text-stone-400" : "bg-stone-50 border-stone-100 text-stone-500"
+            <div className={`dashboard-list-heading grid grid-cols-12 px-6 py-3 border-b text-xs font-bold ${theme === "dark" ? "bg-[#0f172a]/60 border-[#334155] text-slate-400" : "bg-slate-50 border-slate-100 text-slate-500"
               }`}>
               <div className="col-span-5">Name</div>
               <div className="col-span-3 text-center">Online users</div>
@@ -790,24 +837,24 @@ export default function Dashboard() {
               <div className="col-span-2 text-right">Actions</div>
             </div>
 
-            <div className={`divide-y ${theme === "dark" ? "divide-[#4a3a26]" : "divide-stone-100"}`}>
+            <div className={`divide-y ${theme === "dark" ? "divide-[#334155]" : "divide-slate-100"}`}>
               {filteredBoards.map(board => {
                 const isStarred = starredIds.includes(board.ID);
                 return (
-                  <Link key={board.ID} to={`/b/${board.ID}`} className={`dashboard-list-row px-6 py-4 grid grid-cols-12 items-center transition-colors group ${theme === "dark" ? "hover:bg-[#1c1309]" : "hover:bg-[#f7efdc]/40"
+                  <Link key={board.ID} to={`/b/${board.ID}`} className={`dashboard-list-row px-6 py-4 grid grid-cols-12 items-center transition-colors group ${theme === "dark" ? "hover:bg-[#0f172a]" : "hover:bg-[#f8fafc]/40"
                     }`}>
                     {/* Name Column */}
                     <div className="col-span-5 flex items-center gap-3">
-                      <div className={`p-2 rounded-xl border flex-shrink-0 ${theme === "dark" ? "bg-[#a24d2e]/10 border-[#a24d2e]/20 text-[#d9a83f]" : "bg-[#f7efdc] border-[#f0e2c8] text-[#a24d2e]"
+                      <div className={`p-2 rounded-xl border flex-shrink-0 ${theme === "dark" ? "bg-[#4f63ef]/10 border-[#4f63ef]/20 text-[#a5b4fc]" : "bg-[#f8fafc] border-[#eef2ff] text-[#4f63ef] dark:text-[#a5b4fc]"
                         }`}>
                         <FolderKanban size={18} />
                       </div>
                       <div className="min-w-0">
-                        <h4 className={`text-sm font-bold truncate transition-colors ${theme === "dark" ? "text-stone-100 group-hover:text-[#d9a83f]" : "text-stone-900 group-hover:text-[#a24d2e]"
+                        <h4 className={`text-sm font-bold truncate transition-colors ${theme === "dark" ? "text-slate-100 group-hover:text-[#a5b4fc]" : "text-slate-900 group-hover:text-[#4f63ef]"
                           }`}>
                           {board.Name || "Untitled Board"}
                         </h4>
-                        <p className={`text-[11px] ${theme === "dark" ? "text-stone-400" : "text-stone-500"}`}>{board.Cards?.length || 0} tasks</p>
+                        <p className={`text-[11px] ${theme === "dark" ? "text-slate-400" : "text-slate-500"}`}>{board.Cards?.length || 0} tasks · {boardTypeLabel(board.Type)}</p>
                       </div>
                     </div>
 
@@ -819,8 +866,8 @@ export default function Dashboard() {
                     {/* Owner Column */}
                     <div className="col-span-2 flex items-center justify-center">
                       <span className={`px-2.5 py-0.5 rounded-md text-[10px] font-bold ${board.IsOwner
-                        ? theme === "dark" ? "bg-[#a24d2e]/20 text-[#d9a06b] border border-[#a24d2e]/30" : "bg-[#f7efdc] text-[#7a3a1e] border border-[#ecd3b4]"
-                        : theme === "dark" ? "bg-amber-500/20 text-amber-300 border border-amber-500/30" : "bg-amber-50 text-amber-700 border border-amber-200"
+                        ? theme === "dark" ? "bg-[#4f63ef]/20 text-[#a5b4fc] border border-[#4f63ef]/30" : "bg-[#f8fafc] text-[#4051d6] border border-[#c7d2fe]"
+                        : theme === "dark" ? "bg-violet-500/15 text-violet-300 border border-violet-500/30" : "bg-violet-50 text-violet-700 border border-violet-200"
                         }`}>
                         {board.IsOwner ? "Owner" : "Shared"}
                       </span>
@@ -830,8 +877,8 @@ export default function Dashboard() {
                     <div className="col-span-2 flex items-center justify-end gap-2">
                       <button
                         onClick={(e) => toggleStar(e, board.ID)}
-                        className={`p-1.5 rounded-lg transition-colors border ${theme === "dark" ? "border-[#4a3a26]" : "border-stone-200"
-                          } ${isStarred ? "text-amber-500" : "text-stone-400 hover:text-amber-500"}`}
+                        className={`p-1.5 rounded-lg transition-colors border ${theme === "dark" ? "border-[#334155]" : "border-slate-200"
+                          } ${isStarred ? "text-[#4f63ef] dark:text-[#a5b4fc]" : "text-slate-400 hover:text-[#4f63ef] dark:hover:text-[#a5b4fc]"}`}
                         title="Star Board"
                       >
                         <Star size={14} fill={isStarred ? "currentColor" : "none"} />
@@ -840,14 +887,14 @@ export default function Dashboard() {
                         <>
                           <button
                             onClick={(e) => openRenameModal(e, board.ID, board.Name)}
-                            className={`p-1.5 transition-colors ${theme === "dark" ? "text-stone-400 hover:text-[#d9a83f]" : "text-stone-400 hover:text-[#8a4526]"}`}
+                            className={`p-1.5 transition-colors ${theme === "dark" ? "text-slate-400 hover:text-[#a5b4fc]" : "text-slate-400 hover:text-[#4051d6]"}`}
                             title="Rename"
                           >
                             <Edit2 size={14} />
                           </button>
                           <button
                             onClick={(e) => openDeleteModal(e, board.ID, board.Name)}
-                            className="p-1.5 text-stone-400 hover:text-rose-600 transition-colors"
+                            className="p-1.5 text-slate-400 hover:text-rose-600 transition-colors"
                             title="Delete"
                           >
                             <Trash2 size={14} />
@@ -863,37 +910,138 @@ export default function Dashboard() {
         )}
       </main>
 
-      {/* Centered Glassmorphic Rename Board Modal */}
-      {renameModalData && (
+      {/* Centered Glassmorphic Create Board Modal */}
+      {showCreateModal && (
         <div
-          className="fixed inset-0 bg-stone-950/70 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-in fade-in duration-150"
-          onClick={() => setRenameModalData(null)}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Create a new board"
+          className="fixed inset-0 bg-slate-950/70 backdrop-blur-md z-50 flex items-center justify-center overflow-y-auto p-4 animate-in fade-in duration-150"
+          onClick={() => setShowCreateModal(false)}
         >
           <div
-            className={`w-full max-w-md rounded-3xl border shadow-2xl p-6 flex flex-col gap-4 animate-in zoom-in-95 duration-150 ${theme === "dark" ? "bg-[#2a2013] border-[#4a3a26] text-stone-100" : "bg-white border-stone-200 text-stone-800"
+            className={`w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl border shadow-2xl p-6 flex flex-col gap-4 animate-in zoom-in-95 duration-150 ${theme === "dark" ? "bg-[#172033] border-[#334155] text-slate-100" : "bg-white border-slate-200 text-slate-800"
               }`}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2.5">
-                <div className="p-2.5 rounded-2xl bg-[#a24d2e]/10 text-[#a24d2e] border border-[#a24d2e]/20">
+                <div className="p-2.5 rounded-2xl bg-[#4f63ef]/10 text-[#4f63ef] dark:text-[#a5b4fc] border border-[#4f63ef]/20">
+                  <Plus size={18} />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold">New board</h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Choose how this board presents your work. You can still edit tasks and columns later.</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowCreateModal(false)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors p-1 cursor-pointer rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="space-y-1.5">
+              <label htmlFor="new-board-name" className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Board name</label>
+              <input
+                id="new-board-name"
+                type="text"
+                autoFocus
+                value={newBoardName}
+                onChange={(e) => setNewBoardName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") createNewBoard();
+                  if (e.key === "Escape") setShowCreateModal(false);
+                }}
+                className={`w-full px-4 py-3 rounded-xl border text-sm focus:outline-none focus:ring-2 focus:ring-[#4f63ef] font-semibold transition-all ${theme === "dark" ? "bg-[#0f172a] border-[#334155] text-slate-100 placeholder:text-slate-600" : "bg-slate-50 border-slate-200 text-slate-900 placeholder:text-slate-400"
+                  }`}
+                placeholder="Untitled board"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Board type</span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                {BOARD_TYPES.map((t) => {
+                  const selected = newBoardType === t.id;
+                  return (
+                    <button
+                      key={t.id}
+                      onClick={() => setNewBoardType(t.id)}
+                      aria-pressed={selected}
+                      className={`text-left p-3 rounded-xl border transition-all cursor-pointer ${selected
+                        ? theme === "dark" ? "border-[#4f63ef] bg-[#4f63ef]/15" : "border-[#4f63ef] bg-[#eef2ff]"
+                        : theme === "dark" ? "border-[#334155] bg-[#0f172a] hover:border-[#4f63ef]" : "border-slate-200 bg-[#f8fafc] hover:border-[#c7d2fe]"
+                        }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-bold">{t.label}</span>
+                        {selected && <Check size={14} className="text-[#4f63ef] dark:text-[#a5b4fc]" />}
+                      </div>
+                      <p className={`text-[10px] mt-0.5 ${theme === "dark" ? "text-slate-400" : "text-slate-500"}`}>{t.hint}</p>
+                      <div className="h-16 mt-2 overflow-hidden rounded-lg border border-[#e2e8f0] dark:border-[#334155] bg-white dark:bg-[#0f172a] pointer-events-none">
+                        <BoardFormatPreview format={t.id} />
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {createError && <p role="alert" className="text-xs text-rose-500">{createError}</p>}
+
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100 dark:border-slate-800">
+              <button
+                onClick={() => setShowCreateModal(false)}
+                className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${theme === "dark" ? "bg-slate-800 hover:bg-slate-700 text-slate-300" : "bg-slate-100 hover:bg-slate-200 text-slate-700"
+                  }`}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={createNewBoard}
+                disabled={isCreatingBoard}
+                className="px-5 py-2.5 bg-[#4f63ef] hover:bg-[#4051d6] text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-[#4f63ef]/20 cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+              >
+                {isCreatingBoard ? "Creating..." : "Create board"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Centered Glassmorphic Rename Board Modal */}
+      {renameModalData && (
+        <div
+          className="fixed inset-0 bg-slate-950/70 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-in fade-in duration-150"
+          onClick={() => setRenameModalData(null)}
+        >
+          <div
+            className={`w-full max-w-md rounded-3xl border shadow-2xl p-6 flex flex-col gap-4 animate-in zoom-in-95 duration-150 ${theme === "dark" ? "bg-[#172033] border-[#334155] text-slate-100" : "bg-white border-slate-200 text-slate-800"
+              }`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2.5 rounded-2xl bg-[#4f63ef]/10 text-[#4f63ef] dark:text-[#a5b4fc] border border-[#4f63ef]/20">
                   <Edit2 size={18} />
                 </div>
                 <div>
                   <h3 className="text-base font-bold">Rename Board</h3>
-                  <p className="text-xs text-stone-500 dark:text-stone-400">Enter a new name for your board</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Enter a new name for your board</p>
                 </div>
               </div>
               <button
                 onClick={() => setRenameModalData(null)}
-                className="text-stone-400 hover:text-stone-600 dark:hover:text-stone-200 transition-colors p-1 cursor-pointer rounded-lg hover:bg-stone-100 dark:hover:bg-stone-800"
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors p-1 cursor-pointer rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"
               >
                 <X size={18} />
               </button>
             </div>
 
             <div className="space-y-1.5 pt-1">
-              <label className="text-[11px] font-bold uppercase tracking-wider text-stone-400">Board Name</label>
+              <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Board Name</label>
               <input
                 type="text"
                 autoFocus
@@ -903,16 +1051,18 @@ export default function Dashboard() {
                   if (e.key === "Enter") handleSaveRename();
                   if (e.key === "Escape") setRenameModalData(null);
                 }}
-                className={`w-full px-4 py-3 rounded-xl border text-sm focus:outline-none focus:ring-2 focus:ring-[#a24d2e] font-semibold transition-all ${theme === "dark" ? "bg-[#1c1309] border-[#4a3a26] text-stone-100 placeholder:text-stone-600" : "bg-stone-50 border-stone-200 text-stone-900 placeholder:text-stone-400"
+                className={`w-full px-4 py-3 rounded-xl border text-sm focus:outline-none focus:ring-2 focus:ring-[#4f63ef] font-semibold transition-all ${theme === "dark" ? "bg-[#0f172a] border-[#334155] text-slate-100 placeholder:text-slate-600" : "bg-slate-50 border-slate-200 text-slate-900 placeholder:text-slate-400"
                   }`}
                 placeholder="Board name..."
               />
             </div>
 
-            <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-stone-100 dark:border-stone-800">
+            {renameError && <p role="alert" className="text-xs text-rose-500">{renameError}</p>}
+
+            <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100 dark:border-slate-800">
               <button
                 onClick={() => setRenameModalData(null)}
-                className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${theme === "dark" ? "bg-stone-800 hover:bg-stone-700 text-stone-300" : "bg-stone-100 hover:bg-stone-200 text-stone-700"
+                className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${theme === "dark" ? "bg-slate-800 hover:bg-slate-700 text-slate-300" : "bg-slate-100 hover:bg-slate-200 text-slate-700"
                   }`}
               >
                 Cancel
@@ -920,7 +1070,7 @@ export default function Dashboard() {
               <button
                 onClick={handleSaveRename}
                 disabled={!renameInputValue.trim() || isSavingRename}
-                className="px-5 py-2.5 bg-[#a24d2e] hover:bg-[#8a4526] text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-[#a24d2e]/20 cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                className="px-5 py-2.5 bg-[#4f63ef] hover:bg-[#4051d6] text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-[#4f63ef]/20 cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
               >
                 {isSavingRename ? "Saving..." : "Save Changes"}
               </button>
@@ -932,11 +1082,11 @@ export default function Dashboard() {
       {/* Centered Glassmorphic Delete Confirm Modal */}
       {deleteModalData && (
         <div
-          className="fixed inset-0 bg-stone-950/70 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-in fade-in duration-150"
+          className="fixed inset-0 bg-slate-950/70 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-in fade-in duration-150"
           onClick={() => setDeleteModalData(null)}
         >
           <div
-            className={`w-full max-w-md rounded-3xl border shadow-2xl p-6 flex flex-col gap-4 animate-in zoom-in-95 duration-150 ${theme === "dark" ? "bg-[#2a2013] border-[#4a3a26] text-stone-100" : "bg-white border-stone-200 text-stone-800"
+            className={`w-full max-w-md rounded-3xl border shadow-2xl p-6 flex flex-col gap-4 animate-in zoom-in-95 duration-150 ${theme === "dark" ? "bg-[#172033] border-[#334155] text-slate-100" : "bg-white border-slate-200 text-slate-800"
               }`}
             onClick={(e) => e.stopPropagation()}
           >
@@ -947,25 +1097,27 @@ export default function Dashboard() {
                 </div>
                 <div>
                   <h3 className="text-base font-bold text-rose-500">Delete Board?</h3>
-                  <p className="text-xs text-stone-500 dark:text-stone-400">This action cannot be undone</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">This action cannot be undone</p>
                 </div>
               </div>
               <button
                 onClick={() => setDeleteModalData(null)}
-                className="text-stone-400 hover:text-stone-600 dark:hover:text-stone-200 transition-colors p-1 cursor-pointer rounded-lg hover:bg-stone-100 dark:hover:bg-stone-800"
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors p-1 cursor-pointer rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"
               >
                 <X size={18} />
               </button>
             </div>
 
-            <p className="text-xs text-stone-500 dark:text-stone-400 leading-relaxed bg-rose-500/5 p-3.5 rounded-xl border border-rose-500/10">
-              Are you sure you want to delete <strong className="text-stone-800 dark:text-stone-100 font-bold">"{deleteModalData.name}"</strong>? All columns, tasks, and data inside this board will be permanently removed.
+            <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed bg-rose-500/5 p-3.5 rounded-xl border border-rose-500/10">
+              Are you sure you want to delete <strong className="text-slate-800 dark:text-slate-100 font-bold">"{deleteModalData.name}"</strong>? All columns, tasks, and data inside this board will be permanently removed.
             </p>
 
-            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-stone-100 dark:border-stone-800">
+            {deleteError && <p role="alert" className="text-xs text-rose-500">{deleteError}</p>}
+
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100 dark:border-slate-800">
               <button
                 onClick={() => setDeleteModalData(null)}
-                className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${theme === "dark" ? "bg-stone-800 hover:bg-stone-700 text-stone-300" : "bg-stone-100 hover:bg-stone-200 text-stone-700"
+                className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${theme === "dark" ? "bg-slate-800 hover:bg-slate-700 text-slate-300" : "bg-slate-100 hover:bg-slate-200 text-slate-700"
                   }`}
               >
                 Cancel

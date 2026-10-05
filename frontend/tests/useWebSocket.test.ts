@@ -195,3 +195,40 @@ it('sends only changed fields and preserves unrelated remote edits',async()=>{
  act(()=>socket.message({type:'EDIT_CARD',cardId:'1',changes:{description:''}}));
  expect(result.current.cards[0].Description).toBe('');
 });
+
+describe('board formats and metadata sync', () => {
+  it('loads board type and sprint metadata, then confirms correlated sprint updates', async () => {
+    savedBoard = { ...savedBoard, Type: 'sprint', SprintName: 'Iteration 1', SprintStart: '2026-10-05', SprintEnd: '2026-10-18', SprintStatus: 'planning' };
+    const { result, socket } = await connected();
+    expect(result.current.boardType).toBe('sprint');
+    expect(result.current.sprint).toEqual({ name: 'Iteration 1', start: '2026-10-05', end: '2026-10-18', status: 'planning' });
+    act(() => result.current.updateSprint({ name: 'Iteration 2', status: 'active' }));
+    const payload = JSON.parse(socket.send.mock.calls[0][0]);
+    expect(payload.changes).toEqual({ name: 'Iteration 2', status: 'active' });
+    expect(payload.expected).toEqual({ name: 'Iteration 1', status: 'planning' });
+    expect(result.current.operations[0].state).toBe('saving');
+    act(() => socket.message({ type: 'UPDATE_SPRINT', requestId: payload.requestId, sprintName: 'Iteration 2', sprintStart: '2026-10-05', sprintEnd: '2026-10-18', sprintStatus: 'active' }));
+    expect(result.current.operations[0].state).toBe('saved');
+    expect(result.current.sprint.status).toBe('active');
+  });
+
+  it('keeps story points and sprint membership typed on optimistic and remote edits', async () => {
+    const { result, socket } = await connected();
+    act(() => result.current.editCardDetail('1', { storyPoints: 5, inSprint: true, startDate: '2026-10-05', dependencies: '2', parentId: '3' }));
+    const payload = JSON.parse(socket.send.mock.calls[0][0]);
+    expect(payload.changes).toEqual({ storyPoints: '5', inSprint: 'true', startDate: '2026-10-05', dependencies: '2', parentId: '3' });
+    expect(payload.expected).toMatchObject({ storyPoints: '0', inSprint: 'false', startDate: '', dependencies: '', parentId: '' });
+    expect(result.current.cards[0]).toMatchObject({ StoryPoints: 5, InSprint: true, ParentID: '3' });
+    act(() => socket.message({ type: 'EDIT_CARD', cardId: '1', changes: { storyPoints: '8', inSprint: 'false', dependencies: '4' } }));
+    expect(result.current.cards[0]).toMatchObject({ StoryPoints: 8, InSprint: false, Dependencies: '4' });
+  });
+
+  it('sends scheduled child creation and refreshes survivors after a deleted reference', async () => {
+    const { result, socket } = await connected();
+    act(() => result.current.addCard('Child', 'TODO', 2000, 'Untitled', { parentId: '1', startDate: '2026-10-05', dueDate: '2026-10-08' }));
+    expect(JSON.parse(socket.send.mock.calls[0][0])).toMatchObject({ type: 'ADD_CARD', parentId: '1', startDate: '2026-10-05', dueDate: '2026-10-08' });
+    savedBoard = { ...savedBoard, Cards: [{ ...card, ParentID: '', Dependencies: '' }] };
+    await act(async () => socket.message({ type: 'BOARD_REFRESH', boardId: 'board' }));
+    expect(result.current.cards[0]).toMatchObject({ ParentID: '', Dependencies: '' });
+  });
+});

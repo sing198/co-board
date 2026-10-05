@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -46,31 +47,37 @@ type Client struct {
 }
 
 type WsMessage struct {
-	Changes     map[string]string `json:"changes,omitempty"`
-	Expected    map[string]string `json:"expected,omitempty"`
-	RequestID   string            `json:"requestId,omitempty"`
-	Type        string            `json:"type"`
-	CardId      string            `json:"cardId,omitempty"`
-	BoardId     string            `json:"boardId,omitempty"`
-	Title       string            `json:"title,omitempty"`
-	ToList      string            `json:"toList,omitempty"`
-	Swimlane    string            `json:"swimlane,omitempty"`
-	Position    float64           `json:"position,omitempty"`
-	Card        *Card             `json:"card,omitempty"`
-	Cards       []Card            `json:"cards,omitempty"`
-	ColumnName  string            `json:"columnName,omitempty"`
-	OldColumn   string            `json:"oldColumn,omitempty"`
-	Columns     string            `json:"columns,omitempty"`
-	Swimlanes   string            `json:"swimlanes,omitempty"`
-	OldSwimlane string            `json:"oldSwimlane,omitempty"`
-	BoardName   string            `json:"boardName,omitempty"`
-	AccessLevel string            `json:"accessLevel,omitempty"`
-	InviteToken string            `json:"inviteToken,omitempty"`
-	Tags        string            `json:"tags,omitempty"`
-	Description string            `json:"description,omitempty"`
-	DueDate     string            `json:"dueDate,omitempty"`
-	Checklist   string            `json:"checklist,omitempty"`
-	Background  string            `json:"background,omitempty"`
+	Changes      map[string]string `json:"changes,omitempty"`
+	Expected     map[string]string `json:"expected,omitempty"`
+	RequestID    string            `json:"requestId,omitempty"`
+	Type         string            `json:"type"`
+	CardId       string            `json:"cardId,omitempty"`
+	BoardId      string            `json:"boardId,omitempty"`
+	Title        string            `json:"title,omitempty"`
+	ToList       string            `json:"toList,omitempty"`
+	Swimlane     string            `json:"swimlane,omitempty"`
+	Position     float64           `json:"position,omitempty"`
+	Card         *Card             `json:"card,omitempty"`
+	Cards        []Card            `json:"cards,omitempty"`
+	ColumnName   string            `json:"columnName,omitempty"`
+	OldColumn    string            `json:"oldColumn,omitempty"`
+	Columns      string            `json:"columns,omitempty"`
+	Swimlanes    string            `json:"swimlanes,omitempty"`
+	OldSwimlane  string            `json:"oldSwimlane,omitempty"`
+	BoardName    string            `json:"boardName,omitempty"`
+	AccessLevel  string            `json:"accessLevel,omitempty"`
+	InviteToken  string            `json:"inviteToken,omitempty"`
+	Tags         string            `json:"tags,omitempty"`
+	Description  string            `json:"description,omitempty"`
+	DueDate      string            `json:"dueDate,omitempty"`
+	StartDate    string            `json:"startDate,omitempty"`
+	ParentID     string            `json:"parentId,omitempty"`
+	Checklist    string            `json:"checklist,omitempty"`
+	Background   string            `json:"background,omitempty"`
+	SprintName   string            `json:"sprintName,omitempty"`
+	SprintStart  string            `json:"sprintStart,omitempty"`
+	SprintEnd    string            `json:"sprintEnd,omitempty"`
+	SprintStatus string            `json:"sprintStatus,omitempty"`
 }
 
 // sendError is a small helper that pushes an ERROR frame back to this client.
@@ -117,6 +124,16 @@ func validateCardMutation(msg WsMessage) (WsMessage, string) {
 		if msg.Swimlane == "" {
 			msg.Swimlane = "Untitled"
 		}
+		if err := validateDateRange(msg.StartDate, msg.DueDate); err != nil {
+			return msg, err.Error()
+		}
+		if msg.ParentID != "" {
+			id, err := parseCardID(msg.ParentID)
+			if err != nil {
+				return msg, err.Error()
+			}
+			msg.ParentID = strconv.FormatUint(uint64(id), 10)
+		}
 	case "EDIT_CARD":
 		if msg.CardId == "" {
 			return msg, "Missing cardId."
@@ -127,7 +144,7 @@ func validateCardMutation(msg WsMessage) (WsMessage, string) {
 			}
 			for key, value := range msg.Changes {
 				switch key {
-				case "title", "description", "dueDate", "checklist", "tags", "swimlane":
+				case "title", "description", "dueDate", "startDate", "checklist", "tags", "swimlane", "dependencies", "parentId", "storyPoints", "inSprint":
 				default:
 					return msg, "Invalid task field."
 				}
@@ -138,6 +155,39 @@ func validateCardMutation(msg WsMessage) (WsMessage, string) {
 					}
 					msg.Changes[key] = value
 				}
+				if key == "startDate" || key == "dueDate" {
+					if err := validateCalendarDate(value); err != nil {
+						return msg, err.Error()
+					}
+				}
+				if key == "storyPoints" {
+					points, err := strconv.Atoi(value)
+					if err != nil || points < 0 {
+						return msg, "Story points must be a non-negative integer."
+					}
+					msg.Changes[key] = strconv.Itoa(points)
+				}
+				if key == "inSprint" {
+					included, err := strconv.ParseBool(value)
+					if err != nil {
+						return msg, "In-sprint must be true or false."
+					}
+					msg.Changes[key] = strconv.FormatBool(included)
+				}
+				if key == "parentId" && value != "" {
+					id, err := parseCardID(value)
+					if err != nil {
+						return msg, err.Error()
+					}
+					msg.Changes[key] = strconv.FormatUint(uint64(id), 10)
+				}
+				if key == "dependencies" {
+					clean, _, err := normalizeDependencies(value)
+					if err != nil {
+						return msg, err.Error()
+					}
+					msg.Changes[key] = clean
+				}
 			}
 			return msg, ""
 		}
@@ -145,6 +195,9 @@ func validateCardMutation(msg WsMessage) (WsMessage, string) {
 			msg.Title = trimTitle(msg.Title)
 		} else if msg.Description == "" && msg.DueDate == "" && msg.Checklist == "" && msg.Tags == "" {
 			return msg, "Card title cannot be empty."
+		}
+		if err := validateCalendarDate(msg.DueDate); err != nil {
+			return msg, err.Error()
 		}
 	case "DELETE_CARD", "UPDATE_CARD_TAGS":
 		if msg.CardId == "" {
@@ -193,6 +246,26 @@ func validateCardMutation(msg WsMessage) (WsMessage, string) {
 		}
 	case "UPDATE_BOARD_BACKGROUND":
 		msg.Background = strings.TrimSpace(msg.Background)
+	case "UPDATE_SPRINT":
+		if len(msg.Changes) == 0 {
+			return msg, "No sprint changes supplied."
+		}
+		for key, value := range msg.Changes {
+			switch key {
+			case "name":
+				msg.Changes[key] = strings.TrimSpace(value)
+			case "start", "end":
+				if err := validateCalendarDate(value); err != nil {
+					return msg, err.Error()
+				}
+			case "status":
+				if value != "planning" && value != "active" && value != "completed" {
+					return msg, "Invalid sprint status."
+				}
+			default:
+				return msg, "Invalid sprint field."
+			}
+		}
 	default:
 		return msg, "Unknown message type."
 	}
@@ -304,6 +377,7 @@ func (c *Client) readPump() {
 				}
 			}
 
+			refreshBoard := false
 			switch msg.Type {
 			case "MOVE_CARD":
 				updates := map[string]interface{}{
@@ -331,38 +405,15 @@ func (c *Client) readPump() {
 					}
 				}
 			case "ADD_CARD":
-				swim := msg.Swimlane
-				if swim == "" {
-					swim = "Untitled"
-				}
-				newCard := Card{Title: msg.Title, List: msg.ToList, Swimlane: swim, BoardID: c.boardID, Position: msg.Position, Tags: msg.Tags}
-				if err := c.db.Create(&newCard).Error; err != nil {
-					c.sendError("Could not create task. Please try again.")
+				newCard, err := addCardWithMetadata(c.db, c.boardID, msg)
+				if err != nil {
+					c.sendError("Could not create task: " + err.Error())
 					continue
 				}
 				msg.Card = &newCard
 			case "EDIT_CARD":
-				updates := map[string]interface{}{}
-				query := c.db.Model(&Card{}).Where("id = ? AND board_id = ?", msg.CardId, c.boardID)
-				if msg.Changes != nil {
-					fields := map[string]string{"title": "title", "description": "description", "dueDate": "due_date", "checklist": "checklist", "tags": "tags", "swimlane": "swimlane"}
-					for key, value := range msg.Changes {
-						column := fields[key]
-						updates[column] = value
-						if previous, ok := msg.Expected[key]; ok {
-							query = query.Where("COALESCE("+column+", '') = ?", previous)
-						}
-					}
-				} else {
-					// Legacy clients update only supplied nonempty fields.
-					for column, value := range map[string]string{"title": msg.Title, "description": msg.Description, "due_date": msg.DueDate, "checklist": msg.Checklist, "tags": msg.Tags, "swimlane": msg.Swimlane} {
-						if value != "" {
-							updates[column] = value
-						}
-					}
-				}
-				if result := query.Updates(updates); result.Error != nil || result.RowsAffected == 0 {
-					c.sendError("Task changed or was deleted by another user. Refresh and review before editing again.")
+				if err := editCardWithMetadata(c.db, c.boardID, &msg); err != nil {
+					c.sendError("Could not update task: " + err.Error() + ". Refresh and review before editing again.")
 					continue
 				}
 			case "UPDATE_CARD_TAGS":
@@ -371,14 +422,20 @@ func (c *Client) readPump() {
 					continue
 				}
 			case "DELETE_CARD":
-				if result := c.db.Where("id = ? AND board_id = ?", msg.CardId, c.boardID).Delete(&Card{}); result.Error != nil || result.RowsAffected == 0 {
+				if err := deleteCardWithReferences(c.db, c.boardID, msg.CardId); err != nil {
 					c.sendError("Could not save task. It may have been deleted. Refresh and try again.")
 					continue
 				}
+				refreshBoard = true
 			case "UPDATE_BOARD_NAME":
 				c.db.Model(&Board{}).Where("id = ?", c.boardID).Update("name", msg.BoardName)
 			case "UPDATE_BOARD_BACKGROUND":
 				c.db.Model(&Board{}).Where("id = ?", c.boardID).Update("background", msg.Background)
+			case "UPDATE_SPRINT":
+				if err := updateSprintMetadata(c.db, c.boardID, &msg); err != nil {
+					c.sendError("Could not update sprint: " + err.Error())
+					continue
+				}
 			case "ADD_COLUMN":
 				var b Board
 				if err := c.db.Where("id = ?", c.boardID).First(&b).Error; err == nil {
@@ -407,9 +464,29 @@ func (c *Client) readPump() {
 						}
 					}
 					newCols := strings.Join(newColList, ",")
-					c.db.Model(&Board{}).Where("id = ?", c.boardID).Update("columns", newCols)
-					c.db.Where("board_id = ? AND list = ?", c.boardID, msg.ColumnName).Delete(&Card{})
+					err := c.db.Transaction(func(tx *gorm.DB) error {
+						var deleted []Card
+						if err := tx.Where("board_id = ? AND list = ?", c.boardID, msg.ColumnName).Find(&deleted).Error; err != nil {
+							return err
+						}
+						if err := tx.Model(&Board{}).Where("id = ?", c.boardID).Update("columns", newCols).Error; err != nil {
+							return err
+						}
+						if err := tx.Where("board_id = ? AND list = ?", c.boardID, msg.ColumnName).Delete(&Card{}).Error; err != nil {
+							return err
+						}
+						ids := make(map[uint]bool, len(deleted))
+						for _, card := range deleted {
+							ids[card.ID] = true
+						}
+						return clearDeletedCardReferences(tx, c.boardID, ids)
+					})
+					if err != nil {
+						c.sendError("Could not delete column. Please try again.")
+						continue
+					}
 					msg.Columns = newCols
+					refreshBoard = true
 				}
 			case "RENAME_COLUMN":
 				var b Board
@@ -484,6 +561,12 @@ func (c *Client) readPump() {
 			msg.InviteToken = ""
 			msg.BoardId = c.boardID
 			message, _ = json.Marshal(msg)
+			c.hub.publish <- message
+			if refreshBoard {
+				refresh, _ := json.Marshal(WsMessage{Type: "BOARD_REFRESH", BoardId: c.boardID})
+				c.hub.publish <- refresh
+			}
+			continue
 		}
 
 		c.hub.publish <- message

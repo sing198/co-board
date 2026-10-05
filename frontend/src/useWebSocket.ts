@@ -7,6 +7,11 @@ export type Card = {
   Title: string;
   Description?: string;
   DueDate?: string;
+  StartDate?: string;
+  Dependencies?: string;
+  ParentID?: string;
+  StoryPoints?: number;
+  InSprint?: boolean;
   Checklist?: string;
   List: string;
   Swimlane?: string;
@@ -21,6 +26,8 @@ export type MutationFeedback = { id: string; label: string; state: "saving" | "s
 export type BoardState = Card[];
 
 export type ConnectionStatus = "connecting" | "connected" | "disconnected";
+
+export type SprintDetails = { name: string; start: string; end: string; status: "planning" | "active" | "completed" };
 
 const deduplicateAndSortCards = (cards: Card[]): Card[] => {
   const map = new Map<string, Card>();
@@ -42,6 +49,12 @@ export function useWebSocket(boardId: string, token: string | null) {
   }, []);
 
   const [boardName, setBoardName] = useState<string>("Board");
+	const [boardType, setBoardType] = useState<string>("");
+	const [sprint, setSprint] = useState<SprintDetails>({ name: "", start: "", end: "", status: "planning" });
+	useEffect(() => {
+		setBoardType("");
+		setSprint({ name: "", start: "", end: "", status: "planning" });
+	}, [boardId]);
   const [columns, setColumns] = useState<string[]>(["TODO", "DOING", "DONE"]);
   const [swimlanes, setSwimlanes] = useState<string[]>([]);
   const [accessLevel, setAccessLevel] = useState<"edit" | "view" | "private">("edit");
@@ -121,6 +134,8 @@ export function useWebSocket(boardId: string, token: string | null) {
         if (generation !== connectionGeneration.current) return;
         setCards(data.Cards || []);
         setBoardName(data.Name || "Untitled Board");
+		setBoardType(data.Type || "kanban");
+		setSprint({ name: data.SprintName || "", start: data.SprintStart || "", end: data.SprintEnd || "", status: data.SprintStatus || "planning" });
         if (data.OwnerID) {
           setOwnerId(data.OwnerID);
         }
@@ -246,6 +261,11 @@ export function useWebSocket(boardId: string, token: string | null) {
           return;
         }
 
+		if (data.type === "BOARD_REFRESH") {
+			void fetchBoard().catch(() => {});
+			return;
+		}
+
         if (data.type === "ERROR") {
           setErrorToast(data.title || "An error occurred");
           readyToEdit.current = false;
@@ -290,8 +310,8 @@ export function useWebSocket(boardId: string, token: string | null) {
           });
         } else if (data.type === "EDIT_CARD") {
           if (data.changes) {
-            const fields: Record<string,string> = {title:"Title",description:"Description",dueDate:"DueDate",checklist:"Checklist",tags:"Tags",swimlane:"Swimlane"};
-            const patch = Object.fromEntries(Object.entries(data.changes).filter(([key])=>fields[key]).map(([key,value])=>[fields[key],value]));
+			const fields: Record<string,string> = {title:"Title",description:"Description",dueDate:"DueDate",startDate:"StartDate",checklist:"Checklist",tags:"Tags",swimlane:"Swimlane",dependencies:"Dependencies",parentId:"ParentID",storyPoints:"StoryPoints",inSprint:"InSprint"};
+			const patch = Object.fromEntries(Object.entries(data.changes).filter(([key])=>fields[key]).map(([key,value])=>[fields[key],key === "storyPoints" ? Number(value) : key === "inSprint" ? value === "true" : value]));
             setCards(prev=>prev.map(c=>String(c.ID)===data.cardId ? {...c,...patch} : c));
             return;
           }
@@ -309,6 +329,8 @@ export function useWebSocket(boardId: string, token: string | null) {
           );
         } else if (data.type === "UPDATE_BOARD_BACKGROUND" && data.background) {
           setBoardBackground(data.background);
+		} else if (data.type === "UPDATE_SPRINT") {
+			setSprint({ name: data.sprintName || "", start: data.sprintStart || "", end: data.sprintEnd || "", status: data.sprintStatus || "planning" });
         } else if (data.type === "UPDATE_CARD_TAGS") {
           setCards((prev) =>
             prev.map((c) => (c.ID.toString() === data.cardId ? { ...c, Tags: data.tags } : c))
@@ -409,10 +431,10 @@ export function useWebSocket(boardId: string, token: string | null) {
   }, [connect, fetchBoard, closeAllSockets]);
 
   const sendWsMsg = useCallback((payload: Record<string, unknown>) => {
-    const tracked = ["ADD_CARD", "EDIT_CARD", "DELETE_CARD", "MOVE_CARD", "UPDATE_CARD_TAGS"].includes(String(payload.type));
+	const tracked = ["ADD_CARD", "EDIT_CARD", "DELETE_CARD", "MOVE_CARD", "UPDATE_CARD_TAGS", "UPDATE_SPRINT"].includes(String(payload.type));
     const requestId = tracked ? crypto.randomUUID() : undefined;
     if (requestId) {
-      const label = ({ ADD_CARD: "Create task", EDIT_CARD: "Edit task", DELETE_CARD: "Delete task", MOVE_CARD: "Move task", UPDATE_CARD_TAGS: "Update tags" } as Record<string, string>)[String(payload.type)];
+	  const label = ({ ADD_CARD: "Create task", EDIT_CARD: "Edit task", DELETE_CARD: "Delete task", MOVE_CARD: "Move task", UPDATE_CARD_TAGS: "Update tags", UPDATE_SPRINT: "Update sprint" } as Record<string, string>)[String(payload.type)];
       pending.current.set(requestId, { payload });
       setOperations(prev => [...prev.filter(op => op.state !== "saved"), { id: requestId, label, state: "saving" }]);
     }
@@ -457,8 +479,8 @@ export function useWebSocket(boardId: string, token: string | null) {
     );
   }, [sendWsMsg]);
 
-  const addCard = useCallback((title: string, list: string, position?: number, swimlane?: string) => {
-    sendWsMsg({ type: "ADD_CARD", title, toList: list, position, swimlane: swimlane || "Untitled" });
+  const addCard = useCallback((title: string, list: string, position?: number, swimlane?: string, details?: { dueDate?: string; startDate?: string; parentId?: string }) => {
+    return sendWsMsg({ type: "ADD_CARD", title, toList: list, position, swimlane: swimlane || "Untitled", ...details });
   }, [sendWsMsg]);
 
   const editCard = useCallback((cardId: string, title: string, tags?: string, expectedTitle?: string) => {
@@ -566,19 +588,31 @@ export function useWebSocket(boardId: string, token: string | null) {
     setBoardBackground(bg);
   }, [sendWsMsg]);
 
-  const editCardDetail = useCallback((cardId: string, details: { title?: string; description?: string; dueDate?: string; checklist?: string; tags?: string; swimlane?: string }, baseline?: Record<string,string>) => {
+	const updateSprint = useCallback((details: Partial<SprintDetails>) => {
+		const changes: Record<string,string> = {}, expected: Record<string,string> = {};
+		for (const key of ["name", "start", "end", "status"] as const) {
+			if (details[key] === undefined) continue;
+			changes[key] = details[key]!;
+			expected[key] = sprint[key];
+		}
+		if (Object.keys(changes).length === 0 || !sendWsMsg({ type: "UPDATE_SPRINT", changes, expected })) return;
+		setSprint(prev => ({ ...prev, ...details }));
+	}, [sendWsMsg, sprint]);
+
+  const editCardDetail = useCallback((cardId: string, details: { title?: string; description?: string; dueDate?: string; startDate?: string; checklist?: string; tags?: string; swimlane?: string; dependencies?: string; parentId?: string; storyPoints?: number; inSprint?: boolean }, baseline?: Record<string,string>) => {
     const targetCard = cards.find(c => String(c.ID) === cardId);
-    const fields: Record<string, keyof Card> = {title:"Title",description:"Description",dueDate:"DueDate",checklist:"Checklist",tags:"Tags",swimlane:"Swimlane"};
+	const fields: Record<string, keyof Card> = {title:"Title",description:"Description",dueDate:"DueDate",startDate:"StartDate",checklist:"Checklist",tags:"Tags",swimlane:"Swimlane",dependencies:"Dependencies",parentId:"ParentID",storyPoints:"StoryPoints",inSprint:"InSprint"};
     const changes: Record<string,string> = {}, expected: Record<string,string> = {};
     const local: Partial<Card> = {};
     for (const [key,value] of Object.entries(details)) {
       if (value === undefined) continue;
-      changes[key] = value;
-      expected[key] = baseline?.[key] ?? String(targetCard?.[fields[key]] ?? "");
-      Object.assign(local, { [fields[key]]: value });
+	  changes[key] = String(value);
+	  expected[key] = baseline?.[key] ?? String(targetCard?.[fields[key]] ?? (key === "storyPoints" ? 0 : key === "inSprint" ? false : ""));
+      Object.assign(local, { [fields[key]]: key === "storyPoints" ? Number(value) : key === "inSprint" ? String(value) === "true" : value });
     }
-    if (!sendWsMsg({type:"EDIT_CARD",cardId,changes,expected})) return;
+    if (!sendWsMsg({type:"EDIT_CARD",cardId,changes,expected})) return false;
     setCards(prev => prev.map(c => String(c.ID) === cardId ? {...c,...local} : c));
+    return true;
   }, [cards, sendWsMsg]);
 
   return {
@@ -590,6 +624,9 @@ export function useWebSocket(boardId: string, token: string | null) {
     dismissOperation: (id: string) => { pending.current.delete(id); setOperations(prev => prev.filter(op => op.id !== id)); },
     cards: cards.filter(card => !pendingDeletes.includes(String(card.ID)) && !operations.some(op => op.state === "saving" && pending.current.get(op.id)?.payload.type === "DELETE_CARD" && pending.current.get(op.id)?.payload.cardId === String(card.ID))),
     boardName,
+	boardType,
+	sprint,
+	updateSprint,
     columns,
     swimlanes,
     accessLevel,

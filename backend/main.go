@@ -36,6 +36,20 @@ func isOriginAllowed(origin string) bool {
 	return allowedOriginsMap[origin]
 }
 
+// One response shape for every board format. The live workspace consumes the
+// persisted format and sprint settings from this endpoint after reconnects.
+func boardDetailsPayload(board Board, userRole string) gin.H {
+	return gin.H{
+		"ID": board.ID, "Name": board.Name, "OwnerID": board.OwnerID,
+		"Columns": board.Columns, "Swimlanes": board.Swimlanes,
+		"AccessLevel": board.AccessLevel, "Background": board.Background,
+		"Type": board.Type, "SprintName": board.SprintName,
+		"SprintStart": board.SprintStart, "SprintEnd": board.SprintEnd,
+		"SprintStatus": board.SprintStatus,
+		"Cards":        board.Cards, "UserRole": userRole,
+	}
+}
+
 func createWSTicket(userID uint) string {
 	ticketMu.Lock()
 	defer ticketMu.Unlock()
@@ -309,21 +323,7 @@ func main() {
 			userRole = role
 		}
 
-		c.JSON(200, gin.H{
-			"ID":          board.ID,
-			"Name":        board.Name,
-			"OwnerID":     board.OwnerID,
-			"Columns":     board.Columns,
-			"Swimlanes":   board.Swimlanes,
-			"AccessLevel": board.AccessLevel,
-			"Background":  board.Background,
-			"Cards":       board.Cards,
-			// UserRole is the effective role for the calling user
-			// ("owner" | "edit" | "view" | "" for anonymous). The frontend relies
-			// on this to decide editor vs. view-only mode; previously it was
-			// never sent, so the client always defaulted to "view".
-			"UserRole": userRole,
-		})
+		c.JSON(200, boardDetailsPayload(board, userRole))
 	})
 
 	// Auth Middleware
@@ -437,11 +437,11 @@ func main() {
 			c.JSON(400, gin.H{"error": "Invalid payload"})
 			return
 		}
-		if req.Template != "" && req.Template != "demo" {
+		if !isValidBoardTemplate(req.Template) {
 			c.JSON(400, gin.H{"error": "Unknown board template"})
 			return
 		}
-		board, err := createBoard(db, userID, req.Name, req.Template == "demo")
+		board, err := createBoard(db, userID, req.Name, req.Template)
 		if err != nil {
 			c.JSON(500, gin.H{"error": "Could not create board"})
 			return

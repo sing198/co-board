@@ -4,11 +4,11 @@ import "testing"
 
 func TestDemoBoardIsIndependentAndPersisted(t *testing.T) {
 	db := newTestDB(t)
-	first, err := createBoard(db, 1, "", true)
+	first, err := createBoard(db, 1, "", "demo")
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := createBoard(db, 2, "", true)
+	second, err := createBoard(db, 2, "", "demo")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -38,7 +38,7 @@ func TestDemoBoardIsIndependentAndPersisted(t *testing.T) {
 
 func TestBlankBoardRemainsBlank(t *testing.T) {
 	db := newTestDB(t)
-	board, err := createBoard(db, 1, "My Board", false)
+	board, err := createBoard(db, 1, "My Board", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -47,12 +47,39 @@ func TestBlankBoardRemainsBlank(t *testing.T) {
 	}
 }
 
+func TestTemplateBoardSeedsColumnsAndType(t *testing.T) {
+	db := newTestDB(t)
+	board, err := createBoard(db, 1, "Sprint board", "sprint")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if board.Columns != "BACKLOG,TO DO,IN PROGRESS,REVIEW,DONE" {
+		t.Fatalf("unexpected sprint columns: %q", board.Columns)
+	}
+	if board.Type != "sprint" {
+		t.Fatalf("want board type sprint, got %q", board.Type)
+	}
+	if len(board.Cards) != 0 {
+		t.Fatal("template board must not carry sample cards")
+	}
+	blank, err := createBoard(db, 1, "Kanban board", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if blank.Type != "kanban" || blank.Columns != "TODO,DOING,DONE" {
+		t.Fatalf("default template wrong: type %q columns %q", blank.Type, blank.Columns)
+	}
+	if _, err := createBoard(db, 1, "", "nonsense"); err == nil {
+		t.Fatal("expected unknown template to fail")
+	}
+}
+
 func TestDemoCreationRollsBackOnMembershipFailure(t *testing.T) {
 	db := newTestDB(t)
 	if err := db.Migrator().DropTable(&BoardMember{}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := createBoard(db, 1, "", true); err == nil {
+	if _, err := createBoard(db, 1, "", "demo"); err == nil {
 		t.Fatal("expected membership failure")
 	}
 	var boards, cards int64

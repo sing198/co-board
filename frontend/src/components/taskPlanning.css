@@ -1,0 +1,31 @@
+.task-planning-fields { display:grid; gap:18px; }
+.task-planning-fields section { border-bottom:1px solid var(--board-line,#e2e8f0); padding-bottom:16px; }
+.task-planning-fields h3 { margin:0 0 10px; font-size:12px; font-weight:700; color:var(--board-muted,#64748b); }
+.task-planning-fields label,.planning-dialog label { display:grid; gap:6px; font-size:12px; font-weight:600; color:var(--board-ink,#172033); }
+.task-planning-fields input:not([type=checkbox]),.task-planning-fields select,.planning-dialog input,.planning-dialog select { width:100%; min-height:36px; border:1px solid var(--board-line,#e2e8f0); border-radius:8px; background:var(--board-panel,#fff); color:var(--board-ink,#172033); padding:7px 10px; font-size:12px; }
+.planning-date-row { display:flex; align-items:end; flex-wrap:wrap; gap:10px; }
+.planning-date-row label { flex:1; min-width:140px; }
+.planning-hint { font-size:11px; line-height:1.6; font-weight:400; color:var(--board-muted,#64748b); margin:7px 0 0; }
+.planning-error { color:#be123c; font-size:12px; margin:8px 0; }
+.dark .planning-error { color:#fda4af; }
+.planning-save,.planning-dialog-actions button { border:1px solid var(--board-line,#e2e8f0); border-radius:8px; padding:9px 12px; font-size:12px; font-weight:650; color:var(--board-ink,#172033); cursor:pointer; }
+.planning-save:disabled,.planning-dialog button:disabled { opacity:.45; cursor:not-allowed; }
+.task-planning-fields .planning-checkbox { display:flex; align-items:center; gap:8px; font-weight:400; margin-top:9px; }
+.planning-checkbox input { accent-color:#4f63ef; width:15px; height:15px; flex-shrink:0; }
+.planning-dependencies { margin-top:12px; border:1px solid var(--board-line,#e2e8f0); border-radius:8px; padding:10px; max-height:220px; overflow:auto; }
+.planning-dependencies summary { font-size:12px; cursor:pointer; }
+.planning-dialog-backdrop { position:fixed; inset:0; z-index:60; display:flex; align-items:center; justify-content:center; background:#02061799; backdrop-filter:blur(4px); padding:16px; }
+.planning-dialog { width:100%; max-width:460px; display:grid; gap:18px; border:1px solid var(--board-line,#e2e8f0); border-radius:18px; padding:24px; background:var(--board-panel,#fff); color:var(--board-ink,#172033); box-shadow:0 20px 60px #02061720; max-height:90vh; overflow:auto; }
+.planning-dialog-heading { display:flex; justify-content:space-between; align-items:center; }
+.planning-dialog-heading h2 { font-size:19px; margin:0; font-weight:700; }
+.planning-dialog-heading button { padding:6px; border-radius:8px; cursor:pointer; color:var(--board-muted,#64748b); }
+.planning-dialog-actions { display:flex; gap:10px; justify-content:flex-end; }
+.planning-dialog-actions .planning-primary { background:#4f63ef; color:white; border-color:#4f63ef; }
+.planning-dialog-actions .planning-primary:hover { background:#4051d6; }
+.board-view-tabs { gap:16px; }
+.board-view-switch { min-width:0; }
+.board-view-tabs > p { flex-shrink:0; }
+.table-sort-button { cursor:pointer; white-space:nowrap; text-align:left; padding:4px 0; }
+.table-sort-button:hover { color:var(--board-accent,#4f63ef); }
+.task-view-table th:first-child,.task-view-table td:first-child { width:40%; }
+@media(max-width:1200px) { .board-view-tabs > p { display:none; } }

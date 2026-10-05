@@ -18,7 +18,7 @@ export function KanbanMark() {
 }
 
 export function WorkspaceLogo({ onClick }: { onClick: () => void }) {
-  return <button className="workspace-logo" onClick={onClick} aria-label="Kanban workspace"><KanbanMark />Kanban</button>;
+  return <button className="workspace-logo" onClick={onClick} aria-label="co-board workspace"><KanbanMark />co-board</button>;
 }
 
 export default function WorkspaceSidebar({ user, activePage, onAllBoards, onOverview, role, boardCount, cardCount, children, onLogout }: Props) {

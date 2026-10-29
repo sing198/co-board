@@ -123,6 +123,7 @@ const adjustHeight = (el: HTMLTextAreaElement | null) => {
 };
 
 const TAG_PRESETS = [
+  { name: "Testing", bg: "bg-slate-100 dark:bg-slate-800/60", text: "text-slate-600 dark:text-slate-300", border: "border-slate-200 dark:border-slate-700" },
   { name: "Bug", bg: "bg-rose-500/15 dark:bg-rose-950/40", text: "text-rose-600 dark:text-rose-400", border: "border-rose-200 dark:border-rose-800/60" },
   { name: "Feature", bg: "bg-indigo-50 dark:bg-indigo-950/40", text: "text-indigo-600 dark:text-indigo-300", border: "border-indigo-100 dark:border-indigo-800/60" },
   { name: "Urgent", bg: "bg-amber-500/15 dark:bg-amber-950/40", text: "text-amber-600 dark:text-amber-400", border: "border-amber-200 dark:border-amber-800/60" },
@@ -538,15 +539,21 @@ function DraggableCard({
 
 function SwimlaneDropZone({
   id,
-  children
+  children,
+  isEmpty,
+  isDragging
 }: {
-  id: string,
-  children: React.ReactNode
+  id: string;
+  children: React.ReactNode;
+  isEmpty?: boolean;
+  isDragging?: boolean;
 }) {
   const { setNodeRef } = useDroppable({ id });
   return (
     <div ref={setNodeRef} className="min-h-[50px] flex flex-col gap-2.5">
       {children}
+      {isEmpty && isDragging && <div className="board-empty-drop" aria-hidden="true">Drop here</div>}
+      {isEmpty && !isDragging && <div className="board-empty-note" aria-hidden="true">No tasks yet</div>}
     </div>
   );
 }
@@ -1030,6 +1037,7 @@ export default function Board() {
   const [selectedTagFilter, setSelectedTagFilter] = useState<string>("All");
   const [selectedDueFilter, setSelectedDueFilter] = useState("all");
   const [mineOnly, setMineOnly] = useState(false);
+  const [isDraggingCard, setIsDraggingCard] = useState(false);
   const [boardView, setBoardView] = useState<BoardView>(() => {
     try {
       const saved = localStorage.getItem(`co_board_view_v2_${boardId}`);
@@ -1829,13 +1837,11 @@ export default function Board() {
         <div className="overview-copy">
 
           <h2>{boardName}</h2>
-          <p>{VIEW_HINTS[boardView]}</p>
 
-          <div className="overview-meta">{(boardView === "board" || boardView === "scrum") && swimlanes.length > 1 && <span><UserPlus size={14} /> {swimlanes.length} groups</span>}<span className="overview-access">{isOwner ? "Full access" : canEdit ? "Can edit" : "View only"}</span></div>
+          <div className="overview-meta">{(boardView === "board" || boardView === "scrum") && swimlanes.length > 1 && <span><UserPlus size={14} /> {swimlanes.length} groups</span>}<span className="overview-access">{isOwner ? "Full access" : canEdit ? "Can edit" : "View only"}</span><span><strong>{cards.length}</strong> {cards.length === 1 ? "task on this board" : "tasks on this board"}</span></div>
         </div>
         <div className="overview-action">
           {canEdit && columns.length > 0 && <button className="new-task-button" disabled={status !== "connected"} onClick={openQuickAdd}><Plus size={17} /> {boardView === "mindmap" ? "New idea" : "New task"}</button>}
-          <div className="overview-task-count"><strong>{cards.length}</strong><span>tasks on this board</span></div>
         </div>
       </section>
       <div className="board-view-tabs">
@@ -1847,7 +1853,7 @@ export default function Board() {
             <button aria-pressed={boardView === "timeline"} title="Tasks across a date range" onClick={() => chooseBoardView("timeline")}><GanttChart size={15} /> Timeline</button>
             <button aria-pressed={boardView === "mindmap"} title="Ideas connected as branches" onClick={() => chooseBoardView("mindmap")}><Network size={15} /> Mind map</button>
             {boardType === "sprint" && <button aria-pressed={boardView === "scrum"} title="Backlog and the current sprint" onClick={() => chooseBoardView("scrum")}><Timer size={15} /> Sprint</button>}
-            <button aria-pressed={boardView === "due"} title="What is overdue, due today, or later" onClick={() => chooseBoardView("due")}><Calendar size={15} /> Due</button>
+            <button aria-pressed={boardView === "due"} title="What is overdue, due today, or later" onClick={() => chooseBoardView("due")}><Clock size={15} /> Due</button>
           </div>
           <div className="board-view-more-wrap" ref={viewsMenuRef}>
             <button
@@ -1866,7 +1872,7 @@ export default function Board() {
                 <button type="button" role="menuitem" aria-pressed={boardView === "timeline"} onClick={() => { chooseBoardView("timeline"); setViewsOpen(false); }}><GanttChart size={15} /> Timeline</button>
                 <button type="button" role="menuitem" aria-pressed={boardView === "mindmap"} onClick={() => { chooseBoardView("mindmap"); setViewsOpen(false); }}><Network size={15} /> Mind map</button>
                 {boardType === "sprint" && <button type="button" role="menuitem" aria-pressed={boardView === "scrum"} onClick={() => { chooseBoardView("scrum"); setViewsOpen(false); }}><Timer size={15} /> Sprint</button>}
-                <button type="button" role="menuitem" aria-pressed={boardView === "due"} onClick={() => { chooseBoardView("due"); setViewsOpen(false); }}><Calendar size={15} /> Due</button>
+                <button type="button" role="menuitem" aria-pressed={boardView === "due"} onClick={() => { chooseBoardView("due"); setViewsOpen(false); }}><Clock size={15} /> Due</button>
               </div>
             )}
           </div>
@@ -1908,13 +1914,13 @@ export default function Board() {
             <option value="later">Later</option>
             <option value="none">No due date</option>
           </select>
-          {user && <button type="button" className="board-mine-filter" aria-pressed={mineOnly} onClick={() => setMineOnly((current) => !current)}>Mine</button>}
+          {user && <button type="button" className="board-mine-filter" aria-pressed={mineOnly} title={mineOnly ? "Showing only tasks assigned to me" : "Show only tasks assigned to me"} onClick={() => setMineOnly((current) => !current)}>{mineOnly ? "✓ Mine" : "Mine"}</button>}
 
           <div className="board-filter-chips flex items-center gap-1.5 overflow-x-auto py-0.5 max-w-full">
             <button
               aria-pressed={selectedTagFilter === "All"}
               onClick={() => setSelectedTagFilter("All")}
-              className={`px-2.5 py-1 rounded-xl text-xs font-bold transition-all border cursor-pointer ${
+              className={`px-2.5 py-1 rounded-full text-xs font-bold transition-all border cursor-pointer ${
                 selectedTagFilter === "All"
                   ? "bg-[#4f63ef] text-white border-[#4f63ef] shadow-2xs"
                   : theme === "dark" ? "bg-[#172033] text-slate-300 border-[#334155] hover:bg-slate-800" : "bg-white text-slate-600 border-slate-200 hover:bg-slate-100"
@@ -1930,7 +1936,7 @@ export default function Board() {
                   key={tagName}
                   aria-pressed={active}
                   onClick={() => setSelectedTagFilter(active ? "All" : tagName)}
-                  className={`px-2.5 py-1 rounded-xl text-xs font-extrabold border transition-all cursor-pointer ${colorObj?.bg || ''} ${colorObj?.text || ''} ${
+                  className={`px-2.5 py-1 rounded-full text-xs font-extrabold border transition-all cursor-pointer ${colorObj?.bg || ''} ${colorObj?.text || ''} ${
                     active ? "ring-2 ring-[#4f63ef] shadow-2xs" : (colorObj?.border || '') + " opacity-80 hover:opacity-100"
                   }`}
                 >
@@ -2040,7 +2046,7 @@ export default function Board() {
           </div>
         )}
 
-        <DndContext sensors={sensors} collisionDetection={closestCorners} onDragEnd={handleDragEnd}>
+        <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={() => setIsDraggingCard(true)} onDragCancel={() => setIsDraggingCard(false)} onDragEnd={(event) => { setIsDraggingCard(false); handleDragEnd(event); }}>
 
           {/* Top Column Headers Row */}
           <div className="flex gap-6 items-center w-full px-1">
@@ -2085,6 +2091,24 @@ export default function Board() {
                 </div>
               );
             })}
+            {canEdit && (
+              <button
+                type="button"
+                onClick={() => {
+                  let name = "Column 1";
+                  let count = 1;
+                  while (columns.includes(name)) {
+                    name = `Column ${++count}`;
+                  }
+                  addColumn(name);
+                }}
+                disabled={status !== "connected"}
+                title="Add a column, such as Review"
+                className="board-add-column-trailing"
+              >
+                <Plus size={14} /> Add column
+              </button>
+            )}
           </div>
 
           {/* Unified Swimlane Rows Section */}
@@ -2173,7 +2197,7 @@ export default function Board() {
                           <div key={col} className="board-column flex-1 min-w-0 flex flex-col justify-between min-h-[100px] group/col">
                             <div className="flex flex-col">
                               <SortableContext items={swimCardIds} strategy={verticalListSortingStrategy}>
-                                <SwimlaneDropZone id={dropKey}>
+                                <SwimlaneDropZone id={dropKey} isEmpty={swimCards.length === 0 && !searchQuery && selectedTagFilter === "All" && selectedDueFilter === "all" && !mineOnly} isDragging={isDraggingCard}>
                                   {swimCards.map((c: any) => (
                                     <DraggableCard
                                       key={c.ID}
@@ -2293,7 +2317,7 @@ export default function Board() {
 
       {/* Miro Floating Toolbar at Bottom Center */}
       {canEdit && boardView === "board" && (
-        <div className={`board-create-toolbar fixed bottom-6 left-1/2 -translate-x-1/2 z-40 backdrop-blur-xl px-3 py-1.5 rounded-2xl border shadow-xl flex items-center gap-1.5 ${theme === "dark" ? "bg-[#0f172a]/95 border-[#334155] text-slate-200" : "bg-white/95 border-slate-200 text-slate-700"
+        <div className={`board-create-toolbar mx-auto mb-8 w-fit backdrop-blur-xl px-3 py-1.5 rounded-2xl border shadow-xl flex items-center gap-1.5 ${theme === "dark" ? "bg-[#0f172a]/95 border-[#334155] text-slate-200" : "bg-white/95 border-slate-200 text-slate-700"
           }`}>
           <button
             onClick={() => {

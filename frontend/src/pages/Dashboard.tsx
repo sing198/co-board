@@ -31,7 +31,6 @@ import {
 } from "lucide-react";
 import { API_URL } from "../config";
 import WorkspaceSidebar, { KanbanMark } from "../components/WorkspaceSidebar";
-import StartHere from "../components/StartHere";
 import { BoardFormatPreview } from "../components/BoardCanvasViews";
 import { useNotifications } from "../useNotifications";
 import AssignmentNotices from "../components/AssignmentNotices";
@@ -130,13 +129,6 @@ export default function Dashboard() {
   const [deleteModalData, setDeleteModalData] = useState<{ boardId: string; name: string } | null>(null);
   const [isDeletingBoard, setIsDeletingBoard] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
-  const [showHomeTips, setShowHomeTips] = useState(() => {
-    try { return localStorage.getItem("co_board_home_tips") !== "hidden"; } catch { return true; }
-  });
-  const dismissHomeTips = () => {
-    setShowHomeTips(false);
-    try { localStorage.setItem("co_board_home_tips", "hidden"); } catch { /* Tips can stay visible if storage is blocked. */ }
-  };
   const navigate = useNavigate();
 
   const renderOnlineAvatars = (users?: UserPresence[], size: "sm" | "md" = "sm") => {
@@ -514,7 +506,7 @@ export default function Dashboard() {
                 </section>
                 <section>
                   <header><i className="is-doing" /> Doing <span>1</span></header>
-                  <article className="is-lift"><small>Build</small><strong>Drag this card here</strong></article>
+                  <article className="is-lift"><small>Build</small><strong>Drag this card to Done</strong></article>
                 </section>
                 <section>
                   <header><i className="is-done" /> Done <span>1</span></header>
@@ -556,7 +548,7 @@ export default function Dashboard() {
 
       <WorkspaceSidebar onLogout={handleWorkspaceLogout} user={user} activePage="dashboard" boardCount={boards.length} role="Personal workspace"
         boardFilter={activeTab}
-        note="Pick a template, or open a board you already have."
+        note="Star a board to pin it under Starred."
         onOverview={() => window.scrollTo({ top: 0 })} onAllBoards={() => { setActiveTab("all"); setSearchQuery(""); }}>
         <div className="sidebar-section-label">QUICK ACCESS</div>
         <button className={`sidebar-stream ${activeTab === "my" ? "active" : ""}`} aria-pressed={activeTab === "my"} onClick={() => setActiveTab("my")}><FolderKanban size={15} /> My boards</button>
@@ -716,14 +708,15 @@ export default function Dashboard() {
 
       <section className="board-overview" aria-label="Workspace overview">
         <div className="overview-copy">
-          <div className="board-eyebrow"><span /> START HERE</div>
+          {boards.length === 0 && <div className="board-eyebrow"><span /> START HERE</div>}
           <h2>My workspace</h2>
-          <p>Open a board to move tasks, or create one from a template. Kanban is the easiest place to begin.</p>
+          <p>{boards.length === 0 ? "Open a board to move tasks, or create one from a template. Kanban is the easiest place to begin." : "Open a board to move tasks, or create one from a template."}</p>
           <div className="overview-meta">
-            <span><Layers3 size={14} /> {boards.length} boards</span>
+            <span><Layers3 size={14} /> {boards.length} {boards.length === 1 ? "board" : "boards"}</span>
             <span><Star size={14} /> {boards.filter(b => starredIds.includes(b.ID)).length} starred</span>
+            <span>{boards.reduce((n, b) => n + (b.Cards?.length || 0), 0)} {boards.reduce((n, b) => n + (b.Cards?.length || 0), 0) === 1 ? "task" : "tasks"} across your boards</span>
             {user?.email === "guest@kanban.demo" && (
-              <span className="overview-access font-bold">Guest Session</span>
+              <span className="overview-access font-bold">Guest session</span>
             )}
           </div>
         </div>
@@ -731,19 +724,8 @@ export default function Dashboard() {
           <button className="new-task-button" onClick={() => { setNewBoardName(""); setShowCreateModal(true); }}>
             <Plus size={17} /> New board
           </button>
-          <div className="overview-task-count">
-            <strong>{boards.reduce((n, b) => n + (b.Cards?.length || 0), 0)}</strong>
-            <span>tasks across your boards</span>
-          </div>
         </div>
       </section>
-
-      {showHomeTips && (
-        <StartHere
-          message="Pick a template below, name the board, then press Create."
-          onDismiss={dismissHomeTips}
-        />
-      )}
 
       {attention.length > 0 && (
         <section className="due-soon" aria-label="Tasks that need attention">
@@ -780,47 +762,6 @@ export default function Dashboard() {
           </ul>
         </section>
       )}
-
-      <section className="start-templates" aria-label="Quick templates">
-        <div className="flex items-center justify-between mb-3">
-          <span className="text-[13px] font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
-            <Sparkles size={14} className="text-[#4f63ef] dark:text-[#a5b4fc]" /> Start from a template
-          </span>
-          <span className="text-[12px] text-slate-500 hidden sm:inline">You can rename it and switch views later</span>
-        </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
-          {BOARD_TYPES.slice(0, 6).map((item) => (
-            <button
-              key={item.id}
-              onClick={() => {
-                setNewBoardType(item.id);
-                setNewBoardName(item.defaultName || "");
-                setShowCreateModal(true);
-              }}
-              className={`start-template p-3 rounded-xl border text-left transition-all duration-150 cursor-pointer group flex flex-col justify-between shadow-2xs hover:shadow-md hover:-translate-y-0.5 ${
-                theme === "dark"
-                  ? "bg-[#172033]/90 hover:bg-[#1e293b] border-[#334155] hover:border-[#4f63ef]/60"
-                  : "bg-white hover:bg-[#f8fafc] border-slate-200 hover:border-[#4f63ef]/60"
-              }`}
-            >
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-[13px] font-bold text-slate-800 dark:text-slate-100 group-hover:text-[#4f63ef] dark:group-hover:text-[#a5b4fc] transition-colors flex items-center gap-1.5 flex-wrap">
-                  <item.icon size={14} className="text-[#4f63ef] dark:text-[#a5b4fc]" />
-                  {item.label}
-                  {item.id === "kanban" && <span className="start-badge">Easiest start</span>}
-                </span>
-                <Plus size={14} className="text-slate-400 group-hover:text-[#4f63ef] dark:group-hover:text-[#a5b4fc] transition-colors" />
-              </div>
-              <p className="text-[12px] text-slate-500 dark:text-slate-400 leading-snug line-clamp-2">
-                {item.hint}
-              </p>
-              <span className="text-[12px] font-bold text-[#4f63ef] dark:text-[#a5b4fc] flex items-center gap-0.5">
-                Use this <ArrowRight size={12} />
-              </span>
-            </button>
-          ))}
-        </div>
-      </section>
 
       {/* MAIN CONTAINER */}
       <main className="dashboard-main max-w-7xl w-full mx-auto px-8 py-6 flex-1 space-y-6">
@@ -1051,7 +992,7 @@ export default function Dashboard() {
                     <div className={`flex items-center justify-between text-xs pt-2 border-t ${theme === "dark" ? "border-[#334155] text-slate-400" : "border-slate-100 text-slate-500"
                       }`}>
                       <span className="text-[13px] font-semibold">
-                        {board.Cards?.length || 0} tasks
+                        {board.Cards?.length || 0} {(board.Cards?.length || 0) === 1 ? "task" : "tasks"}
                       </span>
                       <span className="flex items-center gap-3">
                         {renderOnlineAvatars(board.OnlineUsers, "sm")}
@@ -1093,7 +1034,7 @@ export default function Dashboard() {
                           }`}>
                           {board.Name || "Untitled Board"}
                         </h4>
-                        <p className={`text-[11px] ${theme === "dark" ? "text-slate-400" : "text-slate-500"}`}>{board.Cards?.length || 0} tasks · {boardTypeLabel(board.Type)}</p>
+                        <p className={`text-[11px] ${theme === "dark" ? "text-slate-400" : "text-slate-500"}`}>{(board.Cards?.length || 0)} {(board.Cards?.length || 0) === 1 ? "task" : "tasks"} · {boardTypeLabel(board.Type)}</p>
                       </div>
                     </div>
 
@@ -1148,6 +1089,47 @@ export default function Dashboard() {
           </div>
         )}
       </main>
+
+      <section className="start-templates" aria-label="Quick templates">
+        <div className="flex items-center justify-between mb-3">
+          <span className="text-[13px] font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
+            <Sparkles size={14} className="text-[#4f63ef] dark:text-[#a5b4fc]" /> Start from a template
+          </span>
+          <span className="text-[12px] text-slate-500 hidden sm:inline">You can rename it and switch views later</span>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
+          {BOARD_TYPES.slice(0, 6).map((item) => (
+            <button
+              key={item.id}
+              onClick={() => {
+                setNewBoardType(item.id);
+                setNewBoardName(item.defaultName || "");
+                setShowCreateModal(true);
+              }}
+              className={`start-template p-3 rounded-xl border text-left transition-all duration-150 cursor-pointer group flex flex-col justify-between shadow-2xs hover:shadow-md ${
+                theme === "dark"
+                  ? "bg-[#172033]/90 hover:bg-[#1e293b] border-[#334155] hover:border-[#4f63ef]/60"
+                  : "bg-white hover:bg-[#f8fafc] border-slate-200 hover:border-[#4f63ef]/60"
+              }`}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[13px] font-bold text-slate-800 dark:text-slate-100 group-hover:text-[#4f63ef] dark:group-hover:text-[#a5b4fc] transition-colors flex items-center gap-1.5 flex-wrap">
+                  <item.icon size={14} className="text-[#4f63ef] dark:text-[#a5b4fc]" />
+                  {item.label}
+                </span>
+                <Plus size={14} className="text-slate-400 group-hover:text-[#4f63ef] dark:group-hover:text-[#a5b4fc] transition-colors flex-shrink-0" />
+              </div>
+              <span className="start-badge-row">{item.id === "kanban" && <span className="start-badge">Easiest start</span>}</span>
+              <p className="text-[12px] text-slate-500 dark:text-slate-400 leading-snug line-clamp-2">
+                {item.hint}
+              </p>
+              <span className="text-[12px] font-bold text-[#4f63ef] dark:text-[#a5b4fc] flex items-center gap-0.5">
+                Use this <ArrowRight size={12} />
+              </span>
+            </button>
+          ))}
+        </div>
+      </section>
 
       {/* Centered Glassmorphic Create Board Modal */}
       {showCreateModal && (

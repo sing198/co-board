@@ -30,8 +30,8 @@ export default function WorkspaceSidebar({ user, activePage, onAllBoards, onOver
       <WorkspaceLogo onClick={onOverview} />
       <div className="workspace-switcher"><span className="workspace-avatar">{user?.name?.[0] || "K"}</span><div><strong>My workspace</strong><small>{user?.email === "guest@kanban.demo" ? "Guest session" : "Personal workspace"}</small></div></div>
       <div className="sidebar-section-label">WORKSPACE</div>
-      <button className={`sidebar-nav ${allBoardsActive ? "active" : ""}`} onClick={onAllBoards} aria-current={allBoardsActive ? "page" : undefined}><LayoutDashboard size={17} /> All boards {activePage === "dashboard" ? <span>{boardCount}</span> : <ArrowUpRight size={14} />}</button>
-      {activePage === "board" && <button className="sidebar-nav active" onClick={() => document.getElementById("board-content")?.scrollIntoView({ block: "start" })} aria-current="page"><Layers3 size={17} /> Current board <span>{cardCount}</span></button>}
+      <button className={`sidebar-nav ${allBoardsActive ? "active" : ""}`} onClick={onAllBoards} aria-current={allBoardsActive ? "page" : undefined}><LayoutDashboard size={17} /> All boards {activePage === "dashboard" ? <span title="Number of boards">{boardCount} {boardCount === 1 ? "board" : "boards"}</span> : <ArrowUpRight size={14} />}</button>
+      {activePage === "board" && <button className="sidebar-nav active" onClick={() => document.getElementById("board-content")?.scrollIntoView({ block: "start" })} aria-current="page"><Layers3 size={17} /> Current board <span title="Number of tasks">{cardCount} {cardCount === 1 ? "task" : "tasks"}</span></button>}
       {children}
       <div className="sidebar-bottom">
         <div className="workspace-note"><Sparkles size={18} /><strong>New here?</strong><p>{note || "Drag a card to move it. Click a card to add details."}</p></div>

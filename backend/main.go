@@ -120,17 +120,84 @@ func startGuestBoardCleanupWorker(db *gorm.DB) {
 	for range ticker.C {
 		cutoff := time.Now().Add(-24 * time.Hour)
 		var guestUser User
-		if err := db.Where("email = ?", "guest@kanban.demo").First(&guestUser).Error; err == nil {
-			var oldBoards []Board
-			if err := db.Where("owner_id = ? AND created_at < ?", guestUser.ID, cutoff).Find(&oldBoards).Error; err == nil {
-				for _, b := range oldBoards {
-					db.Where("board_id = ?", b.ID).Delete(&Card{})
-					db.Where("board_id = ?", b.ID).Delete(&BoardMember{})
-					db.Where("board_id = ?", b.ID).Delete(&AccessRequest{})
-					db.Where("id = ?", b.ID).Delete(&Board{})
-					log.Printf("🧹 Cleaned up expired guest board %s (older than 24h)\n", b.ID)
-				}
+		if err := db.Where("email = ?", "guest@kanban.demo").First(&guestUser).Error; err != nil {
+			continue
+		}
+		var oldBoards []Board
+		if err := db.Where("owner_id = ? AND created_at < ?", guestUser.ID, cutoff).Find(&oldBoards).Error; err != nil {
+			// Log instead of silently skipping: a failed listing used to mean
+			// expired guest boards piled up forever with no trace in the logs.
+			log.Printf("guest board cleanup: failed to list expired boards: %v", err)
+			continue
+		}
+		for _, b := range oldBoards {
+			// Delete every board-scoped row. The old version deleted only
+			// Card/BoardMember/AccessRequest/Board and left the board's
+			// CardActivity and AssignmentNotice rows behind as orphans.
+			if err := db.Where("board_id = ?", b.ID).Delete(&Card{}).Error; err != nil {
+				log.Printf("guest board cleanup: failed to delete cards for board %s: %v", b.ID, err)
 			}
+			if err := db.Where("board_id = ?", b.ID).Delete(&BoardMember{}).Error; err != nil {
+				log.Printf("guest board cleanup: failed to delete members for board %s: %v", b.ID, err)
+			}
+			if err := db.Where("board_id = ?", b.ID).Delete(&AccessRequest{}).Error; err != nil {
+				log.Printf("guest board cleanup: failed to delete access requests for board %s: %v", b.ID, err)
+			}
+			if err := db.Where("board_id = ?", b.ID).Delete(&CardActivity{}).Error; err != nil {
+				log.Printf("guest board cleanup: failed to delete card activity for board %s: %v", b.ID, err)
+			}
+			if err := db.Where("board_id = ?", b.ID).Delete(&AssignmentNotice{}).Error; err != nil {
+				log.Printf("guest board cleanup: failed to delete assignment notices for board %s: %v", b.ID, err)
+			}
+			if err := db.Where("id = ?", b.ID).Delete(&Board{}).Error; err != nil {
+				log.Printf("guest board cleanup: failed to delete board %s: %v", b.ID, err)
+				continue
+			}
+			log.Printf("🧹 Cleaned up expired guest board %s (older than 24h)\n", b.ID)
+		}
+	}
+}
+
+// Retention limits for append-only rows. These are the only tables that grow
+// without a user deleting something, so capping them bounds total database
+// size no matter how long the app runs on a small (1 GB) database.
+const (
+	// Keep at most this many activity rows per card; the card face only shows
+	// the latest note, and the activity feed is recent history, not an audit log.
+	retentionActivityMaxPerCard = 50
+	// Activity older than this is deleted even if the card has fewer rows.
+	retentionActivityMaxAge = 90 * 24 * time.Hour
+	// A notice the recipient has already seen has served its purpose.
+	retentionSeenNoticeMaxAge = 30 * 24 * time.Hour
+	// Pending requests are never deleted here; only decided ones age out.
+	retentionResolvedRequestMaxAge = 30 * 24 * time.Hour
+)
+
+// startRetentionCleanupWorker prunes append-only rows on the same hourly
+// cadence as the guest-board cleanup. It deliberately never touches boards,
+// cards, members, or pending access requests.
+func startRetentionCleanupWorker(db *gorm.DB) {
+	ticker := time.NewTicker(1 * time.Hour)
+	for range ticker.C {
+		now := time.Now()
+
+		// Card activity older than 90 days.
+		if err := db.Where("created_at < ?", now.Add(-retentionActivityMaxAge)).Delete(&CardActivity{}).Error; err != nil {
+			log.Printf("retention cleanup: failed to delete old card activity: %v", err)
+		}
+		// Cap activity at the latest 50 rows per card (newest first by
+		// created_at, id breaks ties). Works on both PostgreSQL and SQLite.
+		if err := db.Exec(`DELETE FROM card_activities WHERE id NOT IN (SELECT id FROM card_activities AS keep WHERE keep.card_id = card_activities.card_id ORDER BY keep.created_at DESC, keep.id DESC LIMIT ?)`, retentionActivityMaxPerCard).Error; err != nil {
+			log.Printf("retention cleanup: failed to cap card activity per card: %v", err)
+		}
+		// Assignment notices the recipient has already seen, older than 30 days.
+		// Unseen notices are kept indefinitely so nobody loses an unread bell item.
+		if err := db.Where("seen = ? AND created_at < ?", true, now.Add(-retentionSeenNoticeMaxAge)).Delete(&AssignmentNotice{}).Error; err != nil {
+			log.Printf("retention cleanup: failed to delete old seen assignment notices: %v", err)
+		}
+		// Decided (approved/dismissed) access requests older than 30 days.
+		if err := db.Where("status != ? AND created_at < ?", "pending", now.Add(-retentionResolvedRequestMaxAge)).Delete(&AccessRequest{}).Error; err != nil {
+			log.Printf("retention cleanup: failed to delete old resolved access requests: %v", err)
 		}
 	}
 }
@@ -241,6 +308,10 @@ func main() {
 
 	// Start 24-hour Guest Board Garbage Collection Worker
 	go startGuestBoardCleanupWorker(db)
+
+	// Prune append-only activity, notice, and resolved-request rows so the
+	// database cannot grow without bound on a small free-tier database.
+	go startRetentionCleanupWorker(db)
 
 	// Initialize OAuth
 	InitOAuth()

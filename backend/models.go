@@ -16,19 +16,20 @@ type User struct {
 
 // Board represents a single Kanban board
 type Board struct {
-	ID           string `gorm:"primarykey;type:uuid" json:"ID"`
-	Name         string `json:"Name"`
-	OwnerID      uint   `json:"OwnerID"` // Who created the board
-	Columns      string `gorm:"default:'To do,Doing,Done'" json:"Columns"`
-	Swimlanes    string `gorm:"default:''" json:"Swimlanes"`
-	AccessLevel  string `gorm:"default:'edit'" json:"AccessLevel"`
-	Background   string `gorm:"default:'default'" json:"Background"`
-	Type         string `gorm:"column:board_type;default:'kanban'" json:"Type"`
-	SprintName   string `gorm:"default:''" json:"SprintName"`
-	SprintStart  string `gorm:"default:''" json:"SprintStart"`
-	SprintEnd    string `gorm:"default:''" json:"SprintEnd"`
-	SprintStatus string `gorm:"default:'planning'" json:"SprintStatus"`
-	Cards        []Card `gorm:"foreignKey:BoardID" json:"Cards"`
+	ID           string    `gorm:"primarykey;type:uuid" json:"ID"`
+	Name         string    `json:"Name"`
+	OwnerID      uint      `json:"OwnerID"`   // Who created the board
+	CreatedAt    time.Time `json:"CreatedAt"` // GORM sets this on insert; the guest-board cleanup worker deletes boards older than 24h by this column, so it must exist (boards created before it was added get stamped by the MigrateDB backfill below).
+	Columns      string    `gorm:"default:'To do,Doing,Done'" json:"Columns"`
+	Swimlanes    string    `gorm:"default:''" json:"Swimlanes"`
+	AccessLevel  string    `gorm:"default:'edit'" json:"AccessLevel"`
+	Background   string    `gorm:"default:'default'" json:"Background"`
+	Type         string    `gorm:"column:board_type;default:'kanban'" json:"Type"`
+	SprintName   string    `gorm:"default:''" json:"SprintName"`
+	SprintStart  string    `gorm:"default:''" json:"SprintStart"`
+	SprintEnd    string    `gorm:"default:''" json:"SprintEnd"`
+	SprintStatus string    `gorm:"default:'planning'" json:"SprintStatus"`
+	Cards        []Card    `gorm:"foreignKey:BoardID" json:"Cards"`
 }
 
 // Card represents a task card
@@ -107,7 +108,14 @@ type AssignmentNotice struct {
 
 // Initialize schemas
 func MigrateDB(db *gorm.DB) error {
-	return db.AutoMigrate(&Board{}, &Card{}, &User{}, &BoardMember{}, &AccessRequest{}, &CardActivity{}, &AssignmentNotice{})
+	if err := db.AutoMigrate(&Board{}, &Card{}, &User{}, &BoardMember{}, &AccessRequest{}, &CardActivity{}, &AssignmentNotice{}); err != nil {
+		return err
+	}
+	// Backfill for boards created before Board.CreatedAt existed: stamp them
+	// with the migration time so the guest-board cleanup worker gives them a
+	// full 24h from this deploy instead of treating NULL as never-expiring.
+	// Idempotent: only NULL rows are touched.
+	return db.Model(&Board{}).Where("created_at IS NULL").UpdateColumn("created_at", time.Now()).Error
 }
 
 // resolveBoardRole computes the effective role of userID on the board owned by

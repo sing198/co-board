@@ -171,7 +171,9 @@ func readMutation(conn *websocket.Conn, message *WsMessage) error {
 		if err := conn.ReadJSON(message); err != nil {
 			return err
 		}
-		if message.Type != "PRESENCE" {
+		// CARD_NOTE is the activity side channel published when a move is
+		// rebalanced, so these tests still observe the board change itself.
+		if message.Type != "PRESENCE" && message.Type != "CARD_NOTE" {
 			return nil
 		}
 	}

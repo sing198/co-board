@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import {
   DndContext,
   closestCorners,
@@ -18,14 +18,16 @@ import {
   arrayMove
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Plus, Link as LinkIcon, Edit2, Trash2, LogOut, AlertCircle, Wifi, WifiOff, X, ChevronDown, ChevronRight, Sun, Moon, UserPlus, Globe, Code, Eye, Bell, Check, ArrowLeft, Download, Search, Tag, FileText, Image, Calendar, Clock, CheckSquare, Palette, LayoutDashboard, Layers3, GanttChart, Network, Timer } from "lucide-react";
+import { Plus, Link as LinkIcon, Edit2, Trash2, LogOut, AlertCircle, Wifi, WifiOff, X, ChevronDown, ChevronRight, Sun, Moon, UserPlus, Globe, Bell, Check, Search, Tag, FileText, Image, Calendar, Clock, CheckSquare, LayoutDashboard, GanttChart, Network, Timer, MoreHorizontal } from "lucide-react";
+
 import { toPng } from "html-to-image";
 
 import { useWebSocket } from "../useWebSocket";
-import type { Card } from "../useWebSocket";
+import type { Card, CardNote } from "../useWebSocket";
 import { useAuth } from "../useAuth";
 import { useTheme } from "../useTheme";
 import { useNotifications } from "../useNotifications";
+import AssignmentNotices from "../components/AssignmentNotices";
 import { API_URL } from "../config";
 import WorkspaceSidebar, { KanbanMark } from "../components/WorkspaceSidebar";
 import BoardTaskViews from "../components/BoardTaskViews";
@@ -38,8 +40,15 @@ import { defaultBoardView, isBoardView } from "../boardFormats";
 import type { BoardView } from "../boardFormats";
 import { dueBucket, localDate } from "../boardDates";
 
-const VIEW_LABELS: Record<BoardView, string> = { board: "Kanban", list: "Table", due: "Due dates", calendar: "Calendar", timeline: "Timeline", mindmap: "Mind Map", scrum: "Sprint" };
-const VIEW_HINTS: Record<BoardView, string> = { board: "Columns show progress · Swimlanes group related tasks", list: "Every task in one place", due: "See what's due next", calendar: "Plan tasks on a monthly calendar", timeline: "Schedule work over time and see dependencies", mindmap: "Connect ideas into a branching plan", scrum: "Plan and track a sprint with a fixed time window" };
+const VIEW_HINTS: Record<BoardView, string> = {
+  board: "Drag a card between columns. Click it when you want to add details.",
+  list: "Click a task to open it. Use the status menu to move it.",
+  due: "Tasks are grouped by when they are due. Click one to change the date.",
+  calendar: "Tasks appear on their due date. Click one to open it.",
+  timeline: "Each bar is a task from its start date to its due date.",
+  mindmap: "Click an idea to open it, or add a branch from it.",
+  scrum: "Choose tasks for this sprint, then start it when you are ready.",
+};
 
 function AvatarImage({ src, name, className, title }: { src: string; name: string; className: string; title?: string }) {
   const [failed, setFailed] = useState(false);
@@ -177,20 +186,14 @@ const BOARD_BACKGROUND_PRESETS: Record<string, { name: string; class: string; pr
 };
 
 const getDueDateBadge = (dueDateStr?: string) => {
-  if (!dueDateStr) return null;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const target = localDate(dueDateStr);
-  if (!target) return null;
-  const diffDays = Math.round((Date.UTC(target.getFullYear(), target.getMonth(), target.getDate()) - Date.UTC(today.getFullYear(), today.getMonth(), today.getDate())) / 86_400_000);
-
-  if (diffDays < 0) {
-    return { label: `Overdue (${dueDateStr})`, bg: "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/30 dark:text-rose-300 dark:border-rose-800/60" };
-  } else if (diffDays <= 1) {
-    return { label: `Due Soon (${dueDateStr})`, bg: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-300 dark:border-amber-800/60" };
-  } else {
-    return { label: dueDateStr, bg: "bg-[#4f63ef]/10 text-[#4f63ef] dark:text-[#a5b4fc] border-[#4f63ef]/20" };
-  }
+  const bucket = dueBucket(dueDateStr);
+  const date = localDate(dueDateStr);
+  if (!date || bucket === "none") return null;
+  const short = date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  if (bucket === "overdue") return { label: `Overdue · ${short}`, tone: "overdue" as const };
+  if (bucket === "today") return { label: "Today", tone: "today" as const };
+  if (bucket === "upcoming") return { label: `Due ${short}`, tone: "upcoming" as const };
+  return { label: short, tone: "later" as const };
 };
 
 function DraggableCard({
@@ -205,7 +208,8 @@ function DraggableCard({
   onUpdateTags,
   onDelete,
   onOpenDetail,
-  canEdit
+  canEdit,
+  assignee
 }: {
   id: string,
   cardData: any,
@@ -218,7 +222,8 @@ function DraggableCard({
   onUpdateTags?: (id: string, newTags: string) => void,
   onDelete: (id: string) => void,
   onOpenDetail?: (card: any) => void,
-  canEdit: boolean
+  canEdit: boolean,
+  assignee?: { name: string; avatarUrl?: string } | null
 }) {
   const { setNodeRef, attributes, listeners, transform, transition, isDragging } = useSortable({ id });
 
@@ -290,6 +295,7 @@ function DraggableCard({
   }
 
   const activeListeners = isTagPopoverOpen ? {} : listeners;
+  const dueBadge = getDueDateBadge(cardData.DueDate);
 
   return (
     <div
@@ -341,12 +347,17 @@ function DraggableCard({
         </div>
       )}
 
-      {/* Due Date & Checklist Surface Badges */}
-      {(cardData.DueDate || cardData.Checklist) && (
+      {(dueBadge || cardData.Checklist || assignee) && (
         <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
-          {cardData.DueDate && getDueDateBadge(cardData.DueDate) && (
-            <span className={`px-2 py-0.5 rounded-lg text-[10px] font-extrabold border flex items-center gap-1 shadow-2xs ${getDueDateBadge(cardData.DueDate)?.bg}`}>
-              <Clock size={10} /> {getDueDateBadge(cardData.DueDate)?.label}
+          {assignee && (
+            <span className="task-assignee" title={assignee.name}>
+              {assignee.avatarUrl ? <img src={assignee.avatarUrl} alt="" /> : <span aria-hidden="true">{(assignee.name[0] || "?").toUpperCase()}</span>}
+              {assignee.name === "Assigned" ? "Assigned" : (assignee.name.split(" ")[0] || assignee.name)}
+            </span>
+          )}
+          {dueBadge && (
+            <span className={`task-due task-due-${dueBadge.tone}`}>
+              <Clock size={13} /> {dueBadge.label}
             </span>
           )}
 
@@ -520,6 +531,7 @@ function DraggableCard({
           </div>
         )}
       </div>
+      {cardData.LatestNote ? <p className="task-note" title={cardData.LatestNote}>{cardData.LatestNote}</p> : null}
     </div>
   );
 }
@@ -537,6 +549,13 @@ function SwimlaneDropZone({
       {children}
     </div>
   );
+}
+
+function noteStamp(value?: string) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 }
 
 const decodeInviteRole = (tokenStr: string | null): "edit" | "view" | null => {
@@ -566,6 +585,12 @@ export function CardDetailModal({
   theme,
   swimlanes,
   columns,
+  members = [],
+  currentUserId = 0,
+  shareHint = "member",
+  noteFeed = [],
+  onAddNote,
+  onShare,
   onMove,
   onClose,
   onEditDetail,
@@ -578,12 +603,21 @@ export function CardDetailModal({
   theme: string;
   swimlanes: string[];
   columns: string[];
+  members?: Array<{ id: number; name: string; avatarUrl?: string; assignable?: boolean }>;
+  currentUserId?: number;
+  shareHint?: "owner" | "guest" | "member";
+  noteFeed?: CardNote[];
+  onAddNote?: (cardId: string, text: string) => boolean;
+  onShare?: () => void;
   onMove: (cardId: string, column: string) => void;
   onClose: () => void;
   onEditDetail: (cardId: string, details: any, baseline?: Record<string,string>) => boolean | void;
   onDeleteCard: (cardId: string, title: string) => void;
 }) {
-  const baseline = useRef<Record<string,string>>({title:card.Title || "",description:card.Description || "",dueDate:card.DueDate || "",startDate:card.StartDate || "",dependencies:card.Dependencies || "",parentId:card.ParentID || "",storyPoints:String(card.StoryPoints || 0),inSprint:String(!!card.InSprint),checklist:card.Checklist || "",tags:card.Tags || "",swimlane:card.Swimlane || ""});
+  const baseline = useRef<Record<string,string>>({title:card.Title || "",description:card.Description || "",dueDate:card.DueDate || "",startDate:card.StartDate || "",dependencies:card.Dependencies || "",parentId:card.ParentID || "",storyPoints:String(card.StoryPoints || 0),inSprint:String(!!card.InSprint),assigneeId:String(card.AssigneeID || 0),checklist:card.Checklist || "",tags:card.Tags || "",swimlane:card.Swimlane || ""});
+  const assigneeID = Number(card.AssigneeID || 0);
+  const assigneeChoices = members.filter((member) => member.assignable || member.id === assigneeID);
+  const onlyYou = canEdit && members.some((member) => member.id === currentUserId) && !members.some((member) => member.assignable && member.id !== currentUserId);
   const saveDetail = (id: string, changes: Record<string,string>) => {
     const accepted = onEditDetail(id, changes, { ...baseline.current });
     if (accepted === false) return false;
@@ -607,8 +641,58 @@ export function CardDetailModal({
     }
   });
   const [newItemText, setNewItemText] = useState("");
+  const [notes, setNotes] = useState<CardNote[]>([]);
+  const [showEarlier, setShowEarlier] = useState(false);
+  const [draft, setDraft] = useState("");
 
   const cardId = card.ID.toString();
+
+  useEffect(() => {
+    let cancelled = false;
+    setShowEarlier(false);
+    setDraft("");
+    if (!card.BoardID) {
+      setNotes(card.LatestNote ? [{ ID: 0, CardID: Number(card.ID), Text: card.LatestNote }] : []);
+      return;
+    }
+    setNotes([]);
+    const jwt = sessionStorage.getItem("kanban_jwt") || localStorage.getItem("kanban_jwt");
+    const headers: Record<string, string> = jwt ? { Authorization: `Bearer ${jwt}` } : {};
+    const invite = new URLSearchParams(window.location.search).get("inviteToken") || "";
+    const query = invite ? `?inviteToken=${encodeURIComponent(invite)}` : "";
+    fetch(`${API_URL}/api/boards/${card.BoardID}/cards/${card.ID}/notes${query}`, { headers })
+      .then((response) => {
+        if (!response.ok) throw new Error("notes unavailable");
+        return response.json();
+      })
+      .then((body: unknown) => {
+        if (cancelled) return;
+        const fetched = Array.isArray(body) ? body as CardNote[] : [];
+        setNotes((prev) => {
+          const ids = new Set(fetched.map((note) => note.ID));
+          const extras = prev.filter((note) => Number(note.CardID) === Number(card.ID) && !ids.has(note.ID));
+          return [...extras, ...fetched].slice(0, 20);
+        });
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setNotes((prev) => {
+          if (prev.some((note) => Number(note.CardID) === Number(card.ID))) return prev;
+          return card.LatestNote ? [{ ID: 0, CardID: Number(card.ID), Text: card.LatestNote }] : [];
+        });
+      });
+    return () => { cancelled = true; };
+  }, [card.ID, card.BoardID]);
+
+  useEffect(() => {
+    const incoming = [...noteFeed].reverse().filter((note) => Number(note.CardID) === Number(card.ID));
+    if (incoming.length === 0) return;
+    setNotes((prev) => {
+      const unseen = incoming.filter((note) => !prev.some((item) => item.ID === note.ID));
+      if (unseen.length === 0) return prev;
+      return [...unseen, ...prev].slice(0, 20);
+    });
+  }, [noteFeed, card.ID]);
 
   const handleSaveTitle = () => {
     if (title.trim() && title.trim() !== card.Title) {
@@ -668,9 +752,9 @@ export function CardDetailModal({
               </span>
               {swimlanes.length > 0 ? (
                 <div className="flex items-center gap-1 px-2.5 py-0.5 rounded-lg font-bold bg-indigo-50 text-indigo-700 border border-indigo-100 dark:bg-indigo-950/30 dark:text-indigo-300 dark:border-indigo-800/50">
-                  <span className="opacity-75">Swimlane:</span>
+                  <span className="opacity-75">Group:</span>
                   <select
-                    aria-label="Move task to swimlane"
+                    aria-label="Move task to group"
                     disabled={!canEdit}
                     value={effectiveSwimlane}
                     onChange={(e) => {
@@ -686,11 +770,7 @@ export function CardDetailModal({
                     ))}
                   </select>
                 </div>
-              ) : (
-                <span className="px-2.5 py-0.5 rounded-lg font-bold bg-indigo-50 text-indigo-700 border border-indigo-100 dark:bg-indigo-950/30 dark:text-indigo-300 dark:border-indigo-800/50">
-                  Swimlane: {effectiveSwimlane}
-                </span>
-              )}
+              ) : null}
             </div>
           </div>
 
@@ -702,6 +782,67 @@ export function CardDetailModal({
             <X size={20} />
           </button>
         </div>
+
+        <div className="flex flex-col gap-2">
+          <label htmlFor={`assignee-${cardId}`} className="text-xs font-bold text-slate-400 uppercase tracking-wider">Assignee</label>
+          <select
+            id={`assignee-${cardId}`}
+            aria-label="Assignee"
+            aria-describedby={onlyYou ? "assignee-hint" : undefined}
+            disabled={!canEdit}
+            value={String(assigneeID)}
+            onChange={(event) => saveDetail(cardId, { assigneeId: event.target.value })}
+            className={`w-full px-3 py-2 rounded-xl border text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#4f63ef] ${theme === "dark" ? "bg-slate-900/60 border-slate-700 text-slate-100" : "bg-slate-50 border-slate-200 text-slate-800"}`}
+          >
+            <option value="0">Unassigned</option>
+            {assigneeChoices.map((member) => <option key={member.id} value={String(member.id)}>{member.name}</option>)}
+          </select>
+          {onlyYou && (
+            <p className="assignee-hint" id="assignee-hint">
+              <span>
+                {shareHint === "guest"
+                  ? "Sign in to share this board and assign someone else."
+                  : shareHint === "owner"
+                    ? "Share this board to assign someone else."
+                    : "Ask the owner to share this board before you can assign someone else."}
+              </span>
+              {shareHint !== "member" && (
+                <button type="button" onClick={onShare}>
+                  {shareHint === "guest" ? "Sign in" : "Share"}
+                </button>
+              )}
+            </p>
+          )}
+        </div>
+
+        <section className="task-notes" aria-label="Notes">
+          <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">Notes</div>
+          {notes.length === 0 ? <p>Moves and short notes show up here.</p> : (
+            <ul>
+              {(showEarlier ? notes : notes.slice(0, 8)).map((note) => {
+                const when = noteStamp(note.CreatedAt);
+                return (
+                  <li key={note.ID} className={note.Kind === "comment" ? "is-comment" : undefined}>
+                    <span>{note.Text}</span>
+                    {when ? <time dateTime={note.CreatedAt}>{when}</time> : null}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+          {notes.length > 8 && !showEarlier ? <button type="button" onClick={() => setShowEarlier(true)}>Show earlier</button> : null}
+          {canEdit ? (
+            <form onSubmit={(event) => {
+              event.preventDefault();
+              const text = draft.trim();
+              if (!text || !onAddNote) return;
+              if (onAddNote(cardId, text)) setDraft("");
+            }}>
+              <input aria-label="Short note" placeholder="Add a short note" maxLength={280} value={draft} onChange={(event) => setDraft(event.target.value)} />
+              <button type="submit" disabled={!draft.trim()}>Add note</button>
+            </form>
+          ) : null}
+        </section>
 
         <TaskPlanningFields card={card} cards={cards} boardType={boardType} canEdit={canEdit} onSave={changes => saveDetail(cardId, changes)} />
 
@@ -841,6 +982,7 @@ export function CardDetailModal({
 
 export default function Board() {
   const { boardId } = useParams();
+  const [searchParams] = useSearchParams();
   const { user, login, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
 
@@ -863,11 +1005,13 @@ export default function Board() {
     errorToast,
     boardError, retryBoard,
     onlineUsers,
-    operations, pendingDeletes, undoDelete, retryOperation, refreshBoard, dismissOperation,
+    operations, pendingDeletes, undoDelete, retryOperation, refreshBoard, applyGrantedRole, dismissOperation,
     moveCard,
     addCard,
     editCard,
     editCardDetail,
+    addCardNote,
+    noteFeed,
     updateCardTags,
     deleteCard,
     updateBoardName,
@@ -885,6 +1029,7 @@ export default function Board() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedTagFilter, setSelectedTagFilter] = useState<string>("All");
   const [selectedDueFilter, setSelectedDueFilter] = useState("all");
+  const [mineOnly, setMineOnly] = useState(false);
   const [boardView, setBoardView] = useState<BoardView>(() => {
     try {
       const saved = localStorage.getItem(`co_board_view_v2_${boardId}`);
@@ -913,8 +1058,7 @@ export default function Board() {
     window.addEventListener("keydown", handleSearchShortcut);
     return () => window.removeEventListener("keydown", handleSearchShortcut);
   }, []);
-  const [isExportDropdownOpen, setIsExportDropdownOpen] = useState(false);
-  const [isThemePaletteOpen, setIsThemePaletteOpen] = useState(false);
+
   const [isExporting, setIsExporting] = useState(false);
 
   // Card Detail Modal states
@@ -928,6 +1072,22 @@ export default function Board() {
   const handleOpenCardDetail = useCallback((card: any) => {
     setSelectedCardDetail(card);
   }, []);
+  const openedFromLink = useRef("");
+  useEffect(() => {
+    const due = searchParams.get("due");
+    if (due === "overdue" || due === "today" || due === "upcoming" || due === "later" || due === "none") {
+      setSelectedDueFilter(due);
+      if (boardType) setBoardView("due");
+    }
+  }, [searchParams, boardType]);
+  useEffect(() => {
+    const taskId = searchParams.get("task");
+    if (!taskId || openedFromLink.current === taskId) return;
+    const card = cards.find((item) => String(item.ID) === taskId);
+    if (!card) return;
+    openedFromLink.current = taskId;
+    setSelectedCardDetail(card);
+  }, [searchParams, cards]);
   const boardContainerRef = useRef<HTMLDivElement | null>(null);
 
   const handleExportPNG = async () => {
@@ -956,7 +1116,8 @@ export default function Board() {
     const cardTags = c.Tags ? c.Tags.split(",").map(t => t.trim().toLowerCase()) : [];
     const matchesTag = selectedTagFilter === "All" || cardTags.includes(selectedTagFilter.toLowerCase());
     const matchesDue = selectedDueFilter === "all" || dueBucket(c.DueDate) === selectedDueFilter;
-    return matchesSearch && matchesTag && matchesDue;
+    const matchesMine = !mineOnly || Number(c.AssigneeID) === Number(user?.id);
+    return matchesSearch && matchesTag && matchesDue && matchesMine;
   });
 
   const allBoardTags = React.useMemo(() => {
@@ -991,10 +1152,18 @@ export default function Board() {
     if (!columns.length || !canEdit || status !== "connected") return;
     if (boardView !== "board") { openFormatTask(); return; }
     quickAddSubmittedRef.current = false;
-    setSearchQuery(""); setSelectedTagFilter("All"); setSelectedDueFilter("all");
+    setSearchQuery(""); setSelectedTagFilter("All"); setSelectedDueFilter("all"); setMineOnly(false);
     const swim = swimlanes[0] || "Untitled";
     setCollapsedSwimlanes(prev => ({ ...prev, [swim]: false }));
     setAddingToKey(`${columns[0]}:::${swim}`);
+    setNewTaskTitle("");
+  };
+  const openColumnQuickAdd = (columnName: string) => {
+    if (!columns.length || !canEdit || status !== "connected") return;
+    quickAddSubmittedRef.current = false;
+    const swim = swimlanes[0] || "Untitled";
+    setCollapsedSwimlanes(prev => ({ ...prev, [swim]: false }));
+    setAddingToKey(`${columnName}:::${swim}`);
     setNewTaskTitle("");
   };
   const moveFromAlternateView = (card: Card, column: string) => {
@@ -1003,6 +1172,33 @@ export default function Board() {
     moveCard(String(card.ID), column, position, card.Swimlane || "Untitled");
   };
   const navigate = useNavigate();
+  const [moreOpen, setMoreOpen] = useState(false);
+  const moreMenuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!moreOpen) return;
+    const closeOnPointer = (event: MouseEvent) => {
+      if (!moreMenuRef.current?.contains(event.target as Node)) setMoreOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMoreOpen(false);
+    };
+    document.addEventListener("mousedown", closeOnPointer);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("mousedown", closeOnPointer);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [moreOpen]);
+  const [viewsOpen, setViewsOpen] = useState(false);
+  const viewsMenuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!viewsOpen) return;
+    const closeOnPointer = (event: MouseEvent) => {
+      if (!viewsMenuRef.current?.contains(event.target as Node)) setViewsOpen(false);
+    };
+    document.addEventListener("mousedown", closeOnPointer);
+    return () => document.removeEventListener("mousedown", closeOnPointer);
+  }, [viewsOpen]);
   const [showGuestShareModal, setShowGuestShareModal] = useState(false);
   const [showGuestExitModal, setShowGuestExitModal] = useState(false);
   const [guestLogoutRequested, setGuestLogoutRequested] = useState(false);
@@ -1012,10 +1208,32 @@ export default function Board() {
   const [tempBoardName, setTempBoardName] = useState("");
   const [collapsedSwimlanes, setCollapsedSwimlanes] = useState<Record<string, boolean>>({});
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
-  const [shareTab, setShareTab] = useState<"invite" | "embed">("invite");
   const [copySuccessToast, setCopySuccessToast] = useState(false);
   const [shareLinkRole, setShareLinkRole] = useState<"edit" | "view">("edit");
-  const [shareView, setShareView] = useState<"main" | "manage_access">("main");
+  useEffect(() => {
+    if (!isShareModalOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setIsShareModalOpen(false);
+    };
+    document.addEventListener("keydown", closeOnEscape);
+    return () => document.removeEventListener("keydown", closeOnEscape);
+  }, [isShareModalOpen]);
+  const shareToken = shareLinkRole === "edit" ? editInviteToken : viewInviteToken;
+  const shareUrl = shareToken && boardId ? `${window.location.origin}/b/${boardId}?inviteToken=${shareToken}` : "";
+  const copyShareLink = async () => {
+    if (!shareUrl) return;
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setCopySuccessToast(true);
+      window.setTimeout(() => setCopySuccessToast(false), 3000);
+    } catch {
+      setCopySuccessToast(false);
+    }
+  };
+  const chooseShareRole = (role: "edit" | "view") => {
+    setShareLinkRole(role);
+    setCopySuccessToast(false);
+  };
   const [boardMembers, setBoardMembers] = useState<Array<{
     id: number;
     name: string;
@@ -1023,7 +1241,13 @@ export default function Board() {
     avatarUrl: string;
     role: string;
     isOwner: boolean;
+    assignable?: boolean;
   }>>([]);
+  const memberById = useMemo(() => {
+    const map = new Map<number, { id: number; name: string; avatarUrl: string }>();
+    for (const member of boardMembers) map.set(member.id, { id: member.id, name: member.name, avatarUrl: member.avatarUrl });
+    return map;
+  }, [boardMembers]);
 
   const fetchBoardMembers = useCallback(async () => {
     if (!boardId) return;
@@ -1035,7 +1259,6 @@ export default function Board() {
       });
       if (res.ok) {
         const data = await res.json();
-        console.log("🔥 Data from GET /members on Refresh:", data);
         setBoardMembers(data || []);
       }
     } catch (err) {
@@ -1044,10 +1267,8 @@ export default function Board() {
   }, [boardId]);
 
   useEffect(() => {
-    if (isShareModalOpen) {
-      fetchBoardMembers();
-    }
-  }, [isShareModalOpen, fetchBoardMembers]);
+    if (boardType || isShareModalOpen) fetchBoardMembers();
+  }, [boardType, isShareModalOpen, fetchBoardMembers]);
 
   const isLoggingInRef = useRef(false);
   const handleLogin = useCallback((bId: string) => {
@@ -1058,9 +1279,8 @@ export default function Board() {
 
 
   // Access Request & Notifications System
-  const { notifications, unreadCount, requestAccess, respondToAccess } = useNotifications();
+  const { notifications, assignments, markAssignmentSeen, unreadCount, requestAccess, respondToAccess } = useNotifications();
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
-  const [isViewOnlyPopoverOpen, setIsViewOnlyPopoverOpen] = useState(false);
   const [isRequestingAccess, setIsRequestingAccess] = useState(false);
   const [accessRequestStatus, setAccessRequestStatus] = useState<"none" | "pending" | "approved">("none");
 
@@ -1069,10 +1289,19 @@ export default function Board() {
     setIsRequestingAccess(true);
     const res = await requestAccess(boardId);
     setIsRequestingAccess(false);
-    if (res) {
-      setAccessRequestStatus(res.status === "approved" ? "approved" : "pending");
+    if (!res) return;
+    // The server only returns approved when this person is already an editor.
+    if (res.status === "approved") {
+      applyGrantedRole("edit");
+      void refreshBoard();
+      return;
     }
+    setAccessRequestStatus("pending");
   };
+
+  useEffect(() => {
+    if (userRole === "edit" || userRole === "owner") setAccessRequestStatus("none");
+  }, [userRole]);
 
   const urlParams = new URLSearchParams(window.location.search);
   const currentInviteToken = urlParams.get("inviteToken");
@@ -1092,6 +1321,8 @@ export default function Board() {
       isOwner ||
       canEditIfLoggedIn
     );
+  const showViewOnlyNote = user ? !canEdit : !canEditIfLoggedIn;
+  const signedInViewer = !!user && user.email !== "guest@kanban.demo";
 
   // Intercept Browser Back Button (<) and Tab Closing (X) for Guest Owners
   useEffect(() => {
@@ -1312,22 +1543,25 @@ export default function Board() {
     }`}>
 
       <div className="mutation-feedback" aria-label="Task save status">
-        {pendingDeletes.map(id => <div key={id} className="mutation-notice"><span role="status">TSK-{id}: deletion queued (6 seconds). Leaving this board cancels it.</span><button onClick={() => undoDelete(id)}>Undo</button></div>)}
+        {pendingDeletes.map(id => <div key={id} className="mutation-notice"><span role="status">This task will be deleted in a few seconds.</span><button onClick={() => undoDelete(id)}>Undo</button></div>)}
         {operations.map(op => <div key={op.id} className={`mutation-notice mutation-${op.state}`}><span role={op.state === "error" || op.state === "unknown" ? "alert" : "status"}>{op.label}: {op.state === "saving" ? "Saving…" : op.state === "saved" ? "Saved" : op.message}</span>{op.state === "error" && <button disabled={status !== "connected"} onClick={() => retryOperation(op.id)}>Retry</button>}{op.state === "unknown" && <button onClick={refreshBoard}>Refresh board</button>}{op.state !== "saving" && <button aria-label={`Dismiss ${op.label} status`} onClick={() => dismissOperation(op.id)}><X size={14} /></button>}</div>)}
       </div>
       <WorkspaceSidebar onLogout={handleWorkspaceLogout} user={user} activePage="board" cardCount={cards.length}
-        role={isOwner ? "Workspace owner" : canEdit ? "Editor" : "Viewer"}
+        note={VIEW_HINTS[boardView]}
+        role={isOwner ? "Full access" : canEdit ? "Can edit" : "View only"}
         onOverview={() => document.getElementById("board-overview")?.scrollIntoView({ block: "start" })}
         onAllBoards={() => navigate("/")}>
-        <div className="sidebar-section-label">SWIMLANES</div>
-        {(swimlanes.length ? swimlanes : ["All tasks"]).map((name, index) => (
-          <button key={name} onClick={() => document.getElementById(`workstream-${index}`)?.scrollIntoView({ block: "start" })} className="sidebar-stream"><i style={{ background: ["#818cf8", "#7dd3fc", "#6ee7b7"][index % 3] }} />{name}</button>
-        ))}
+        {swimlanes.length > 1 && <>
+          <div className="sidebar-section-label">GROUPS</div>
+          {swimlanes.map((name, index) => (
+            <button key={name} onClick={() => document.getElementById(`workstream-${index}`)?.scrollIntoView({ block: "start" })} className="sidebar-stream"><i style={{ background: ["#818cf8", "#7dd3fc", "#6ee7b7"][index % 3] }} />{name}</button>
+          ))}
+        </>}
       </WorkspaceSidebar>
       {status !== "connected" && (
         <div role="status" className="bg-amber-100 text-amber-950 px-4 py-3 text-center text-sm">
-          {status === "connecting" ? "Connecting and refreshing your board…" : "Connection lost. Reconnecting…"}
-          {" "}Editing is paused. Recent changes may not be saved; check them after reconnecting.
+          {status === "connecting" ? "Connecting…" : "Connection lost. Reconnecting…"}
+          {" "}You can keep looking. Edits wait until the connection is back.
         </div>
       )}
       {/* Toast Alert Banner */}
@@ -1423,57 +1657,6 @@ export default function Board() {
             <span className="capitalize">{status}</span>
           </div>
 
-          {/* View-Only Mode Badge & Popover (Miro Screenshot 1 & 2) */}
-          {!canEdit && (
-            <div className="relative">
-              <button
-                onClick={() => setIsViewOnlyPopoverOpen(!isViewOnlyPopoverOpen)}
-                className="px-3 py-1.5 bg-[#4f63ef] hover:bg-[#4051d6] text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-[#4f63ef]/20 flex items-center gap-1.5 cursor-pointer"
-              >
-                <Eye size={13} /> View only <ChevronDown size={13} />
-              </button>
-
-              {/* View-Only Request Access Popover (Miro Screenshot 1 & 2) */}
-              {isViewOnlyPopoverOpen && (
-                <div className={`absolute right-0 mt-2 w-72 rounded-2xl border shadow-xl p-4 z-50 animate-in fade-in slide-in-from-top-2 duration-150 ${theme === "dark" ? "bg-[#172033] border-[#334155] text-slate-100" : "bg-white border-slate-200 text-slate-800"
-                  }`}>
-                  <p className="text-xs leading-relaxed mb-3">
-                    {user && user.email !== "guest@kanban.demo"
-                      ? "You're a viewer on this board. Ask for editor rights to make changes."
-                      : "You're a viewer on this board. To ask for editor rights to make changes, please log in with your Google account."}
-                  </p>
-
-                  {user && user.email !== "guest@kanban.demo" ? (
-                    accessRequestStatus === "approved" ? (
-                      <div className="p-2.5 bg-[#ecfdf5] dark:bg-[#022c22]/40 border border-[#a7f3d0] dark:border-[#064e3b] text-[#047857] dark:text-[#a7f3d0] rounded-xl text-xs font-bold flex items-center gap-1.5">
-                        <Check size={14} /> Editor access granted!
-                      </div>
-                    ) : accessRequestStatus === "pending" ? (
-                      <div className="p-2.5 bg-[#eef2ff] dark:bg-[#172033]/40 border border-[#c7d2fe] dark:border-[#3730a3] text-[#4338ca] dark:text-[#a5b4fc] rounded-xl text-xs font-bold flex items-center gap-1.5">
-                        <Check size={14} /> Request sent to owner
-                      </div>
-                    ) : (
-                      <button
-                        onClick={handleRequestAccess}
-                        disabled={isRequestingAccess}
-                        className="w-full py-2 bg-[#4f63ef] hover:bg-[#4051d6] text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-[#4f63ef]/20 cursor-pointer disabled:opacity-50"
-                      >
-                        {isRequestingAccess ? "Sending request..." : "Request editor rights"}
-                      </button>
-                    )
-                  ) : (
-                    <button
-                      onClick={() => handleLogin(boardId || "")}
-                      className="w-full py-2 bg-[#4f63ef] hover:bg-[#4051d6] text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-[#4f63ef]/20 cursor-pointer"
-                    >
-                      Log in to Request Edit Access
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-
           {/* Notifications Bell Dropdown (Miro Screenshot 3, 4 & 5) */}
           {user && (
             <div className="relative">
@@ -1495,7 +1678,7 @@ export default function Board() {
 
               {/* Notifications Dropdown Panel (Miro Screenshot 4 & 5) */}
               {isNotificationsOpen && (
-                <div className={`absolute right-0 mt-2 w-80 md:w-96 rounded-2xl border shadow-xl p-4 z-50 animate-in fade-in slide-in-from-top-2 duration-150 ${theme === "dark" ? "bg-[#172033] border-[#334155] text-slate-100" : "bg-white border-slate-200 text-slate-800"
+                <div className={`notice-panel absolute right-0 mt-2 w-80 md:w-96 rounded-2xl border shadow-xl p-4 z-50 animate-in fade-in slide-in-from-top-2 duration-150 ${theme === "dark" ? "bg-[#172033] border-[#334155] text-slate-100" : "bg-white border-slate-200 text-slate-800"
                   }`}>
                   <div className="flex items-center justify-between border-b pb-3 mb-3 border-slate-100 dark:border-[#334155]">
                     <h3 className="text-sm font-bold flex items-center gap-2">
@@ -1515,12 +1698,14 @@ export default function Board() {
                   </div>
 
                   <div className="max-h-80 overflow-y-auto space-y-3 pr-1">
-                    {notifications.length === 0 ? (
+                    {notifications.length === 0 && assignments.length === 0 ? (
                       <div className="text-center py-6 text-slate-400 text-xs">
                         No notifications yet
                       </div>
                     ) : (
-                      notifications.map((item) => (
+                      <>
+                      <AssignmentNotices items={assignments} onOpen={(id) => { void markAssignmentSeen(id); setIsNotificationsOpen(false); }} />
+                      {notifications.map((item) => (
                         <div
                           key={item.id}
                           className={`p-3 rounded-xl border transition-all ${item.status === "pending"
@@ -1536,7 +1721,7 @@ export default function Board() {
                             />
                             <div className="flex-1 min-w-0">
                               <p className="text-xs leading-snug">
-                                <span className="font-bold">{item.userName}</span> requests access to your board <span className="font-semibold text-[#4f63ef] dark:text-[#a5b4fc]">{item.boardName}</span>
+                                <span className="font-bold">{item.userName}</span> asked to edit <span className="font-semibold text-[#4f63ef] dark:text-[#a5b4fc]">{item.boardName}</span>
                               </p>
 
                               {/* Notification Actions */}
@@ -1547,7 +1732,7 @@ export default function Board() {
                                       onClick={() => respondToAccess(item.id, "approve")}
                                       className="px-3 py-1 bg-[#4f63ef] hover:bg-[#4051d6] text-white text-xs font-bold rounded-lg transition-all cursor-pointer shadow-xs"
                                     >
-                                      Give access
+                                      Allow editing
                                     </button>
                                     <button
                                       onClick={() => respondToAccess(item.id, "dismiss")}
@@ -1558,7 +1743,7 @@ export default function Board() {
                                   </>
                                 ) : item.status === "approved" ? (
                                   <span className="text-xs font-bold text-[#059669] dark:text-[#6ee7b7] flex items-center gap-1">
-                                    <Check size={14} /> Request approved
+                                    <Check size={14} /> Editing allowed
                                   </span>
                                 ) : (
                                   <span className="text-xs font-medium text-slate-400">
@@ -1569,7 +1754,8 @@ export default function Board() {
                             </div>
                           </div>
                         </div>
-                      ))
+                      ))}
+                      </>
                     )}
                   </div>
                 </div>
@@ -1620,12 +1806,32 @@ export default function Board() {
       </header>
 
       {user?.email === "guest@kanban.demo" && isOwner && <div className="guest-session-notice" role="note"><span><strong>Guest session</strong> · Logging out of this board deletes it. Sign in to keep it.</span><button onClick={() => handleLogin(boardId || "")}>Sign in to save</button></div>}
+      {showViewOnlyNote && (
+        <div className="view-only-note" role="note">
+          <p>
+            {signedInViewer
+              ? accessRequestStatus === "pending"
+                ? "You can look at this board. Your request is with the owner."
+                : "You can look at this board. Ask the owner if you need to change it."
+              : "You can look at this board. Sign in to ask the owner if you need to change it."}
+          </p>
+          {signedInViewer && accessRequestStatus === "none" && (
+            <button type="button" onClick={handleRequestAccess} disabled={isRequestingAccess}>
+              {isRequestingAccess ? "Sending request..." : "Request editor rights"}
+            </button>
+          )}
+          {!signedInViewer && (
+            <button type="button" onClick={() => handleLogin(boardId || "")}>Sign in</button>
+          )}
+        </div>
+      )}
       <section id="board-overview" className="board-overview" aria-label="Board overview">
         <div className="overview-copy">
 
           <h2>{boardName}</h2>
+          <p>{VIEW_HINTS[boardView]}</p>
 
-          <div className="overview-meta"><span><Layers3 size={14} /> {VIEW_LABELS[defaultBoardView(boardType)]} board</span>{(boardView === "board" || boardView === "scrum") && <><span>{columns.length} columns</span><span><UserPlus size={14} /> {swimlanes.length || 1} swimlanes</span></>}<span className="overview-access">{isOwner ? "Owner" : canEdit ? "Editor" : "View only"}</span></div>
+          <div className="overview-meta">{(boardView === "board" || boardView === "scrum") && swimlanes.length > 1 && <span><UserPlus size={14} /> {swimlanes.length} groups</span>}<span className="overview-access">{isOwner ? "Full access" : canEdit ? "Can edit" : "View only"}</span></div>
         </div>
         <div className="overview-action">
           {canEdit && columns.length > 0 && <button className="new-task-button" disabled={status !== "connected"} onClick={openQuickAdd}><Plus size={17} /> {boardView === "mindmap" ? "New idea" : "New task"}</button>}
@@ -1634,18 +1840,39 @@ export default function Board() {
       </section>
       <div className="board-view-tabs">
         <div className="board-view-switch" role="group" aria-label="Board view">
-          <button aria-pressed={boardView === "board"} onClick={() => chooseBoardView("board")}><LayoutDashboard size={15} /> Kanban</button>
-          <button aria-pressed={boardView === "list"} onClick={() => chooseBoardView("list")}><FileText size={15} /> Table</button>
-          <button aria-pressed={boardView === "calendar"} onClick={() => chooseBoardView("calendar")}><Calendar size={15} /> Calendar</button>
-          <button aria-pressed={boardView === "timeline"} onClick={() => chooseBoardView("timeline")}><GanttChart size={15} /> Timeline</button>
-          <button aria-pressed={boardView === "mindmap"} onClick={() => chooseBoardView("mindmap")}><Network size={15} /> Mind Map</button>
-          {boardType === "sprint" && <button aria-pressed={boardView === "scrum"} onClick={() => chooseBoardView("scrum")}><Timer size={15} /> Sprint</button>}
-          <button aria-pressed={boardView === "due"} onClick={() => chooseBoardView("due")}><Calendar size={15} /> Due dates</button>
+          <button aria-pressed={boardView === "board"} title="Drag cards between columns" onClick={() => chooseBoardView("board")}><LayoutDashboard size={15} /> Board</button>
+          <button aria-pressed={boardView === "list"} title="Every task in a list" onClick={() => chooseBoardView("list")}><FileText size={15} /> List</button>
+          <div className="board-view-extra">
+            <button aria-pressed={boardView === "calendar"} title="Tasks on their due dates" onClick={() => chooseBoardView("calendar")}><Calendar size={15} /> Calendar</button>
+            <button aria-pressed={boardView === "timeline"} title="Tasks across a date range" onClick={() => chooseBoardView("timeline")}><GanttChart size={15} /> Timeline</button>
+            <button aria-pressed={boardView === "mindmap"} title="Ideas connected as branches" onClick={() => chooseBoardView("mindmap")}><Network size={15} /> Mind map</button>
+            {boardType === "sprint" && <button aria-pressed={boardView === "scrum"} title="Backlog and the current sprint" onClick={() => chooseBoardView("scrum")}><Timer size={15} /> Sprint</button>}
+            <button aria-pressed={boardView === "due"} title="What is overdue, due today, or later" onClick={() => chooseBoardView("due")}><Calendar size={15} /> Due</button>
+          </div>
+          <div className="board-view-more-wrap" ref={viewsMenuRef}>
+            <button
+              type="button"
+              className="board-view-more"
+              aria-expanded={viewsOpen}
+              aria-haspopup="menu"
+              aria-pressed={boardView !== "board" && boardView !== "list"}
+              onClick={() => setViewsOpen((open) => !open)}
+            >
+              {boardView === "calendar" ? "Calendar" : boardView === "timeline" ? "Timeline" : boardView === "mindmap" ? "Mind map" : boardView === "scrum" ? "Sprint" : boardView === "due" ? "Due" : "Views"}
+            </button>
+            {viewsOpen && (
+              <div className="board-view-menu" role="menu">
+                <button type="button" role="menuitem" aria-pressed={boardView === "calendar"} onClick={() => { chooseBoardView("calendar"); setViewsOpen(false); }}><Calendar size={15} /> Calendar</button>
+                <button type="button" role="menuitem" aria-pressed={boardView === "timeline"} onClick={() => { chooseBoardView("timeline"); setViewsOpen(false); }}><GanttChart size={15} /> Timeline</button>
+                <button type="button" role="menuitem" aria-pressed={boardView === "mindmap"} onClick={() => { chooseBoardView("mindmap"); setViewsOpen(false); }}><Network size={15} /> Mind map</button>
+                {boardType === "sprint" && <button type="button" role="menuitem" aria-pressed={boardView === "scrum"} onClick={() => { chooseBoardView("scrum"); setViewsOpen(false); }}><Timer size={15} /> Sprint</button>}
+                <button type="button" role="menuitem" aria-pressed={boardView === "due"} onClick={() => { chooseBoardView("due"); setViewsOpen(false); }}><Calendar size={15} /> Due</button>
+              </div>
+            )}
+          </div>
         </div>
-        <p>{VIEW_HINTS[boardView]}</p>
       </div>
-
-      {/* Secondary Toolbar: Search, Filter Chips & Export PNG/PDF */}
+      {/* Search stays in view. Background, export, and shortcuts live in More. */}
       <div className={`board-toolbar px-6 py-2.5 border-b flex flex-wrap items-center justify-between gap-3 ${
         theme === "dark" ? "bg-[#0f172a]/80 border-[#334155]" : "bg-slate-50 border-slate-200"
       }`}>
@@ -1659,7 +1886,7 @@ export default function Board() {
               ref={searchInputRef}
               type="text"
               aria-label="Search tasks"
-              placeholder="Search tasks…  /"
+              placeholder="Find a task"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className={`w-full bg-transparent text-xs focus:outline-none placeholder:text-slate-400 ${
@@ -1674,13 +1901,14 @@ export default function Board() {
           </div>
 
           <select aria-label="Filter by due date" value={selectedDueFilter} onChange={event => setSelectedDueFilter(event.target.value)} className="board-due-filter">
-            <option value="all">All due dates</option>
+            <option value="all">Any time</option>
             <option value="overdue">Overdue</option>
             <option value="today">Today</option>
             <option value="upcoming">Next 7 days</option>
             <option value="later">Later</option>
             <option value="none">No due date</option>
           </select>
+          {user && <button type="button" className="board-mine-filter" aria-pressed={mineOnly} onClick={() => setMineOnly((current) => !current)}>Mine</button>}
 
           <div className="board-filter-chips flex items-center gap-1.5 overflow-x-auto py-0.5 max-w-full">
             <button
@@ -1713,109 +1941,66 @@ export default function Board() {
           </div>
         </div>
 
-        {/* Right: Theme Wallpaper Palette & Export Dropdown Button */}
-        <div className="flex items-center gap-2">
-          {/* Theme Palette Button */}
-          <div className="relative">
-            <button
-              onClick={() => setIsThemePaletteOpen(!isThemePaletteOpen)}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all border flex items-center gap-1.5 cursor-pointer ${
-                theme === "dark"
-                  ? "bg-[#172033] hover:bg-[#334155] text-slate-200 border-[#334155]"
-                  : "bg-white hover:bg-slate-100 text-slate-700 border-slate-200 shadow-2xs"
-              }`}
-              title="Change Board Background Wallpaper"
-            >
-              <Palette size={14} className="text-[#4f63ef] dark:text-[#a5b4fc]" />
-              <span>Theme</span>
-            </button>
-
-            {isThemePaletteOpen && (
-              <div className={`absolute right-0 mt-2 w-56 rounded-2xl border shadow-xl p-2.5 z-50 animate-in fade-in zoom-in-95 duration-100 ${
-                theme === "dark" ? "bg-[#172033] border-[#334155] text-slate-100" : "bg-white border-slate-200 text-slate-800"
-              }`}>
-                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2 pb-1.5 mb-1.5 border-b border-slate-100 dark:border-slate-800">
-                  Board Wallpapers
-                </div>
-                <div className="flex flex-col gap-1">
-                  {Object.entries(BOARD_BACKGROUND_PRESETS).map(([bgKey, bgItem]) => (
-                    <button
-                      key={bgKey}
-                      onClick={() => {
-                        updateBoardBackground(bgKey);
-                        setIsThemePaletteOpen(false);
-                      }}
-                      className={`flex items-center gap-2.5 w-full px-2.5 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                        boardBackground === bgKey
-                          ? "bg-[#4f63ef]/10 text-[#4f63ef] dark:text-[#a5b4fc] border border-[#4f63ef]/30"
-                          : "hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300"
-                      }`}
-                    >
-                      <div className={`w-4 h-4 rounded-full bg-gradient-to-tr ${bgItem.previewBg} border border-white/20`} />
-                      <span>{bgItem.name}</span>
-                      {boardBackground === bgKey && <Check size={12} className="ml-auto text-[#4f63ef] dark:text-[#a5b4fc]" />}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Export Dropdown Button */}
-          <div className="relative">
+        <div className="relative" ref={moreMenuRef}>
           <button
-            onClick={() => setIsExportDropdownOpen(!isExportDropdownOpen)}
-            disabled={isExporting}
-            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all border flex items-center gap-1.5 cursor-pointer ${
+            type="button"
+            aria-expanded={moreOpen}
+            aria-haspopup="menu"
+            onClick={() => setMoreOpen((open) => !open)}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all border flex items-center gap-1.5 cursor-pointer ${
               theme === "dark"
                 ? "bg-[#172033] hover:bg-[#334155] text-slate-200 border-[#334155]"
                 : "bg-white hover:bg-slate-100 text-slate-700 border-slate-200 shadow-2xs"
             }`}
           >
-            <Download size={14} />
-            <span>{isExporting ? "Exporting..." : "Export Board"}</span>
-            <ChevronDown size={13} />
+            <MoreHorizontal size={16} />
+            <span>More</span>
           </button>
-
-          {isExportDropdownOpen && (
-            <div className={`absolute right-0 mt-2 w-48 rounded-xl border shadow-xl p-1.5 z-50 animate-in fade-in zoom-in-95 duration-100 ${
-              theme === "dark" ? "bg-[#172033] border-[#334155] text-slate-100" : "bg-white border-slate-200 text-slate-800"
-            }`}>
-              <button
-                onClick={() => {
-                  setIsExportDropdownOpen(false);
-                  handleExportPNG();
-                }}
-                className="w-full text-left px-3 py-2 rounded-lg text-xs font-bold flex items-center gap-2 hover:bg-[#eef2ff] dark:hover:bg-[#172033]/40 text-slate-700 dark:text-slate-200 transition-colors cursor-pointer"
-              >
-                <Image size={15} className="text-[#4f63ef] dark:text-[#a5b4fc]" />
-                Export as PNG Image
-              </button>
-              <button
-                onClick={() => {
-                  setIsExportDropdownOpen(false);
-                  handleExportPDF();
-                }}
-                className="w-full text-left px-3 py-2 rounded-lg text-xs font-bold flex items-center gap-2 hover:bg-[#f5f3ff] dark:hover:bg-[#1e1b4b]/40 text-slate-700 dark:text-slate-200 transition-colors cursor-pointer"
-              >
-                <FileText size={15} className="text-[#8b5cf6]" />
-                Print / Export as PDF
-              </button>
+          {moreOpen && (
+            <div role="menu" className={`board-more-menu absolute right-0 mt-2 w-72 rounded-2xl border shadow-xl p-3 z-50 ${theme === "dark" ? "bg-[#172033] border-[#334155] text-slate-100" : "bg-white border-slate-200 text-slate-800"}`}>
+              <p className="board-more-label">Background</p>
+              <div className="flex flex-col gap-1 mb-3">
+                {Object.entries(BOARD_BACKGROUND_PRESETS).map(([bgKey, bgItem]) => (
+                  <button
+                    key={bgKey}
+                    type="button"
+                    role="menuitem"
+                    onClick={() => { updateBoardBackground(bgKey); setMoreOpen(false); }}
+                    className={`flex items-center gap-2.5 w-full px-2.5 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                      boardBackground === bgKey
+                        ? "bg-[#4f63ef]/10 text-[#4f63ef] dark:text-[#a5b4fc]"
+                        : "hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300"
+                    }`}
+                  >
+                    <span className={`w-4 h-4 rounded-full bg-gradient-to-tr ${bgItem.previewBg} border border-white/20`} />
+                    <span>{bgItem.name}</span>
+                    {boardBackground === bgKey && <Check size={12} className="ml-auto" />}
+                  </button>
+                ))}
+              </div>
+              <p className="board-more-label">Save a copy</p>
+              <button type="button" role="menuitem" disabled={isExporting} onClick={() => { setMoreOpen(false); handleExportPNG(); }} className="board-more-action"><Image size={15} /> {isExporting ? "Saving…" : "Save as image"}</button>
+              <button type="button" role="menuitem" onClick={() => { setMoreOpen(false); handleExportPDF(); }} className="board-more-action"><FileText size={15} /> Print this board</button>
+              <p className="board-more-label">Handy keys</p>
+              <div className="board-more-keys">
+                <span>Find a task <kbd>/</kbd></span>
+                <span>Add the task <kbd>Enter</kbd></span>
+                <span>Close or cancel <kbd>Esc</kbd></span>
+              </div>
             </div>
           )}
         </div>
       </div>
-    </div>
 
       {/* MIRO KANBAN CANVAS */}
-      <div className="board-results" aria-live="polite">
-        <span><strong>{VIEW_LABELS[boardView]} view</strong> · {filteredCards.length} of {cards.length} {boardView === "mindmap" ? "ideas" : "tasks"}</span>
-        {(searchQuery || selectedTagFilter !== "All" || selectedDueFilter !== "all") ? (
-          <button onClick={() => { setSearchQuery(""); setSelectedTagFilter("All"); setSelectedDueFilter("all"); }}>Clear filters ×</button>
-        ) : <span>{boardView === "board" ? "Drag to move · Click to open" : boardView === "list" || boardView === "scrum" ? "Click a task to open · Use the status menu to move" : "Click to open · Edit dates and relationships in task details"}</span>}
-      </div>
+      {(searchQuery || selectedTagFilter !== "All" || selectedDueFilter !== "all" || mineOnly) && (
+        <div className="board-results" aria-live="polite">
+          <span>Showing {filteredCards.length} of {cards.length}</span>
+          <button onClick={() => { setSearchQuery(""); setSelectedTagFilter("All"); setSelectedDueFilter("all"); setMineOnly(false); }}>Show all tasks</button>
+        </div>
+      )}
       {boardView === "board" && filteredCards.length === 0 && cards.length > 0 && (
-        <div className="board-no-results" role="status">No matching tasks. Try another search or clear your filters.</div>
+        <div className="board-no-results" role="status">Nothing matches. Choose Show all tasks to see everything again.</div>
       )}
       {boardView === "board" ? <div className="board-scroll" role="region" aria-label="Task board, scroll horizontally to see more columns" tabIndex={0}>
       <main id="board-content" ref={boardContainerRef} className="board-canvas p-6 md:p-8 w-full max-w-[1920px] mx-auto relative z-10 flex flex-col gap-6" style={{ minWidth: Math.max(columns.length * 290 + 64, 354) }}>
@@ -1829,15 +2014,15 @@ export default function Board() {
                 🔐
               </div>
               <div>
-                <p className="text-xs font-bold">Want to edit this board?</p>
-                <p className="text-[11px] opacity-75">Log in with Google to create, edit, and move tasks in real-time.</p>
+                <p className="text-xs font-bold">Sign in to make changes</p>
+                <p className="text-[13px] opacity-75">You can look around now. Sign in when you want to add or move tasks.</p>
               </div>
             </div>
             <button
               onClick={() => handleLogin(boardId || "")}
               className="px-4 py-2 bg-[#4f63ef] hover:bg-[#4051d6] text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-[#4f63ef]/20 flex-shrink-0 cursor-pointer"
             >
-              Log in to Edit
+              Sign in
             </button>
           </div>
         )}
@@ -1849,7 +2034,7 @@ export default function Board() {
             <div className="flex items-center gap-2.5">
               <span className="text-sm">👁️</span>
               <p className="text-xs font-semibold">
-                You are viewing this board in <span className="font-bold text-amber-700 dark:text-amber-300">Read-Only Mode</span>.
+                You can look at this board, but not change it.
               </p>
             </div>
           </div>
@@ -1874,6 +2059,13 @@ export default function Board() {
 
                   {canEdit && (
                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        onClick={() => openColumnQuickAdd(col)}
+                        className="p-1 text-slate-400 hover:text-[#4f63ef] dark:hover:text-[#a5b4fc] rounded transition-colors cursor-pointer"
+                        aria-label={`Add task to ${col}`} title={`Add task to ${col}`}
+                      >
+                        <Plus size={12} />
+                      </button>
                       <button
                         onClick={() => openRenameModal("Rename Column", col, (newName) => renameColumn(col, newName))}
                         className="p-1 text-slate-400 hover:text-[#4f63ef] dark:hover:text-[#a5b4fc] rounded transition-colors"
@@ -1918,17 +2110,17 @@ export default function Board() {
                       <button
                         className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors p-0.5 cursor-pointer"
                         onClick={() => toggleSwimlane(swim)}
-                        title={isCollapsed ? "Expand Swimlane" : "Collapse Swimlane"}
+                        title={isCollapsed ? "Expand group" : "Collapse group"}
                       >
                         {isCollapsed ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
                       </button>
 
                       <span
                         onClick={() => {
-                          if (canEdit) openRenameModal("Rename Swimlane", swim, (newName) => renameSwimlane(swim, newName));
+                          if (canEdit) openRenameModal("Rename group", swim, (newName) => renameSwimlane(swim, newName));
                         }}
                         className={`px-3 py-1 rounded-xl text-xs font-bold shadow-xs cursor-pointer hover:scale-105 transition-all ${tagColor}`}
-                        title="Click to rename swimlane"
+                        title="Click to rename this group"
                       >
                         {swim}
                       </span>
@@ -1940,16 +2132,16 @@ export default function Board() {
                       {canEdit && (
                         <div className="flex items-center gap-1 opacity-0 group-hover/swim:opacity-100 transition-opacity ml-1">
                           <button
-                            onClick={() => openRenameModal("Rename Swimlane", swim, (newName) => renameSwimlane(swim, newName))}
+                            onClick={() => openRenameModal("Rename group", swim, (newName) => renameSwimlane(swim, newName))}
                             className={`p-1 text-slate-400 hover:text-[#4f63ef] dark:hover:text-[#a5b4fc] rounded transition-colors cursor-pointer ${theme === "dark" ? "hover:bg-slate-800" : "hover:bg-slate-100"}`}
-                            aria-label="Rename Swimlane" title="Rename Swimlane"
+                            aria-label="Rename group" title="Rename group"
                           >
                             <Edit2 size={13} />
                           </button>
                           <button
-                            onClick={() => openConfirmModal("Delete Swimlane?", `Are you sure you want to delete swimlane "${swim}"?`, () => deleteSwimlane(swim))}
+                            onClick={() => openConfirmModal("Delete this group?", `Delete the group "${swim}"? Tasks in it stay on the board.`, () => deleteSwimlane(swim))}
                             className="p-1 text-slate-400 hover:text-rose-600 rounded hover:bg-rose-500/10 transition-colors cursor-pointer"
-                            aria-label="Delete Swimlane" title="Delete Swimlane"
+                            aria-label="Delete group" title="Delete group"
                           >
                             <Trash2 size={13} />
                           </button>
@@ -1997,6 +2189,7 @@ export default function Board() {
                                       onDelete={(cardId) => openConfirmModal("Delete Task?", `Are you sure you want to delete task "${c.Title}"?`, () => deleteCard(cardId))}
                                       onOpenDetail={handleOpenCardDetail}
                                       canEdit={canEdit}
+                                      assignee={Number(c.AssigneeID) ? (memberById.get(Number(c.AssigneeID)) || { name: "Assigned", avatarUrl: "" }) : null}
                                     />
                                   ))}
                                 </SwimlaneDropZone>
@@ -2030,7 +2223,7 @@ export default function Board() {
                                   ref={(el) => adjustHeight(el)}
                                   autoFocus
                                   rows={2}
-                                  placeholder="Type something"
+                                  placeholder="Task name, then Enter"
                                   value={newTaskTitle}
                                   onChange={(e) => {
                                     setNewTaskTitle(e.target.value);
@@ -2052,7 +2245,12 @@ export default function Board() {
                                   }}
                                 />
 
-                                {swimlanes.length > 0 && (
+                                <div className="quick-add-actions">
+                                  <span>Enter adds it. Esc cancels.</span>
+                                  <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => { quickAddSubmittedRef.current = true; setAddingToKey(null); setNewTaskTitle(""); }}>Cancel</button>
+                                  <button type="button" className="quick-add-save" onMouseDown={(event) => event.preventDefault()} onClick={() => submitQuickTask(newTaskTitle, col, (swimCards[swimCards.length - 1]?.Position ?? 0) + 1000, swim || "Untitled")}>Add</button>
+                                </div>
+                                {swimlanes.length > 1 && (
                                   <div className="flex items-center justify-between pt-1">
                                     <span className={`px-2.5 py-0.5 rounded-lg text-[11px] font-bold tracking-tight shadow-2xs ${
                                       SWIMLANE_TAG_COLORS[swimIdx % SWIMLANE_TAG_COLORS.length]
@@ -2080,7 +2278,7 @@ export default function Board() {
         </DndContext>
       </main>
       </div> : <div ref={boardContainerRef} className="task-view-export">
-        {(boardView === "list" || boardView === "due") ? <BoardTaskViews cards={filteredCards} totalCards={cards.length} columns={columns} swimlanes={swimlanes} canEdit={canEdit} connected={status === "connected"} mode={boardView} onOpen={handleOpenCardDetail} onMove={moveFromAlternateView} onCreate={openQuickAdd} />
+        {(boardView === "list" || boardView === "due") ? <BoardTaskViews cards={filteredCards} totalCards={cards.length} columns={columns} swimlanes={swimlanes} assignees={Object.fromEntries([...memberById].map(([id, person]) => [id, person.name]))} canEdit={canEdit} connected={status === "connected"} mode={boardView} onOpen={handleOpenCardDetail} onMove={moveFromAlternateView} onCreate={openQuickAdd} />
         : boardView === "scrum" ? <ScrumBoard cards={filteredCards} allCards={cards} columns={columns} sprint={sprint} saving={operations.some(operation => operation.label === "Update sprint" && operation.state === "saving")} canEdit={canEdit} connected={status === "connected"} onOpen={handleOpenCardDetail} onMove={moveFromAlternateView} onEdit={(card, changes) => editCardDetail(String(card.ID), changes)} onUpdateSprint={updateSprint} onCreate={openQuickAdd} />
         : <BoardCanvasViews cards={filteredCards} allCards={cards} totalCards={cards.length} boardName={boardName} mode={boardView} canEdit={canEdit} connected={status === "connected"} onOpen={handleOpenCardDetail} onCreate={openFormatTask} />}
       </div>}
@@ -2088,7 +2286,7 @@ export default function Board() {
       {creatingTask && <CreateTaskDialog columns={columns} initial={creatingTask} parentName={cards.find(card => String(card.ID) === creatingTask.parentId)?.Title} idea={boardView === "mindmap"} connected={status === "connected"} onClose={() => setCreatingTask(null)} onSave={(title, column, details) => {
         if (!canEdit || status !== "connected") return false;
         if (!addCard(title, column, Math.max(0, ...cards.filter(card => card.List === column).map(card => card.Position || 0)) + 1000, swimlanes[0] || "Untitled", details)) return false;
-        setSearchQuery(""); setSelectedTagFilter("All"); setSelectedDueFilter("all");
+        setSearchQuery(""); setSelectedTagFilter("All"); setSelectedDueFilter("all"); setMineOnly(false);
         setCreatingTask(null);
         return true;
       }} />}
@@ -2115,14 +2313,14 @@ export default function Board() {
             className={`p-2 rounded-xl transition-all flex items-center gap-2 font-semibold text-xs group cursor-pointer ${theme === "dark" ? "hover:bg-[#172033] text-slate-300 hover:text-white" : "hover:bg-slate-100 text-slate-600 hover:text-slate-900"
               }`}
             disabled={status !== "connected"}
-            title="Add Swimlane (Horizontal Row)"
+            title="Add a row to group tasks, for example by team"
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="group-hover:scale-110 transition-transform">
               <line x1="4" y1="6" x2="20" y2="6" />
               <line x1="12" y1="12" x2="12" y2="20" />
               <line x1="8" y1="16" x2="16" y2="16" />
             </svg>
-            <span>Add swimlane</span>
+            <span>Add group</span>
           </button>
 
           <div className={`h-5 w-[1px] ${theme === "dark" ? "bg-[#172033]" : "bg-slate-200"}`} />
@@ -2139,7 +2337,7 @@ export default function Board() {
             className={`p-2 rounded-xl transition-all flex items-center gap-2 font-semibold text-xs group cursor-pointer ${theme === "dark" ? "hover:bg-[#172033] text-slate-300 hover:text-white" : "hover:bg-slate-100 text-slate-600 hover:text-slate-900"
               }`}
             disabled={status !== "connected"}
-            title="Add Column (Vertical Column)"
+            title="Add a column, such as Review"
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="group-hover:scale-110 transition-transform">
               <line x1="6" y1="4" x2="6" y2="20" />
@@ -2229,350 +2427,139 @@ export default function Board() {
         </div>
       )}
 
-      {/* MIRO OFFICIAL SHARE MODAL DIALOG */}
       {isShareModalOpen && (
-        <div className="fixed inset-0 z-[100] bg-slate-950/60 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in zoom-in-95 duration-150">
-          <div className={`rounded-2xl border shadow-2xl p-6 max-w-lg w-full flex flex-col gap-5 relative transition-colors ${theme === "dark" ? "bg-[#0f172a] border-[#334155] text-slate-100" : "bg-white border-slate-200 text-slate-900"
-            }`}>
+        <div className="fixed inset-0 z-[100] bg-slate-950/60 backdrop-blur-md flex items-center justify-center p-4" onClick={() => setIsShareModalOpen(false)}>
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="share-title"
+            onClick={(event) => event.stopPropagation()}
+            className={`rounded-2xl border shadow-2xl p-6 max-w-md w-full flex flex-col gap-5 relative transition-colors ${theme === "dark" ? "bg-[#0f172a] border-[#334155] text-slate-100" : "bg-white border-slate-200 text-slate-900"
+            }`}
+          >
 
-            {/* Top Close Button */}
             <button
+              type="button"
+              aria-label="Close share"
               onClick={() => setIsShareModalOpen(false)}
               className={`absolute top-5 right-5 p-1.5 rounded-xl transition-colors cursor-pointer ${theme === "dark" ? "text-slate-400 hover:text-white hover:bg-slate-800" : "text-slate-400 hover:text-slate-700 hover:bg-slate-100"
                 }`}
             >
               <X size={18} />
             </button>
-
-            {/* Top Modal Navigation Tabs (Invite, Embed) */}
-            <div className={`flex items-center gap-6 border-b text-sm font-semibold pb-2.5 ${theme === "dark" ? "border-[#334155]" : "border-slate-200"
-              }`}>
-              <button
-                onClick={() => setShareTab("invite")}
-                className={`pb-2.5 -mb-3 transition-colors cursor-pointer ${shareTab === "invite"
-                  ? "text-[#4f63ef] dark:text-[#a5b4fc] font-bold border-b-2 border-[#4f63ef] dark:border-[#a5b4fc]"
-                  : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
-                  }`}
-              >
-                Invite
-              </button>
-              <button
-                onClick={() => setShareTab("embed")}
-                className={`pb-2.5 -mb-3 transition-colors cursor-pointer ${shareTab === "embed"
-                  ? "text-[#4f63ef] dark:text-[#a5b4fc] font-bold border-b-2 border-[#4f63ef] dark:border-[#a5b4fc]"
-                  : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
-                  }`}
-              >
-                Embed
-              </button>
+            <div>
+              <h2 id="share-title" className="text-lg font-extrabold tracking-tight pr-8">Share this board</h2>
+              <p className={`mt-1 text-[13px] leading-relaxed ${theme === "dark" ? "text-slate-400" : "text-slate-500"}`}>
+                {isOwner ? "Pick what this link allows, then copy it." : "Only the owner can create a share link."}
+              </p>
             </div>
 
-            {/* TAB 1: INVITE */}
-            {shareTab === "invite" && (
+            {isOwner && (
               <>
-                {/* Middle Invite Link Bar (Grey Container Box) */}
-                <div className={`flex items-center justify-between gap-2 border rounded-xl p-2 pl-3 ${theme === "dark" ? "bg-[#0f172a] border-[#334155]" : "bg-[#f8fafc] border-slate-200"
-                  }`}>
-                  <div className="flex items-center gap-2 min-w-0 flex-1">
-                    <LinkIcon size={16} className="text-slate-500 flex-shrink-0" />
-                    <span className={`text-xs truncate font-medium ${theme === "dark" ? "text-slate-300" : "text-slate-600"}`}>
-                      {`${window.location.origin}/b/${boardId}?inviteToken=${shareLinkRole === "edit" ? editInviteToken : viewInviteToken}`}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    <select
-                      value={shareLinkRole}
-                      onChange={(e) => setShareLinkRole(e.target.value as "edit" | "view")}
-                      className={`border text-xs font-semibold rounded-lg px-2.5 py-1.5 focus:outline-none cursor-pointer ${theme === "dark" ? "bg-[#172033] border-[#334155] text-slate-200" : "bg-white border-slate-200 text-slate-800"
-                        }`}
-                    >
-                      <option value="edit">Can edit</option>
-                      <option value="view">Can view</option>
-                    </select>
-
-                    <button
-                      onClick={() => {
-                        const tokenToCopy = shareLinkRole === "edit" ? editInviteToken : viewInviteToken;
-                        const url = `${window.location.origin}/b/${boardId}?inviteToken=${tokenToCopy}`;
-                        navigator.clipboard.writeText(url);
-                        setCopySuccessToast(true);
-                        setTimeout(() => setCopySuccessToast(false), 3000);
-                      }}
-                      className="px-3.5 py-1.5 bg-[#4f63ef] hover:bg-[#4051d6] text-white text-xs font-bold rounded-lg transition-all shadow-sm flex-shrink-0 cursor-pointer"
-                    >
-                      {copySuccessToast ? "Copied! ✓" : "Copy team invite link"}
-                    </button>
-                  </div>
+                <div className="grid grid-cols-2 gap-2" role="group" aria-label="What this link allows">
+                  <button
+                    type="button"
+                    aria-label="Can edit"
+                    aria-pressed={shareLinkRole === "edit"}
+                    onClick={() => chooseShareRole("edit")}
+                    className={`rounded-xl border px-3 py-3 text-left cursor-pointer ${shareLinkRole === "edit"
+                      ? "border-[#4f63ef] bg-[#eef2ff] text-[#312e81] dark:bg-[#172033] dark:text-[#e0e7ff]"
+                      : theme === "dark" ? "border-[#334155] text-slate-300" : "border-slate-200 text-slate-700"}`}
+                  >
+                    <strong className="block text-[13px]">Can edit</strong>
+                    <span className="mt-1 block text-[12px] leading-snug opacity-80">They can add and move tasks.</span>
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="View only"
+                    aria-pressed={shareLinkRole === "view"}
+                    onClick={() => chooseShareRole("view")}
+                    className={`rounded-xl border px-3 py-3 text-left cursor-pointer ${shareLinkRole === "view"
+                      ? "border-[#4f63ef] bg-[#eef2ff] text-[#312e81] dark:bg-[#172033] dark:text-[#e0e7ff]"
+                      : theme === "dark" ? "border-[#334155] text-slate-300" : "border-slate-200 text-slate-700"}`}
+                  >
+                    <strong className="block text-[13px]">View only</strong>
+                    <span className="mt-1 block text-[12px] leading-snug opacity-80">They can look, but not change the board.</span>
+                  </button>
                 </div>
-
-                {shareView === "main" ? (
-                  <>
-                    {/* BOARD ACCESS Section */}
-                    <div className="flex flex-col gap-3 pt-2">
-                      <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                        BOARD ACCESS
-                      </span>
-
-                      {/* Team Members Row (Miro Screenshot 1) */}
-                      <div className="flex items-center justify-between py-1">
-                        <div className="flex items-center gap-2.5 min-w-0">
-                          {/* Member Avatars Stack */}
-                          <div className="flex items-center -space-x-1.5 overflow-hidden flex-shrink-0">
-                            {boardMembers.length > 0 ? (
-                              boardMembers.slice(0, 3).map((m, idx) => (
-                                <AvatarImage
-                                  key={m.id || idx}
-                                  src={m.avatarUrl}
-                                  name={m.name}
-                                  className="w-6 h-6 rounded-full ring-2 ring-white dark:ring-[#0f172a] object-cover"
-                                />
-                              ))
-                            ) : (
-                              <div className="w-6 h-6 rounded-full bg-amber-400 flex items-center justify-center text-[10px] font-bold text-slate-900">
-                                👤
-                              </div>
-                            )}
+                <label className="flex flex-col gap-1.5 text-[12px] font-bold text-slate-400 uppercase tracking-wider">
+                  Share link
+                  <input
+                    id="share-link"
+                    readOnly
+                    value={shareUrl}
+                    placeholder="Preparing the link…"
+                    onFocus={(event) => event.currentTarget.select()}
+                    className={`w-full rounded-xl border px-3 py-2 text-[13px] font-medium normal-case tracking-normal ${theme === "dark" ? "bg-[#172033] border-[#334155] text-slate-200" : "bg-slate-50 border-slate-200 text-slate-700"}`}
+                  />
+                </label>
+                <button
+                  type="button"
+                  aria-label="Copy link"
+                  disabled={!shareUrl}
+                  onClick={() => void copyShareLink()}
+                  className="w-full py-2.5 bg-[#4f63ef] hover:bg-[#4051d6] disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-[#4f63ef]/20 cursor-pointer"
+                >
+                  {copySuccessToast ? "Copied" : "Copy link"}
+                </button>
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="board-address-access" className="text-[12px] font-bold text-slate-400 uppercase tracking-wider">Board address</label>
+                  <select
+                    id="board-address-access"
+                    aria-label="Board address access"
+                    aria-describedby="board-address-help"
+                    value={accessLevel}
+                    onChange={(event) => updateBoardAccess(event.target.value as "edit" | "view" | "private")}
+                    className={`w-full rounded-xl border px-3 py-2 text-[13px] font-semibold focus:outline-none cursor-pointer ${theme === "dark" ? "bg-[#172033] border-[#334155] text-slate-200" : "bg-white border-slate-200 text-slate-800"}`}
+                  >
+                    <option value="edit">Can edit</option>
+                    <option value="view">View only</option>
+                    <option value="private">No access</option>
+                  </select>
+                  <p id="board-address-help" className={`text-[12px] font-medium normal-case tracking-normal leading-relaxed ${theme === "dark" ? "text-slate-400" : "text-slate-500"}`}>
+                    People who open the board address, without an invite, get this access.
+                  </p>
+                </div>
+                {boardMembers.some((member) => !member.isOwner) && (
+                  <div className={`flex flex-col gap-3 border-t pt-4 ${theme === "dark" ? "border-[#334155]" : "border-slate-200"}`}>
+                    <h3 className="text-[13px] font-bold">People on this board</h3>
+                    <div className="max-h-52 overflow-y-auto space-y-3">
+                      {boardMembers.filter((member) => !member.isOwner).map((member) => (
+                        <div key={member.id} className="flex items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="text-[13px] font-bold truncate">{member.name}</p>
+                            <p className="text-[12px] text-slate-400 truncate">{member.email}</p>
                           </div>
-                          <span className={`text-xs font-medium truncate ${theme === "dark" ? "text-slate-200" : "text-slate-800"}`}>
-                            <span className="font-bold">{boardMembers.length || 1} team members</span> have access
-                          </span>
-                        </div>
-
-                        {isOwner && (
-                          <button
-                            onClick={() => setShareView("manage_access")}
-                            className="text-xs font-bold text-[#4f63ef] dark:text-[#a5b4fc] hover:underline cursor-pointer flex-shrink-0"
-                          >
-                            Manage access
-                          </button>
-                        )}
-                      </div>
-
-                      {/* Anyone with the link Row */}
-                      <div className="flex items-center justify-between py-1">
-                        <div className="flex items-center gap-3">
-                          <Globe size={16} className="text-slate-500 flex-shrink-0" />
-                          <span className={`text-xs font-semibold ${theme === "dark" ? "text-slate-200" : "text-slate-800"}`}>
-                            Anyone with the link
-                          </span>
-                        </div>
-
-                        {user ? (
                           <select
-                            value={accessLevel}
-                            onChange={(e) => updateBoardAccess(e.target.value as "edit" | "view" | "private")}
-                            className={`border text-xs font-semibold rounded-lg px-2.5 py-1 focus:outline-none cursor-pointer ${theme === "dark" ? "bg-[#172033] border-[#334155] text-slate-200" : "bg-white border-slate-200 text-slate-800"
-                              }`}
+                            aria-label={`Access for ${member.name}`}
+                            value={member.role === "edit" ? "Editor" : "Viewer"}
+                            onChange={async (event) => {
+                              const newRole = event.target.value === "Editor" ? "edit" : "view";
+                              setBoardMembers((prev) => prev.map((item) => item.id === member.id ? { ...item, role: newRole } : item));
+                              const token = sessionStorage.getItem("kanban_jwt") || localStorage.getItem("kanban_jwt");
+                              if (!token) return;
+                              try {
+                                const res = await fetch(`${API_URL}/api/boards/${boardId}/members/${member.id}`, {
+                                  method: "POST",
+                                  headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+                                  body: JSON.stringify({ role: newRole }),
+                                });
+                                if (!res.ok) fetchBoardMembers();
+                              } catch {
+                                fetchBoardMembers();
+                              }
+                            }}
+                            className={`border text-xs font-bold rounded-xl px-3 py-1.5 focus:outline-none cursor-pointer ${theme === "dark" ? "bg-[#172033] border-[#334155] text-slate-200" : "bg-white border-slate-200 text-slate-800"}`}
                           >
-                            <option value="edit">Can edit</option>
-                            <option value="view">Viewer</option>
-                            <option value="private">No access</option>
+                            <option value="Editor">Can edit</option>
+                            <option value="Viewer">View only</option>
                           </select>
-                        ) : (
-                          <span className="text-xs font-semibold text-slate-500 capitalize">
-                            {accessLevel === "edit" ? "Can edit" : accessLevel === "view" ? "Viewer" : "No access"}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </>
-                ) : (
-                  /* MANAGE BOARD ACCESS VIEW (Miro Screenshot 2) */
-                  <div className="flex flex-col gap-4">
-                    {/* Header with Back button */}
-                    <div className="flex items-center justify-between border-b pb-3 border-slate-100 dark:border-[#334155]">
-                      <button
-                        onClick={() => setShareView("main")}
-                        className="flex items-center gap-1 text-xs font-bold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 cursor-pointer"
-                      >
-                        <ArrowLeft size={16} /> Back
-                      </button>
-                      <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
-                        Manage board access
-                      </h3>
-                      <div className="w-12" />
-                    </div>
-
-                    {/* Members List */}
-                    <div className="max-h-72 overflow-y-auto space-y-3 pr-1 divide-y divide-slate-100 dark:divide-[#334155]/60">
-                      {boardMembers.map((member) => (
-                        <div key={member.id} className="flex items-center justify-between pt-3 first:pt-0">
-                          <div className="flex items-center gap-3 min-w-0">
-                            <AvatarImage
-                              src={member.avatarUrl}
-                              name={member.name}
-                              className="w-8 h-8 rounded-full flex-shrink-0 object-cover"
-                            />
-                            <div className="min-w-0">
-                              <p className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate">
-                                {member.name}
-                              </p>
-                              <p className="text-[11px] text-slate-400 truncate">
-                                {member.email}
-                              </p>
-                            </div>
-                          </div>
-
-                          {/* Role Selector (Editor / Viewer) */}
-                          <div className="flex-shrink-0">
-                            {member.isOwner ? (
-                              <span className="text-xs font-bold text-slate-400 px-3 py-1">Owner</span>
-                            ) : (
-                              <select
-                                // บังคับอ่านค่าจาก member.role ตรงๆ ("edit" -> "Editor", อื่นๆ -> "Viewer")
-                                value={member.role === "edit" ? "Editor" : "Viewer"}
-                                onChange={async (e) => {
-                                  const selectedValue = e.target.value; // "Editor" หรือ "Viewer"
-                                  const newRoleForBackend = selectedValue === "Editor" ? "edit" : "view";
-                                  const targetUserId = member.id;
-
-                                  // 1. อัปเดต UI ทันที และล็อกค่าไว้ใน React State
-                                  setBoardMembers((prevMembers) =>
-                                    prevMembers.map((m) =>
-                                      m.id === targetUserId ? { ...m, role: newRoleForBackend } : m
-                                    )
-                                  );
-
-                                  // 2. ยิง API บันทึกลง Database
-                                  const token = (sessionStorage.getItem("kanban_jwt") || localStorage.getItem("kanban_jwt"));
-                                  if (!token) return;
-
-                                  try {
-                                    const res = await fetch(`${API_URL}/api/boards/${boardId}/members/${targetUserId}`, {
-                                      method: "POST",
-                                      headers: {
-                                        Authorization: `Bearer ${token}`,
-                                        "Content-Type": "application/json",
-                                      },
-                                      body: JSON.stringify({ role: newRoleForBackend }),
-                                    });
-
-                                    if (!res.ok) {
-                                      console.error("Failed to update role in DB, reverting...");
-                                      // ถ้ายิง API ไม่ผ่าน ค่อยดึงข้อมูลเดิมจากเซิร์ฟเวอร์มาคืนค่า
-                                      fetchBoardMembers();
-                                    }
-                                    // **ถ้ายิงผ่าน (res.ok) ไม่ต้องเรียก fetchBoardMembers() แล้ว**
-                                    // เพราะ Optimistic Update ได้อัปเดต state อย่างถูกต้องเรียบร้อยแล้ว
-                                  } catch (err) {
-                                    console.error("Error updating role:", err);
-                                    fetchBoardMembers();
-                                  }
-                                }}
-                                className={`border text-xs font-bold rounded-xl px-3 py-1.5 focus:outline-none cursor-pointer ${theme === "dark"
-                                  ? "bg-[#172033] border-[#334155] text-slate-200"
-                                  : "bg-white border-slate-200 text-slate-800"
-                                  }`}
-                              >
-                                <option value="Editor">Editor</option>
-                                <option value="Viewer">Viewer</option>
-                              </select>
-                            )}
-                          </div>
                         </div>
                       ))}
                     </div>
-
-                    {/* Bottom Action Button */}
-                    <div className="pt-3 border-t flex justify-between items-center border-slate-100 dark:border-[#334155]">
-                      <button
-                        onClick={() => setShareView("main")}
-                        className="px-6 py-2 bg-[#4f63ef] hover:bg-[#4051d6] text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-[#4f63ef]/20 cursor-pointer"
-                      >
-                        Done
-                      </button>
-                    </div>
                   </div>
                 )}
-
-                {/* Bottom Copy Board Link */}
-                <div className={`pt-4 border-t flex items-center gap-2 ${theme === "dark" ? "border-[#334155]" : "border-slate-200"
-                  }`}>
-                  <button
-                    onClick={() => {
-                      const url = `${window.location.origin}/b/${boardId}`;
-                      navigator.clipboard.writeText(url);
-                      setCopySuccessToast(true);
-                      setTimeout(() => setCopySuccessToast(false), 3000);
-                    }}
-                    className="text-[#4f63ef] dark:text-[#a5b4fc] hover:underline text-xs font-bold flex items-center gap-2 cursor-pointer"
-                  >
-                    <LinkIcon size={16} /> Copy board link
-                  </button>
-                </div>
               </>
-            )}
-
-            {/* TAB 2: EMBED */}
-            {shareTab === "embed" && (
-              <div className="flex flex-col gap-4">
-                {/* Blue Info Notice Box */}
-                <div className="flex items-start gap-3 bg-[#eef2ff]/80 dark:bg-[#172033]/40 border border-[#c7d2fe] dark:border-[#3730a3]/60 rounded-xl p-3.5 text-xs">
-                  <Eye size={16} className="text-[#4051d6] dark:text-[#a5b4fc] flex-shrink-0 mt-0.5" />
-                  <p className="text-slate-700 dark:text-slate-300 leading-relaxed">
-                    <strong className="font-bold text-slate-900 dark:text-slate-100">This board is shared by link.</strong> Anyone can view the board. Change who can see it in the <button onClick={() => setShareTab("invite")} className="text-[#4051d6] dark:text-[#a5b4fc] underline font-semibold cursor-pointer">invite section</button>.
-                  </p>
-                </div>
-
-                {/* Settings Row */}
-                <div className="flex items-center justify-between text-xs font-medium">
-                  <div className="flex items-center gap-2">
-                    <span className="text-slate-500">Start view:</span>
-                    <span className={`px-2.5 py-1 rounded-lg border font-bold flex items-center gap-1.5 ${theme === "dark" ? "bg-[#172033] border-[#334155] text-slate-200" : "bg-slate-100 border-slate-200 text-slate-800"
-                      }`}>
-                      📺 Board <ChevronDown size={14} />
-                    </span>
-                  </div>
-
-                  <label className="flex items-center gap-2 cursor-pointer select-none text-slate-700 dark:text-slate-300 font-semibold">
-                    <input type="checkbox" defaultChecked className="rounded border-slate-300 text-[#4051d6] focus:ring-[#4f63ef]" />
-                    View only
-                  </label>
-                </div>
-
-                {/* Embedded Board Preview Box */}
-                <div className={`h-40 rounded-xl border p-4 flex flex-col justify-center items-center gap-2 text-center relative overflow-hidden ${theme === "dark" ? "bg-[#0f172a] border-[#334155]" : "bg-slate-100 border-slate-200"
-                  }`}>
-                  <div className="w-full max-w-xs h-24 border rounded-lg p-2 bg-white dark:bg-[#172033] dark:border-slate-700 shadow-xs flex flex-col gap-1.5 opacity-80">
-                    <div className="flex gap-2">
-                      <div className="w-1/3 h-4 bg-slate-200 dark:bg-slate-700 rounded" />
-                      <div className="w-1/3 h-4 bg-[#e0e7ff] dark:bg-[#243052]/50 rounded" />
-                      <div className="w-1/3 h-4 bg-[#ecfdf5] dark:bg-[#064e3b]/50 rounded" />
-                    </div>
-                    <div className="w-full h-12 bg-slate-50 dark:bg-slate-800 rounded border border-dashed border-slate-200 dark:border-slate-700" />
-                  </div>
-                  <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Live Embed Preview</span>
-                </div>
-
-                {/* Action Buttons */}
-                <div className="flex items-center gap-3 pt-2">
-                  <button
-                    onClick={() => {
-                      const iframeCode = `<iframe src="${window.location.origin}/b/${boardId}?inviteToken=${viewInviteToken}" width="800" height="600" frameborder="0" allowfullscreen></iframe>`;
-                      navigator.clipboard.writeText(iframeCode);
-                      setCopySuccessToast(true);
-                      setTimeout(() => setCopySuccessToast(false), 3000);
-                    }}
-                    className="flex-1 py-2.5 bg-[#4f63ef] hover:bg-[#4051d6] text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-[#4f63ef]/20 flex items-center justify-center gap-2 cursor-pointer"
-                  >
-                    <Code size={15} /> {copySuccessToast ? "Copied HTML! ✓" : "Copy code"}
-                  </button>
-
-                  <button
-                    onClick={() => {
-                      const url = `${window.location.origin}/b/${boardId}?inviteToken=${viewInviteToken}`;
-                      navigator.clipboard.writeText(url);
-                      setCopySuccessToast(true);
-                      setTimeout(() => setCopySuccessToast(false), 3000);
-                    }}
-                    className={`flex-1 py-2.5 border text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer ${theme === "dark" ? "bg-[#172033] border-[#334155] text-slate-200 hover:bg-slate-800" : "bg-white border-slate-300 text-[#4051d6] hover:bg-slate-50"
-                      }`}
-                  >
-                    <LinkIcon size={15} /> Copy link
-                  </button>
-                </div>
-              </div>
             )}
 
           </div>
@@ -2588,6 +2575,15 @@ export default function Board() {
           canEdit={canEdit && status === "connected"}
           theme={theme}
           columns={columns}
+          members={boardMembers}
+          currentUserId={Number(user?.id) || 0}
+          shareHint={!user || user.email === "guest@kanban.demo" ? "guest" : isOwner ? "owner" : "member"}
+          noteFeed={noteFeed}
+          onShare={() => {
+            if (!user || user.email === "guest@kanban.demo") setShowGuestShareModal(true);
+            else setIsShareModalOpen(true);
+          }}
+          onAddNote={addCardNote}
           onMove={(id, column) => moveCard(id, column, Math.max(0, ...cards.filter(c => c.List === column).map(c => c.Position || 0)) + 1000)}
           swimlanes={swimlanes}
           onClose={() => setSelectedCardDetail(null)}

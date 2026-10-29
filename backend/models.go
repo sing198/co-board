@@ -19,7 +19,7 @@ type Board struct {
 	ID           string `gorm:"primarykey;type:uuid" json:"ID"`
 	Name         string `json:"Name"`
 	OwnerID      uint   `json:"OwnerID"` // Who created the board
-	Columns      string `gorm:"default:'TODO,DOING,DONE'" json:"Columns"`
+	Columns      string `gorm:"default:'To do,Doing,Done'" json:"Columns"`
 	Swimlanes    string `gorm:"default:''" json:"Swimlanes"`
 	AccessLevel  string `gorm:"default:'edit'" json:"AccessLevel"`
 	Background   string `gorm:"default:'default'" json:"Background"`
@@ -44,10 +44,13 @@ type Card struct {
 	StoryPoints  int     `gorm:"default:0" json:"StoryPoints"`
 	InSprint     bool    `gorm:"default:false" json:"InSprint"`
 	Checklist    string  `gorm:"default:''" json:"Checklist"`
-	List         string  `gorm:"default:'TODO'" json:"List"` // TODO, DOING, DONE
+	List         string  `gorm:"default:'To do'" json:"List"` // To do, Doing, Done
 	Swimlane     string  `gorm:"default:'Untitled'" json:"Swimlane"`
 	Position     float64 `gorm:"default:0" json:"Position"`
 	Tags         string  `gorm:"default:''" json:"Tags"` // Comma-separated tags e.g. "Bug,Urgent"
+	AssigneeID   uint    `gorm:"default:0" json:"AssigneeID"`
+	// LatestNote is the newest one-line activity sentence shown on the card.
+	LatestNote string `gorm:"default:''" json:"LatestNote"`
 }
 
 // BoardMember records shared access and recent visits
@@ -73,9 +76,38 @@ type AccessRequest struct {
 	CreatedAt time.Time `json:"createdAt"`
 }
 
+// CardActivity is one short log line for a task: added, moved, renamed,
+// assigned, or a single note. Rows are not edited, deleted individually, or
+// threaded into a conversation.
+type CardActivity struct {
+	ID        uint      `gorm:"primarykey" json:"ID"`
+	BoardID   string    `gorm:"type:uuid;index" json:"BoardID"`
+	CardID    uint      `gorm:"index" json:"CardID"`
+	UserID    uint      `json:"UserID"`
+	UserName  string    `json:"UserName"`
+	Kind      string    `json:"Kind"`
+	Text      string    `json:"Text"`
+	CreatedAt time.Time `json:"CreatedAt"`
+}
+
+// AssignmentNotice tells one person they were given a task. It is a single
+// bell item, not a conversation.
+type AssignmentNotice struct {
+	ID          uint      `gorm:"primarykey" json:"id"`
+	BoardID     string    `gorm:"type:uuid;index" json:"boardId"`
+	BoardName   string    `json:"boardName"`
+	CardID      uint      `gorm:"index" json:"cardId"`
+	CardTitle   string    `json:"cardTitle"`
+	RecipientID uint      `gorm:"index" json:"recipientId"`
+	ActorID     uint      `json:"actorId"`
+	ActorName   string    `json:"actorName"`
+	Seen        bool      `gorm:"default:false" json:"seen"`
+	CreatedAt   time.Time `json:"createdAt"`
+}
+
 // Initialize schemas
 func MigrateDB(db *gorm.DB) error {
-	return db.AutoMigrate(&Board{}, &Card{}, &User{}, &BoardMember{}, &AccessRequest{})
+	return db.AutoMigrate(&Board{}, &Card{}, &User{}, &BoardMember{}, &AccessRequest{}, &CardActivity{}, &AssignmentNotice{})
 }
 
 // resolveBoardRole computes the effective role of userID on the board owned by

@@ -5,7 +5,7 @@
 .task-planning-fields input:not([type=checkbox]),.task-planning-fields select,.planning-dialog input,.planning-dialog select { width:100%; min-height:36px; border:1px solid var(--board-line,#e2e8f0); border-radius:8px; background:var(--board-panel,#fff); color:var(--board-ink,#172033); padding:7px 10px; font-size:12px; }
 .planning-date-row { display:flex; align-items:end; flex-wrap:wrap; gap:10px; }
 .planning-date-row label { flex:1; min-width:140px; }
-.planning-hint { font-size:11px; line-height:1.6; font-weight:400; color:var(--board-muted,#64748b); margin:7px 0 0; }
+.planning-hint { font-size:13px; line-height:1.55; font-weight:400; color:var(--board-muted,#64748b); margin:0; }
 .planning-error { color:#be123c; font-size:12px; margin:8px 0; }
 .dark .planning-error { color:#fda4af; }
 .planning-save,.planning-dialog-actions button { border:1px solid var(--board-line,#e2e8f0); border-radius:8px; padding:9px 12px; font-size:12px; font-weight:650; color:var(--board-ink,#172033); cursor:pointer; }
@@ -28,4 +28,4 @@
 .table-sort-button { cursor:pointer; white-space:nowrap; text-align:left; padding:4px 0; }
 .table-sort-button:hover { color:var(--board-accent,#4f63ef); }
 .task-view-table th:first-child,.task-view-table td:first-child { width:40%; }
-@media(max-width:1200px) { .board-view-tabs > p { display:none; } }
+@media(max-width:1200px) { .board-view-tabs > p { display:block; } }

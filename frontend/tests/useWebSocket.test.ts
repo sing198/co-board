@@ -221,6 +221,97 @@ describe('board formats and metadata sync', () => {
     expect(result.current.cards[0]).toMatchObject({ StoryPoints: 5, InSprint: true, ParentID: '3' });
     act(() => socket.message({ type: 'EDIT_CARD', cardId: '1', changes: { storyPoints: '8', inSprint: 'false', dependencies: '4' } }));
     expect(result.current.cards[0]).toMatchObject({ StoryPoints: 8, InSprint: false, Dependencies: '4' });
+    act(() => result.current.editCardDetail('1', { assigneeId: '4' }));
+    const assigned = JSON.parse(socket.send.mock.calls[1][0]);
+    expect(assigned.changes).toEqual({ assigneeId: '4' });
+    expect(assigned.expected).toEqual({ assigneeId: '0' });
+    expect(result.current.cards[0].AssigneeID).toBe(4);
+    act(() => socket.message({ type: 'EDIT_CARD', cardId: '1', changes: { description: 'Later' }, notes: [{ ID: 9, CardID: 1, Text: 'Alex renamed this', Kind: 'renamed' }] }));
+    expect(result.current.cards[0].LatestNote).toBe('Alex renamed this');
+    expect(result.current.cards[0].Description).toBe('Later');
+    expect(result.current.noteFeed[0].Text).toBe('Alex renamed this');
+  });
+
+  it('sends a short note and keeps the latest line on the card', async () => {
+    const { result, socket } = await connected();
+    act(() => result.current.addCardNote('1', '   '));
+    expect(socket.send).not.toHaveBeenCalled();
+    act(() => result.current.addCardNote('1', '  ship it  '));
+    const payload = JSON.parse(socket.send.mock.calls[0][0]);
+    expect(payload).toMatchObject({ type: 'ADD_CARD_NOTE', cardId: '1', text: 'ship it' });
+    expect(payload.requestId).toBeTruthy();
+    expect(result.current.operations[0]).toMatchObject({ label: 'Add note', state: 'saving' });
+    act(() => socket.message({ type: 'ADD_CARD_NOTE', cardId: '1', requestId: payload.requestId, notes: [{ ID: 9, CardID: 1, Text: 'Alex: ship it', Kind: 'comment' }] }));
+    expect(result.current.cards[0].LatestNote).toBe('Alex: ship it');
+    expect(result.current.cards[0].List).toBe('TODO');
+    expect(result.current.noteFeed).toEqual([expect.objectContaining({ ID: 9, Text: 'Alex: ship it' })]);
+    expect(result.current.operations[0].state).toBe('saved');
+    act(() => socket.message({ type: 'CARD_NOTE', cardId: '1', notes: [{ ID: 10, CardID: 1, Text: 'Alex moved this to DOING', Kind: 'moved' }] }));
+    expect(result.current.cards[0].LatestNote).toBe('Alex moved this to DOING');
+    expect(result.current.cards[0].List).toBe('TODO');
+  });
+
+  it('unlocks this user when editing is allowed, and ignores another person', async () => {
+    const token = `h.${btoa(JSON.stringify({ sub: 9, email: 'alex@example.com', name: 'Alex', exp: 2000000000 }))}.s`;
+    savedBoard = { ...savedBoard, UserRole: 'view', OwnerID: 7, AccessLevel: 'view' };
+    const hook = renderHook(() => useWebSocket('board', token));
+    await act(async () => {});
+    const socket = FakeSocket.instances[0];
+    await act(async () => { await socket.open(); });
+    expect(hook.result.current.userRole).toBe('view');
+
+    let releaseRefresh: () => void = () => {};
+    const hold = () => new Promise<void>((resolve) => { releaseRefresh = resolve; });
+    let nextRole = 'view';
+    vi.mocked(fetch).mockImplementation(async (input) => {
+      if (String(input).includes('/api/boards/')) await hold();
+      return { ok: true, status: 200, json: async () => ({ ...savedBoard, UserRole: nextRole }) };
+    });
+
+    await act(async () => { socket.message({ type: 'ACCESS_GRANTED', boardId: 'board', userId: 4, role: 'edit' }); });
+    expect(hook.result.current.userRole).toBe('view');
+    await act(async () => { releaseRefresh(); });
+    expect(hook.result.current.userRole).toBe('view');
+
+    nextRole = 'edit';
+    await act(async () => { socket.message({ type: 'ACCESS_GRANTED', boardId: 'board', userId: 9, role: 'edit' }); });
+    expect(hook.result.current.userRole).toBe('edit');
+    await act(async () => { releaseRefresh(); });
+    expect(hook.result.current.userRole).toBe('edit');
+
+    nextRole = 'view';
+    await act(async () => { socket.message({ type: 'ACCESS_GRANTED', boardId: 'board', userId: 9, role: 'view' }); });
+    expect(hook.result.current.userRole).toBe('view');
+    await act(async () => { releaseRefresh(); });
+    expect(hook.result.current.userRole).toBe('view');
+  });
+
+  it('keeps an editor grant when an older board refresh returns view only', async () => {
+    const token = `h.${btoa(JSON.stringify({ sub: 9, email: 'alex@example.com', name: 'Alex', exp: 2000000000 }))}.s`;
+    savedBoard = { ...savedBoard, UserRole: 'view', OwnerID: 7, AccessLevel: 'view' };
+    const hook = renderHook(() => useWebSocket('board', token));
+    await act(async () => {});
+    const socket = FakeSocket.instances[0];
+    await act(async () => { await socket.open(); });
+    expect(hook.result.current.userRole).toBe('view');
+
+    const pending: Array<(body: Record<string, unknown>) => void> = [];
+    vi.mocked(fetch).mockImplementation((input) => new Promise((resolve) => {
+      if (!String(input).includes('/api/boards/')) {
+        resolve({ ok: true, status: 200, json: async () => ({}) });
+        return;
+      }
+      pending.push((body) => resolve({ ok: true, status: 200, json: async () => body }));
+    }));
+
+    act(() => socket.message({ type: 'BOARD_REFRESH', boardId: 'board' }));
+    act(() => socket.message({ type: 'ACCESS_GRANTED', boardId: 'board', userId: 9, role: 'edit' }));
+    expect(hook.result.current.userRole).toBe('edit');
+    expect(pending).toHaveLength(2);
+    await act(async () => { pending[0]({ ...savedBoard, UserRole: 'view' }); });
+    expect(hook.result.current.userRole).toBe('edit');
+    await act(async () => { pending[1]({ ...savedBoard, UserRole: 'edit' }); });
+    expect(hook.result.current.userRole).toBe('edit');
   });
 
   it('sends scheduled child creation and refreshes survivors after a deleted reference', async () => {

@@ -14,7 +14,7 @@
 .format-segment button { border:0; min-height:26px; padding:4px 10px; color:var(--board-muted, #64748b); }
 .format-segment button[aria-pressed=true] { background:#eef2ff; color:#4051d6; }
 .dark .format-segment button[aria-pressed=true] { background:#243052; color:#a5b4fc; }
-.format-hint { color:var(--board-muted, #64748b); font-size:11px; line-height:1.7; margin:0 0 14px; }
+.format-hint { color:var(--board-muted, #64748b); font-size:13px; line-height:1.55; margin:0 0 14px; }
 .format-calendar-layout { display:grid; grid-template-columns:minmax(0, 1fr) 215px; gap:16px; align-items:start; }
 .format-calendar-scroll { overflow-x:auto; border:1px solid var(--board-line, #e2e8f0); border-radius:12px; background:var(--board-panel, white); }
 .format-calendar { min-width:650px; }

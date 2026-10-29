@@ -8,4 +8,9 @@ export default defineConfig({
     react(),
     tailwindcss(),
   ],
+  // @ts-expect-error vitest config
+  test: {
+    testTimeout: 15000,
+  },
 })
+

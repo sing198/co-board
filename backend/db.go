@@ -12,14 +12,6 @@ import (
 	"gorm.io/gorm"
 )
 
-// validLists is the canonical set of Kanban list names. Mutations that target a
-// list outside this set are rejected (see validateCardMutation in client.go).
-var validLists = map[string]bool{
-	"TODO":  true,
-	"DOING": true,
-	"DONE":  true,
-}
-
 // maxTitleLength bounds how long a card title may be. A rogue client could
 // otherwise store arbitrarily large strings in the database.
 const maxTitleLength = 10000
@@ -118,10 +110,10 @@ func InitDB() *gorm.DB {
 			ID:   defaultUUID,
 			Name: "Public Real-Time Board",
 			Cards: []Card{
-				{Title: "Design Architecture", List: "TODO"},
-				{Title: "Setup Golang WebSocket", List: "TODO"},
-				{Title: "Build React UI", List: "DOING"},
-				{Title: "Test Concurrency", List: "DONE"},
+				{Title: "Design Architecture", List: "To do"},
+				{Title: "Setup Golang WebSocket", List: "To do"},
+				{Title: "Build React UI", List: "Doing"},
+				{Title: "Test Concurrency", List: "Done"},
 			},
 		})
 	}

@@ -78,6 +78,8 @@ type WsMessage struct {
 	SprintStart  string            `json:"sprintStart,omitempty"`
 	SprintEnd    string            `json:"sprintEnd,omitempty"`
 	SprintStatus string            `json:"sprintStatus,omitempty"`
+	Text         string            `json:"text,omitempty"`
+	Notes        []CardActivity    `json:"notes,omitempty"`
 }
 
 // sendError is a small helper that pushes an ERROR frame back to this client.
@@ -144,9 +146,16 @@ func validateCardMutation(msg WsMessage) (WsMessage, string) {
 			}
 			for key, value := range msg.Changes {
 				switch key {
-				case "title", "description", "dueDate", "startDate", "checklist", "tags", "swimlane", "dependencies", "parentId", "storyPoints", "inSprint":
+				case "title", "description", "dueDate", "startDate", "checklist", "tags", "swimlane", "dependencies", "parentId", "storyPoints", "inSprint", "assigneeId":
 				default:
 					return msg, "Invalid task field."
+				}
+				if key == "assigneeId" {
+					id, err := parseAssigneeID(value)
+					if err != nil {
+						return msg, err.Error()
+					}
+					msg.Changes[key] = strconv.FormatUint(uint64(id), 10)
 				}
 				if key == "title" {
 					value = trimTitle(value)
@@ -266,6 +275,15 @@ func validateCardMutation(msg WsMessage) (WsMessage, string) {
 				return msg, "Invalid sprint field."
 			}
 		}
+	case "ADD_CARD_NOTE":
+		if msg.CardId == "" {
+			return msg, "Missing cardId."
+		}
+		text, reason := normalizeComment(msg.Text)
+		if reason != "" {
+			return msg, reason
+		}
+		msg.Text = text
 	default:
 		return msg, "Unknown message type."
 	}
@@ -392,6 +410,9 @@ func (c *Client) readPump() {
 					c.sendError("Could not move card. Refreshing board.")
 					continue
 				}
+				if note := c.recordActivity(msg.CardId, "moved", "moved this to "+clipRunes(msg.ToList, 40)); note != nil {
+					msg.Notes = append(msg.Notes, *note)
+				}
 				if needs, err := c.needsRenormalize(msg.ToList); err != nil {
 					log.Println("renormalize check failed:", err)
 				} else if needs {
@@ -399,6 +420,10 @@ func (c *Client) readPump() {
 						log.Println("renormalize failed:", err)
 					} else {
 						c.broadcastReorder(msg.ToList, cards)
+						// The move broadcast is skipped after a rebalance, so the
+						// note rides on its own frame. REORDER still carries the
+						// card, including LatestNote, from the database.
+						c.publishCardNote(msg.CardId, msg.RequestID, msg.Notes)
 						ack, _ := json.Marshal(WsMessage{Type: "ACK", RequestID: msg.RequestID, BoardId: c.boardID})
 						c.send <- ack
 						continue
@@ -411,11 +436,36 @@ func (c *Client) readPump() {
 					continue
 				}
 				msg.Card = &newCard
+				if note := c.recordActivity(strconv.FormatUint(uint64(newCard.ID), 10), "added", "added this task"); note != nil {
+					msg.Notes = append(msg.Notes, *note)
+					msg.Card.LatestNote = note.Text
+				}
 			case "EDIT_CARD":
 				if err := editCardWithMetadata(c.db, c.boardID, &msg); err != nil {
 					c.sendError("Could not update task: " + err.Error() + ". Refresh and review before editing again.")
 					continue
 				}
+				for _, change := range editActivityBodies(c.db, msg.Changes) {
+					if note := c.recordActivity(msg.CardId, change.Kind, change.Body); note != nil {
+						msg.Notes = append(msg.Notes, *note)
+					}
+				}
+				if recipient, ok := assignmentRecipient(msg.Changes, msg.Expected, c.userID); ok {
+					var assigned Card
+					if err := c.db.Select("id", "title").Where("id = ? AND board_id = ?", msg.CardId, c.boardID).First(&assigned).Error; err == nil {
+						if err := recordAssignmentNotice(c.db, c.boardID, assigned, c.userID, c.userName, recipient); err != nil {
+							log.Println("assignment notice failed:", err)
+						}
+					}
+				}
+			case "ADD_CARD_NOTE":
+				note, err := saveCardActivity(c.db, c.boardID, msg.CardId, c.userID, c.userName, "comment", msg.Text)
+				if err != nil {
+					c.sendError("Could not add note. It may have been deleted. Refresh and try again.")
+					continue
+				}
+				msg.Notes = append(msg.Notes, note)
+				msg.Text = ""
 			case "UPDATE_CARD_TAGS":
 				if result := c.db.Model(&Card{}).Where("id = ? AND board_id = ?", msg.CardId, c.boardID).Update("tags", msg.Tags); result.Error != nil || result.RowsAffected == 0 {
 					c.sendError("Could not save task. It may have been deleted. Refresh and try again.")
@@ -633,6 +683,31 @@ func (c *Client) needsRenormalize(list string) (bool, error) {
 
 // broadcastReorder publishes a REORDER message carrying the renormalized cards
 // for a list so every connected client resyncs their positions.
+// recordActivity keeps a failed log line from rolling back the move or edit
+// that already succeeded.
+func (c *Client) recordActivity(cardID, kind, body string) *CardActivity {
+	note, err := saveCardActivity(c.db, c.boardID, cardID, c.userID, c.userName, kind, body)
+	if err != nil {
+		log.Println("activity note failed:", err)
+		return nil
+	}
+	return &note
+}
+
+func (c *Client) publishCardNote(cardID, requestID string, notes []CardActivity) {
+	if len(notes) == 0 {
+		return
+	}
+	payload, _ := json.Marshal(WsMessage{
+		Type:      "CARD_NOTE",
+		BoardId:   c.boardID,
+		CardId:    cardID,
+		Notes:     notes,
+		RequestID: requestID,
+	})
+	c.hub.publish <- payload
+}
+
 func (c *Client) broadcastReorder(list string, cards []Card) {
 	msg := WsMessage{
 		Type:    "REORDER",

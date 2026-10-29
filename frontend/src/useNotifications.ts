@@ -2,6 +2,16 @@ import { useState, useEffect, useCallback } from "react";
 import { API_URL } from "./config";
 import { useAuth } from "./useAuth";
 
+export type AssignmentNotice = {
+  id: number;
+  boardId: string;
+  boardName: string;
+  cardId: number;
+  cardTitle: string;
+  actorName: string;
+  seen: boolean;
+};
+
 export type AccessRequestItem = {
   id: number;
   boardId: string;
@@ -17,6 +27,7 @@ export type AccessRequestItem = {
 export function useNotifications() {
   const { user } = useAuth();
   const [notifications, setNotifications] = useState<AccessRequestItem[]>([]);
+  const [assignments, setAssignments] = useState<AssignmentNotice[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -33,6 +44,7 @@ export function useNotifications() {
       if (res.ok) {
         const data = await res.json();
         setNotifications(data.notifications || []);
+        setAssignments(data.assignments || []);
         setUnreadCount(data.unreadCount || 0);
       }
     } catch (err) {
@@ -97,8 +109,24 @@ export function useNotifications() {
     return false;
   };
 
+  const markAssignmentSeen = async (noticeId: number): Promise<void> => {
+    const token = (sessionStorage.getItem("kanban_jwt") || localStorage.getItem("kanban_jwt"));
+    if (!token) return;
+    try {
+      const res = await fetch(`${API_URL}/api/assignments/${noticeId}/seen`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) await fetchNotifications();
+    } catch (err) {
+      console.error("Failed to mark an assignment as seen", err);
+    }
+  };
+
   return {
     notifications,
+    assignments,
+    markAssignmentSeen,
     unreadCount,
     isLoading,
     fetchNotifications,

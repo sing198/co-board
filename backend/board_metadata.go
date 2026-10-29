@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"gorm.io/gorm"
 )
@@ -32,6 +33,40 @@ func validateDateRange(start, end string) error {
 	}
 	if start != "" && end != "" && end < start {
 		return errors.New("end date must be on or after start date")
+	}
+	return nil
+}
+
+func parseAssigneeID(value string) (uint, error) {
+	value = strings.TrimSpace(value)
+	if value == "" || value == "0" {
+		return 0, nil
+	}
+	parsed, err := strconv.ParseUint(value, 10, 32)
+	if err != nil || parsed == 0 {
+		return 0, errors.New("assignee must be a person on this board")
+	}
+	return uint(parsed), nil
+}
+
+// A task can be unassigned, or assigned to the owner or someone already on the board.
+func ensureBoardAssignee(tx *gorm.DB, boardID string, assigneeID uint) error {
+	if assigneeID == 0 {
+		return nil
+	}
+	var board Board
+	if err := tx.Select("id", "owner_id").Where("id = ?", boardID).First(&board).Error; err != nil {
+		return err
+	}
+	if board.OwnerID == assigneeID {
+		return nil
+	}
+	var count int64
+	if err := tx.Model(&BoardMember{}).Where("board_id = ? AND user_id = ?", boardID, assigneeID).Count(&count).Error; err != nil {
+		return err
+	}
+	if count == 0 {
+		return errors.New("that person is not on this board")
 	}
 	return nil
 }
@@ -176,6 +211,16 @@ func clearDeletedCardReferences(tx *gorm.DB, boardID string, deleted map[uint]bo
 	if len(deleted) == 0 {
 		return nil
 	}
+	ids := make([]uint, 0, len(deleted))
+	for id := range deleted {
+		ids = append(ids, id)
+	}
+	if err := tx.Where("board_id = ? AND card_id IN ?", boardID, ids).Delete(&CardActivity{}).Error; err != nil {
+		return err
+	}
+	if err := tx.Where("board_id = ? AND card_id IN ?", boardID, ids).Delete(&AssignmentNotice{}).Error; err != nil {
+		return err
+	}
 	var cards []Card
 	if err := tx.Where("board_id = ?", boardID).Find(&cards).Error; err != nil {
 		return err
@@ -266,6 +311,17 @@ func editCardWithMetadata(db *gorm.DB, boardID string, msg *WsMessage) error {
 					included, _ := strconv.ParseBool(value)
 					candidate.InSprint = included
 					updates["in_sprint"] = included
+				case "assigneeId":
+					assigneeID, err := parseAssigneeID(value)
+					if err != nil {
+						return err
+					}
+					if err := ensureBoardAssignee(tx, boardID, assigneeID); err != nil {
+						return err
+					}
+					candidate.AssigneeID = assigneeID
+					updates["assignee_id"] = assigneeID
+					msg.Changes[key] = strconv.FormatUint(uint64(assigneeID), 10)
 				}
 			}
 		} else {
@@ -307,13 +363,23 @@ func editCardWithMetadata(db *gorm.DB, boardID string, msg *WsMessage) error {
 		}
 		query := tx.Model(&Card{}).Where("id = ? AND board_id = ?", msg.CardId, boardID)
 		if msg.Changes != nil {
-			columns := map[string]string{"title": "title", "description": "description", "dueDate": "due_date", "startDate": "start_date", "checklist": "checklist", "tags": "tags", "swimlane": "swimlane", "dependencies": "dependencies", "parentId": "parent_id"}
+			columns := map[string]string{"title": "title", "description": "description", "dueDate": "due_date", "startDate": "start_date", "checklist": "checklist", "tags": "tags", "swimlane": "swimlane", "dependencies": "dependencies", "parentId": "parent_id", "assigneeId": "assignee_id"}
 			for key := range msg.Changes {
 				previous, hasExpected := msg.Expected[key]
 				if !hasExpected {
 					continue
 				}
 				switch key {
+				case "assigneeId":
+					raw := previous
+					if raw == "" {
+						raw = "0"
+					}
+					id, err := strconv.ParseUint(raw, 10, 64)
+					if err != nil {
+						return errors.New("invalid expected assignee")
+					}
+					query = query.Where("COALESCE(assignee_id, 0) = ?", id)
 				case "storyPoints":
 					points, err := strconv.Atoi(previous)
 					if err != nil {
@@ -407,6 +473,149 @@ func updateSprintMetadata(db *gorm.DB, boardID string, msg *WsMessage) error {
 		msg.SprintName, msg.SprintStart, msg.SprintEnd, msg.SprintStatus = board.SprintName, board.SprintStart, board.SprintEnd, board.SprintStatus
 		return nil
 	})
+}
+
+const maxNoteRunes = 280
+
+// normalizeComment trims a short note, collapses whitespace, and rejects an
+// empty or overlong body. The limit counts runes so a Thai note is not cut
+// short by multi-byte characters.
+func normalizeComment(value string) (string, string) {
+	value = strings.Join(strings.Fields(value), " ")
+	if value == "" {
+		return "", "Write a short note first."
+	}
+	if utf8.RuneCountInString(value) > maxNoteRunes {
+		return "", "Keep the note under 280 characters."
+	}
+	return value, ""
+}
+
+func clipRunes(value string, limit int) string {
+	value = strings.TrimSpace(value)
+	runes := []rune(value)
+	if len(runes) > limit {
+		return string(runes[:limit])
+	}
+	return value
+}
+
+func activityActor(name string) string {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return "Someone"
+	}
+	return name
+}
+
+func activityText(actor, kind, body string) string {
+	if kind == "comment" {
+		return actor + ": " + body
+	}
+	return actor + " " + body
+}
+
+type activityChange struct {
+	Kind string
+	Body string
+}
+
+// editActivityBodies returns the log lines for a task edit. Description,
+// checklist, dates, tags, and sprint fields stay off the card face.
+func editActivityBodies(db *gorm.DB, changes map[string]string) []activityChange {
+	if len(changes) == 0 {
+		return nil
+	}
+	var bodies []activityChange
+	if _, ok := changes["title"]; ok {
+		bodies = append(bodies, activityChange{Kind: "renamed", Body: "renamed this"})
+	}
+	value, ok := changes["assigneeId"]
+	if !ok {
+		return bodies
+	}
+	id, err := parseAssigneeID(value)
+	if err != nil || id == 0 {
+		return append(bodies, activityChange{Kind: "assigned", Body: "cleared the assignee"})
+	}
+	var user User
+	if err := db.Select("name").First(&user, id).Error; err != nil || strings.TrimSpace(user.Name) == "" {
+		return append(bodies, activityChange{Kind: "assigned", Body: "assigned this"})
+	}
+	return append(bodies, activityChange{Kind: "assigned", Body: "assigned this to " + strings.TrimSpace(user.Name)})
+}
+
+// saveCardActivity writes one log line and the card's latest sentence in the
+// same transaction. A missing task returns "task was deleted" and leaves no row.
+func saveCardActivity(db *gorm.DB, boardID, cardID string, userID uint, userName, kind, body string) (CardActivity, error) {
+	var note CardActivity
+	err := db.Transaction(func(tx *gorm.DB) error {
+		id, err := parseCardID(cardID)
+		if err != nil {
+			return errors.New("task was deleted")
+		}
+		var count int64
+		if err := tx.Model(&Card{}).Where("id = ? AND board_id = ?", id, boardID).Count(&count).Error; err != nil {
+			return err
+		}
+		if count == 0 {
+			return errors.New("task was deleted")
+		}
+		actor := activityActor(userName)
+		note = CardActivity{
+			BoardID:  boardID,
+			CardID:   id,
+			UserID:   userID,
+			UserName: actor,
+			Kind:     kind,
+			Text:     activityText(actor, kind, body),
+		}
+		if err := tx.Create(&note).Error; err != nil {
+			return err
+		}
+		return tx.Model(&Card{}).Where("id = ? AND board_id = ?", id, boardID).Update("latest_note", note.Text).Error
+	})
+	return note, err
+}
+
+// assignmentRecipient is the person who should hear about this edit.
+// Clearing, assigning yourself, or sending the same person again does not.
+func assignmentRecipient(changes, expected map[string]string, actorID uint) (uint, bool) {
+	raw, ok := changes["assigneeId"]
+	if !ok {
+		return 0, false
+	}
+	id, err := parseAssigneeID(raw)
+	if err != nil || id == 0 || id == actorID {
+		return 0, false
+	}
+	if previous, ok := expected["assigneeId"]; ok && previous == strconv.FormatUint(uint64(id), 10) {
+		return 0, false
+	}
+	return id, true
+}
+
+func recordAssignmentNotice(db *gorm.DB, boardID string, card Card, actorID uint, actorName string, assigneeID uint) error {
+	if assigneeID == 0 || assigneeID == actorID {
+		return nil
+	}
+	var board Board
+	if err := db.Select("id", "name").Where("id = ?", boardID).First(&board).Error; err != nil {
+		return err
+	}
+	name := strings.TrimSpace(actorName)
+	if name == "" {
+		name = "Someone"
+	}
+	return db.Create(&AssignmentNotice{
+		BoardID:     boardID,
+		BoardName:   board.Name,
+		CardID:      card.ID,
+		CardTitle:   card.Title,
+		RecipientID: assigneeID,
+		ActorID:     actorID,
+		ActorName:   name,
+	}).Error
 }
 
 func deleteCardWithReferences(db *gorm.DB, boardID, cardID string) error {

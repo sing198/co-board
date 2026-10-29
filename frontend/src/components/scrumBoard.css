@@ -89,7 +89,7 @@
 .dark .scrum-scope-button:not(:disabled):hover { background: #34416c; }
 .scrum-status-grid { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 5px; }
 .scrum-status-column { background: var(--scrum-surface); border: 1px solid var(--scrum-border); border-radius: 13px; padding: 12px; min-width: 240px; flex: 1 0 240px; }
-.scrum-status-column h4 { display: flex; justify-content: space-between; margin: 0 0 11px; color: var(--scrum-text); font-size: 0.72rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; }
+.scrum-status-column h4 { display: flex; justify-content: space-between; margin: 0 0 11px; color: var(--scrum-text); font-size: 13px; font-weight: 800; letter-spacing: 0; }
 .scrum-status-column h4 span { color: var(--scrum-muted); }
 .scrum-column-empty { padding: 12px; margin: 0; }
 

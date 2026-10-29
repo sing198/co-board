@@ -9,12 +9,13 @@ type Props = {
   canEdit: boolean;
   connected: boolean;
   mode: "list" | "due";
+  assignees?: Record<number, string>;
   onOpen: (card: Card) => void;
   onMove: (card: Card, column: string) => void;
   onCreate: () => void;
 };
 
-export default function BoardTaskViews({ cards, totalCards, columns, swimlanes, canEdit, connected, mode, onOpen, onMove, onCreate }: Props) {
+export default function BoardTaskViews({ cards, totalCards, columns, swimlanes, canEdit, connected, mode, assignees, onOpen, onMove, onCreate }: Props) {
   const [sort, setSort] = useState<{ field: "Title" | "List" | "Swimlane" | "StartDate" | "DueDate"; direction: 1 | -1 }>({ field: "Title", direction: 1 });
   const sorted = [...cards].sort((a, b) => {
     const aValue = String(a[sort.field] || ""), bValue = String(b[sort.field] || "");
@@ -36,14 +37,15 @@ export default function BoardTaskViews({ cards, totalCards, columns, swimlanes, 
     {cards.length > 0 && groups.filter(group => mode === "list" || group.cards.length > 0).map(group => <section key={group.name} className="task-view-group" aria-label={`${group.name}: ${group.cards.length} tasks`}>
       <h3>{group.name} <span>{group.cards.length}</span></h3>
       {group.cards.length === 0 ? <p className="task-view-empty-group">No tasks here</p> : <div className="task-view-table-wrap"><table className="task-view-table"><thead><tr>{([
-        ["Title", "Task"], ["List", "Status"], ["Swimlane", "Swimlane"], ["StartDate", "Start"], ["DueDate", "Due"],
-      ] as const).map(([field, label]) => <th key={field} scope="col" aria-sort={mode === "list" && sort.field === field ? sort.direction === 1 ? "ascending" : "descending" : "none"}>{mode === "list" ? <button className="table-sort-button" onClick={() => setSort(current => ({ field, direction: current.field === field && current.direction === 1 ? -1 : 1 }))}>{label}{sort.field === field ? sort.direction === 1 ? " ↑" : " ↓" : " ↕"}</button> : label}</th>)}</tr></thead><tbody>
+        ["Title", "Task"], ["List", "Status"], ...(swimlanes.length ? [["Swimlane", "Group"] as const] : []), ["StartDate", "Start"], ["DueDate", "Due"],
+      ] as const).map(([field, label]) => <th key={field} scope="col" aria-sort={mode === "list" && sort.field === field ? sort.direction === 1 ? "ascending" : "descending" : "none"}>{mode === "list" ? <button className="table-sort-button" onClick={() => setSort(current => ({ field, direction: current.field === field && current.direction === 1 ? -1 : 1 }))}>{label}{sort.field === field ? sort.direction === 1 ? " ↑" : " ↓" : " ↕"}</button> : label}</th>)}{assignees && <th scope="col">Assignee</th>}</tr></thead><tbody>
         {group.cards.map(card => <tr key={card.ID}>
           <td><button className="task-view-title" aria-label={`Open task: ${card.Title}`} onClick={() => onOpen(card)}><small>TSK-{String(card.ID).padStart(3, "0")}</small><span>{card.Title}</span></button>{card.Tags && <span className="task-view-tags">{card.Tags.split(",").map(tag => tag.trim()).filter(Boolean).join(" · ")}</span>}</td>
           <td><select aria-label={`Move ${card.Title} to column`} value={card.List} disabled={!canEdit || !connected} onChange={event => onMove(card, event.target.value)}>{!columns.includes(card.List) && <option value={card.List}>{card.List}</option>}{columns.map(column => <option key={column} value={column}>{column}</option>)}</select></td>
-          <td>{swimlanes.length ? card.Swimlane || swimlanes[0] : "—"}</td>
+          {swimlanes.length > 0 && <td>{card.Swimlane || swimlanes[0]}</td>}
           <td><span className="task-view-due">{card.StartDate || "No date"}</span></td>
           <td><span className={`task-view-due task-view-due-${dueBucket(card.DueDate)}`}>{card.DueDate || "No date"}</span></td>
+          {assignees && <td>{assignees[card.AssigneeID || 0] || (card.AssigneeID ? "Assigned" : "Unassigned")}</td>}
         </tr>)}
       </tbody></table></div>}
     </section>)}

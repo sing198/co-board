@@ -18,12 +18,24 @@ import {
   Moon,
   Bell,
   X,
-  Check
+  Check,
+  Calendar,
+  GanttChart,
+  Network,
+  Timer,
+  Zap,
+  ArrowRight,
+  FileText,
+  CheckCircle2,
+  LayoutDashboard
 } from "lucide-react";
 import { API_URL } from "../config";
 import WorkspaceSidebar, { KanbanMark } from "../components/WorkspaceSidebar";
+import StartHere from "../components/StartHere";
 import { BoardFormatPreview } from "../components/BoardCanvasViews";
 import { useNotifications } from "../useNotifications";
+import AssignmentNotices from "../components/AssignmentNotices";
+import { dueBucket } from "../boardDates";
 
 type UserPresence = {
   id: number;
@@ -42,19 +54,27 @@ type Board = {
   OnlineUsers?: UserPresence[];
 };
 
-const BOARD_TYPES = [
-  { id: "kanban", label: "Kanban", hint: "Move work through visual stages" },
-  { id: "todo", label: "To-do", hint: "A focused list for everyday tasks" },
-  { id: "table", label: "Table", hint: "Scan task details in rows" },
-  { id: "calendar", label: "Calendar", hint: "See work on its due date" },
-  { id: "timeline", label: "Timeline", hint: "Plan work across date ranges" },
-  { id: "mindmap", label: "Mind Map", hint: "Explore connected tasks" },
-  { id: "sprint", label: "Scrum", hint: "Plan a backlog and track a sprint" },
-  { id: "content", label: "Content", hint: "Plan an editorial calendar" },
+export const BOARD_TYPES = [
+  { id: "kanban", label: "Kanban", hint: "Move work through visual stages", category: "Agile & Flow", defaultName: "Team Kanban Flow", icon: LayoutDashboard },
+  { id: "sprint", label: "Scrum", hint: "Plan a backlog and track a sprint", category: "Agile & Flow", defaultName: "Sprint 1", icon: Timer },
+  { id: "timeline", label: "Timeline", hint: "Plan work across date ranges & dependencies", category: "Roadmap & Planning", defaultName: "Product Roadmap", icon: GanttChart },
+  { id: "calendar", label: "Calendar", hint: "See work on its due date", category: "Roadmap & Planning", defaultName: "Project Milestones", icon: Calendar },
+  { id: "content", label: "Content", hint: "Plan an editorial calendar", category: "Roadmap & Planning", defaultName: "Editorial Calendar", icon: Calendar },
+  { id: "mindmap", label: "Mind Map", hint: "Explore connected ideas & branches", category: "Ideation & Notes", defaultName: "Product Brainstorm", icon: Network },
+  { id: "table", label: "Table", hint: "Scan and sort task details in rows", category: "Structured Lists", defaultName: "Task Inventory", icon: FileText },
+  { id: "todo", label: "To-do", hint: "A focused list for everyday tasks", category: "Structured Lists", defaultName: "Daily To-do List", icon: CheckCircle2 },
 ];
 
 const boardTypeLabel = (type?: string) =>
   BOARD_TYPES.find((t) => t.id === (type || "kanban"))?.label ?? "Kanban";
+
+const getBoardTypeIcon = (type?: string) => {
+  const match = BOARD_TYPES.find(b => b.id === (type || "kanban"));
+  const IconComp = match?.icon || LayoutDashboard;
+  return <IconComp size={12} />;
+};
+
+
 
 function AvatarImage({ src, name, className, title }: { src: string; name: string; className: string; title?: string }) {
   const [failed, setFailed] = useState(false);
@@ -88,7 +108,7 @@ export default function Dashboard() {
   };
 
   const { theme, toggleTheme } = useTheme();
-  const { notifications, unreadCount, respondToAccess } = useNotifications();
+  const { notifications, assignments, markAssignmentSeen, unreadCount, respondToAccess } = useNotifications();
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [boards, setBoards] = useState<Board[]>([]);
   const [isLoadingBoards, setIsLoadingBoards] = useState(true);
@@ -110,11 +130,18 @@ export default function Dashboard() {
   const [deleteModalData, setDeleteModalData] = useState<{ boardId: string; name: string } | null>(null);
   const [isDeletingBoard, setIsDeletingBoard] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [showHomeTips, setShowHomeTips] = useState(() => {
+    try { return localStorage.getItem("co_board_home_tips") !== "hidden"; } catch { return true; }
+  });
+  const dismissHomeTips = () => {
+    setShowHomeTips(false);
+    try { localStorage.setItem("co_board_home_tips", "hidden"); } catch { /* Tips can stay visible if storage is blocked. */ }
+  };
   const navigate = useNavigate();
 
   const renderOnlineAvatars = (users?: UserPresence[], size: "sm" | "md" = "sm") => {
     if (!users || users.length === 0) {
-      return <span className="text-[10px] text-slate-400 opacity-60">0 online</span>;
+      return null;
     }
 
     // Filter out lingering Guest User presence if current user is logged in with a real Google account
@@ -128,7 +155,7 @@ export default function Dashboard() {
     });
 
     if (filteredUsers.length === 0) {
-      return <span className="text-[10px] text-slate-400 opacity-60">0 online</span>;
+      return null;
     }
 
     // Strict client-side deduplication by ID, Name, or Guest!
@@ -369,6 +396,46 @@ export default function Dashboard() {
     );
   };
 
+  const attention = useMemo(() => {
+    const items: { key: string; boardId: string; boardName: string; title: string; bucket: "overdue" | "today"; cardId: number }[] = [];
+    for (const board of boards) {
+      for (const card of board.Cards || []) {
+        const bucket = dueBucket(card?.DueDate);
+        if (bucket !== "overdue" && bucket !== "today") continue;
+        items.push({
+          key: `${board.ID}-${card.ID}`,
+          boardId: board.ID,
+          boardName: board.Name || "Untitled board",
+          title: card.Title || "Untitled task",
+          bucket,
+          cardId: card.ID,
+        });
+      }
+    }
+    items.sort((a, b) => (a.bucket === b.bucket ? a.title.localeCompare(b.title) : a.bucket === "overdue" ? -1 : 1));
+    return items;
+  }, [boards]);
+
+  const assignedToYou = useMemo(() => {
+    const me = Number(user?.id);
+    if (!me) return [];
+    const items: { key: string; boardId: string; boardName: string; title: string; cardId: number }[] = [];
+    for (const board of boards) {
+      for (const card of board.Cards || []) {
+        if (!card?.ID || Number(card.AssigneeID) !== me) continue;
+        items.push({
+          key: `${board.ID}-${card.ID}`,
+          boardId: board.ID,
+          boardName: board.Name || "Untitled board",
+          title: card.Title || "Untitled task",
+          cardId: card.ID,
+        });
+      }
+    }
+    items.sort((a, b) => a.title.localeCompare(b.title) || a.boardName.localeCompare(b.boardName));
+    return items;
+  }, [boards, user?.id]);
+
   const filteredBoards = useMemo(() => {
     return boards.filter(board => {
       const matchesSearch = board.Name.toLowerCase().includes(searchQuery.toLowerCase());
@@ -382,54 +449,103 @@ export default function Dashboard() {
 
   if (!user) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-[#f8fafc] via-white to-[#eef2ff] text-[#172033] flex items-center justify-center font-sans overflow-hidden p-6 relative selection:bg-[#4f63ef]/20">
-        {/* Glowing Background Ambient Orbs */}
-        <div className="absolute top-1/4 left-1/3 w-[500px] h-[500px] bg-[#4f63ef]/10 rounded-full blur-[140px] pointer-events-none" />
-        <div className="absolute bottom-1/4 right-1/3 w-[450px] h-[450px] bg-[#818cf8]/10 rounded-full blur-[120px] pointer-events-none" />
-
-        <div className="max-w-md w-full bg-white/95 backdrop-blur-2xl p-8 sm:p-10 flex flex-col items-center relative z-10 text-center border border-[#e2e8f0] shadow-xl rounded-3xl gap-6">
-
-          {/* Logo Badge */}
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-[#4051d6] via-[#6366f1] to-[#a5b4fc] p-[2px] shadow-lg shadow-[#4f63ef]/30">
+      <div className="min-h-screen bg-gradient-to-br from-[#f8fafc] via-[#f1f5f9] to-[#eef2ff] dark:from-[#0b0f19] dark:via-[#0f172a] dark:to-[#172033] text-[#172033] dark:text-slate-100 flex flex-col font-sans selection:bg-[#4f63ef]/20 transition-colors">
+        {/* Top Minimal Navbar */}
+        <header className="landing-top">
+          <div className="landing-brand">
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-[#4051d6] via-[#6366f1] to-[#a5b4fc] p-[2px] shadow-md shadow-[#4f63ef]/20">
               <div className="w-full h-full bg-[#0f172a] rounded-[14px] flex items-center justify-center p-2 gap-1">
-                <div className="w-2 h-full rounded-xs bg-gradient-to-b from-[#60a5fa] to-[#4051d6] shadow-2xs" />
-                <div className="w-2 h-4/5 rounded-xs bg-gradient-to-b from-[#818cf8] to-[#6366f1] shadow-2xs" />
-                <div className="w-2 h-3/5 rounded-xs bg-gradient-to-b from-[#818cf8] to-[#8b5cf6] shadow-2xs" />
+                <div className="w-1.5 h-full rounded-xs bg-gradient-to-b from-[#60a5fa] to-[#4051d6]" />
+                <div className="w-1.5 h-4/5 rounded-xs bg-gradient-to-b from-[#818cf8] to-[#6366f1]" />
+                <div className="w-1.5 h-3/5 rounded-xs bg-gradient-to-b from-[#818cf8] to-[#8b5cf6]" />
               </div>
             </div>
-            <div className="text-left">
-              <h1 className="text-2xl font-extrabold tracking-tight text-[#172033] flex items-center gap-2">
-                co-board
-              </h1>
+            <div>
+              <span className="text-lg font-black tracking-tight text-slate-900 dark:text-white">co-board</span>
             </div>
           </div>
 
-          <p className="text-[#64748b] text-xs leading-relaxed max-w-xs">
-            Plan your work with Kanban, tables, calendars, timelines, mind maps and sprints — with live collaboration.
-          </p>
-
-          {demoError && <p role="alert" className="text-sm text-rose-600">{demoError}</p>}
-          {/* Action Buttons Stack */}
-          <div className="w-full flex flex-col gap-3 pt-2">
+          <div className="landing-top-actions">
             <button
-              onClick={() => login("default")}
-              className="w-full py-3.5 px-4 rounded-xl bg-white text-[#172033] border border-[#e2e8f0] font-bold hover:bg-[#f8fafc] transition-all flex items-center justify-center gap-3 shadow-sm hover:shadow-md hover:scale-[1.02] active:scale-[0.98] text-sm cursor-pointer"
+              onClick={toggleTheme}
+              className="landing-icon"
+              title={theme === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode"}
             >
-              <svg className="w-5 h-5" viewBox="0 0 24 24"><path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" /><path fill="currentColor" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" /><path fill="currentColor" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" /><path fill="currentColor" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" /></svg>
-              Continue with Google
+              {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
             </button>
-
-            <button
-              onClick={startDemo}
-              disabled={isStartingDemo}
-              className="w-full py-3.5 px-4 rounded-xl bg-[#4f63ef] text-white font-bold hover:bg-[#4051d6] transition-all flex items-center justify-center gap-2 shadow-md shadow-[#4f63ef]/20 hover:scale-[1.02] active:scale-[0.98] text-sm cursor-pointer"
-            >
-              <Sparkles size={16} />
-              {isStartingDemo ? "Preparing your board…" : "Try a demo — no sign-up"}
+            <button onClick={() => login("default")} className="landing-signin">Sign in</button>
+            <button className="landing-primary landing-demo" onClick={startDemo} disabled={isStartingDemo}>
+              <Sparkles size={14} /> {isStartingDemo ? "Preparing…" : "Try a demo"}
             </button>
           </div>
-        </div>
+        </header>
+
+        <main className="landing">
+          <section className="landing-hero">
+            <div>
+              <p className="landing-kicker"><Sparkles size={14} /> No account needed</p>
+              <h1>A board you can use in the next minute.</h1>
+              <p className="landing-lead">Move tasks across columns, open a card to add details, and see the same change in another window. Start with sample tasks, then make your own board.</p>
+              {demoError && <p role="alert" className="landing-error">{demoError}</p>}
+              <div className="landing-actions">
+                <button className="landing-primary" onClick={startDemo} disabled={isStartingDemo}>
+                  <Sparkles size={16} />
+                  {isStartingDemo ? "Preparing your board…" : "Try a demo — no sign-up"}
+                </button>
+                <button className="landing-secondary" onClick={() => login("default")}>
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" /><path fill="currentColor" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" /><path fill="currentColor" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" /><path fill="currentColor" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" /></svg>
+                  Continue with Google
+                </button>
+              </div>
+              <p className="landing-note">The demo opens a real board with sample tasks. Sign in only if you want to keep it.</p>
+              <ol className="landing-steps">
+                <li><b>1</b> Open the sample board</li>
+                <li><b>2</b> Drag a card to another column</li>
+                <li><b>3</b> Click the card to edit it</li>
+              </ol>
+            </div>
+            <div className="landing-board" aria-hidden="true">
+              <div className="landing-board-top"><i /> Product launch</div>
+              <div className="landing-board-cols">
+                <section>
+                  <header><i /> To do <span>2</span></header>
+                  <article><small>Design</small><strong>Sketch the homepage</strong></article>
+                  <article><small>Write</small><strong>Draft the announcement</strong></article>
+                </section>
+                <section>
+                  <header><i className="is-doing" /> Doing <span>1</span></header>
+                  <article className="is-lift"><small>Build</small><strong>Drag this card here</strong></article>
+                </section>
+                <section>
+                  <header><i className="is-done" /> Done <span>1</span></header>
+                  <article><small>Plan</small><strong>Pick a board format</strong></article>
+                </section>
+              </div>
+            </div>
+          </section>
+          <section className="landing-features" aria-label="What you can do">
+            <article>
+              <LayoutGrid size={18} />
+              <h2>Move work visually</h2>
+              <p>Start with columns. Switch to a table, calendar, timeline, or mind map when you need another way to look at the same tasks.</p>
+            </article>
+            <article>
+              <Zap size={18} />
+              <h2>See the same board together</h2>
+              <p>Open the link in another window. A move on one side shows up on the other without refreshing.</p>
+            </article>
+            <article>
+              <Timer size={18} />
+              <h2>Plan a sprint</h2>
+              <p>Keep a backlog, choose what belongs in this sprint, and mark the sprint done when the work is finished.</p>
+            </article>
+            <article>
+              <Sparkles size={18} />
+              <h2>Try it before you sign in</h2>
+              <p>One click opens sample tasks. You can sign in later if you want to save the board or invite someone.</p>
+            </article>
+          </section>
+        </main>
       </div>
     );
   }
@@ -439,11 +555,13 @@ export default function Dashboard() {
       }`}>
 
       <WorkspaceSidebar onLogout={handleWorkspaceLogout} user={user} activePage="dashboard" boardCount={boards.length} role="Personal workspace"
+        boardFilter={activeTab}
+        note="Pick a template, or open a board you already have."
         onOverview={() => window.scrollTo({ top: 0 })} onAllBoards={() => { setActiveTab("all"); setSearchQuery(""); }}>
         <div className="sidebar-section-label">QUICK ACCESS</div>
-        <button className="sidebar-stream" onClick={() => setActiveTab("my")}><FolderKanban size={15} /> My boards</button>
-        <button className="sidebar-stream" onClick={() => setActiveTab("shared")}><Layers3 size={15} /> Shared with me</button>
-        <button className="sidebar-stream" onClick={() => setActiveTab("starred")}><Star size={15} /> Starred</button>
+        <button className={`sidebar-stream ${activeTab === "my" ? "active" : ""}`} aria-pressed={activeTab === "my"} onClick={() => setActiveTab("my")}><FolderKanban size={15} /> My boards</button>
+        <button className={`sidebar-stream ${activeTab === "shared" ? "active" : ""}`} aria-pressed={activeTab === "shared"} onClick={() => setActiveTab("shared")}><Layers3 size={15} /> Shared with me</button>
+        <button className={`sidebar-stream ${activeTab === "starred" ? "active" : ""}`} aria-pressed={activeTab === "starred"} onClick={() => setActiveTab("starred")}><Star size={15} /> Starred</button>
       </WorkspaceSidebar>
       {demoError && <div role="alert" className="bg-rose-100 text-rose-900 p-4">{demoError} <button onClick={startDemo} disabled={isStartingDemo} className="underline">Retry demo</button></div>}
       {isStartingDemo && <div role="status" className="bg-[#eef2ff] text-[#172033] p-4">Preparing your demo board…</div>}
@@ -485,6 +603,7 @@ export default function Dashboard() {
                 : "bg-slate-100 text-slate-700 hover:bg-slate-200 border-slate-200"
                 }`}
               title="Notifications"
+              aria-label="Notifications"
             >
               <Bell size={17} />
               {unreadCount > 0 && (
@@ -496,7 +615,7 @@ export default function Dashboard() {
 
             {/* Notifications Dropdown Panel (Miro Screenshot 4 & 5) */}
             {isNotificationsOpen && (
-              <div className={`absolute right-0 mt-2 w-80 md:w-96 rounded-2xl border shadow-xl p-4 z-50 animate-in fade-in slide-in-from-top-2 duration-150 ${theme === "dark" ? "bg-[#172033] border-[#334155] text-slate-100" : "bg-white border-slate-200 text-slate-800"
+              <div className={`notice-panel absolute right-0 mt-2 w-80 md:w-96 rounded-2xl border shadow-xl p-4 z-50 animate-in fade-in slide-in-from-top-2 duration-150 ${theme === "dark" ? "bg-[#172033] border-[#334155] text-slate-100" : "bg-white border-slate-200 text-slate-800"
                 }`}>
                 <div className="flex items-center justify-between border-b pb-3 mb-3 border-slate-100 dark:border-[#334155]">
                   <h3 className="text-sm font-bold flex items-center gap-2">
@@ -516,12 +635,14 @@ export default function Dashboard() {
                 </div>
 
                 <div className="max-h-80 overflow-y-auto space-y-3 pr-1">
-                  {notifications.length === 0 ? (
+                  {notifications.length === 0 && assignments.length === 0 ? (
                     <div className="text-center py-6 text-slate-400 text-xs">
                       No notifications yet
                     </div>
                   ) : (
-                    notifications.map((item) => (
+                    <>
+                    <AssignmentNotices items={assignments} onOpen={(id) => { void markAssignmentSeen(id); setIsNotificationsOpen(false); }} />
+                    {notifications.map((item) => (
                       <div
                         key={item.id}
                         className={`p-3 rounded-xl border transition-all ${item.status === "pending"
@@ -537,7 +658,7 @@ export default function Dashboard() {
                           />
                           <div className="flex-1 min-w-0">
                             <p className="text-xs leading-snug">
-                              <span className="font-bold">{item.userName}</span> requests access to your board <span className="font-semibold text-[#4f63ef] dark:text-[#a5b4fc]">{item.boardName}</span>
+                              <span className="font-bold">{item.userName}</span> asked to edit <span className="font-semibold text-[#4f63ef] dark:text-[#a5b4fc]">{item.boardName}</span>
                             </p>
 
                             {/* Notification Actions */}
@@ -548,7 +669,7 @@ export default function Dashboard() {
                                     onClick={() => respondToAccess(item.id, "approve")}
                                     className="px-3 py-1 bg-[#4f63ef] hover:bg-[#4051d6] text-white text-xs font-bold rounded-lg transition-all cursor-pointer shadow-xs"
                                   >
-                                    Give access
+                                    Allow editing
                                   </button>
                                   <button
                                     onClick={() => respondToAccess(item.id, "dismiss")}
@@ -559,7 +680,7 @@ export default function Dashboard() {
                                 </>
                               ) : item.status === "approved" ? (
                                 <span className="text-xs font-bold text-[#16a34a] dark:text-[#22c55e] flex items-center gap-1">
-                                  <Check size={14} /> Request approved
+                                  <Check size={14} /> Editing allowed
                                 </span>
                               ) : (
                                 <span className="text-xs font-medium text-slate-400">
@@ -570,7 +691,8 @@ export default function Dashboard() {
                           </div>
                         </div>
                       </div>
-                    ))
+                    ))}
+                    </>
                   )}
                 </div>
               </div>
@@ -593,11 +715,115 @@ export default function Dashboard() {
       </header>
 
       <section className="board-overview" aria-label="Workspace overview">
-        <div className="overview-copy"><div className="board-eyebrow"><span /> YOUR SPACE TO MAKE THINGS HAPPEN</div><h2>My workspace</h2><p>All your projects, one place. Pick a board and keep things moving.</p><div className="overview-meta"><span><Layers3 size={14} /> {boards.length} boards</span><span><Star size={14} /> {boards.filter(b => starredIds.includes(b.ID)).length} starred</span></div></div>
-        <div className="overview-action"><button className="new-task-button" onClick={() => setShowCreateModal(true)}><Plus size={17} /> New board</button><div className="overview-task-count"><strong>{boards.reduce((n,b) => n + (b.Cards?.length || 0), 0)}</strong><span>tasks across your boards</span></div></div>
+        <div className="overview-copy">
+          <div className="board-eyebrow"><span /> START HERE</div>
+          <h2>My workspace</h2>
+          <p>Open a board to move tasks, or create one from a template. Kanban is the easiest place to begin.</p>
+          <div className="overview-meta">
+            <span><Layers3 size={14} /> {boards.length} boards</span>
+            <span><Star size={14} /> {boards.filter(b => starredIds.includes(b.ID)).length} starred</span>
+            {user?.email === "guest@kanban.demo" && (
+              <span className="overview-access font-bold">Guest Session</span>
+            )}
+          </div>
+        </div>
+        <div className="overview-action">
+          <button className="new-task-button" onClick={() => { setNewBoardName(""); setShowCreateModal(true); }}>
+            <Plus size={17} /> New board
+          </button>
+          <div className="overview-task-count">
+            <strong>{boards.reduce((n, b) => n + (b.Cards?.length || 0), 0)}</strong>
+            <span>tasks across your boards</span>
+          </div>
+        </div>
       </section>
+
+      {showHomeTips && (
+        <StartHere
+          message="Pick a template below, name the board, then press Create."
+          onDismiss={dismissHomeTips}
+        />
+      )}
+
+      {attention.length > 0 && (
+        <section className="due-soon" aria-label="Tasks that need attention">
+          <div className="due-soon-counts">
+            <strong>{attention.filter((item) => item.bucket === "overdue").length} overdue</strong>
+            <strong>{attention.filter((item) => item.bucket === "today").length} due today</strong>
+          </div>
+          <ul>
+            {attention.slice(0, 4).map((item) => (
+              <li key={item.key}>
+                <Link to={`/b/${item.boardId}?due=${item.bucket}&task=${item.cardId}`}>
+                  <span className={`due-soon-${item.bucket}`}>{item.bucket === "overdue" ? "Overdue" : "Today"}</span>
+                  <b>{item.title}</b>
+                  <small>{item.boardName}</small>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {assignedToYou.length > 0 && (
+        <section className="assigned-you" aria-label="Assigned to you">
+          <h3>Assigned to you <span>{assignedToYou.length}</span></h3>
+          <ul>
+            {assignedToYou.slice(0, 6).map((item) => (
+              <li key={item.key}>
+                <Link to={`/b/${item.boardId}?task=${item.cardId}`}>
+                  <b>{item.title}</b>
+                  <small>{item.boardName}</small>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      <section className="start-templates" aria-label="Quick templates">
+        <div className="flex items-center justify-between mb-3">
+          <span className="text-[13px] font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
+            <Sparkles size={14} className="text-[#4f63ef] dark:text-[#a5b4fc]" /> Start from a template
+          </span>
+          <span className="text-[12px] text-slate-500 hidden sm:inline">You can rename it and switch views later</span>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
+          {BOARD_TYPES.slice(0, 6).map((item) => (
+            <button
+              key={item.id}
+              onClick={() => {
+                setNewBoardType(item.id);
+                setNewBoardName(item.defaultName || "");
+                setShowCreateModal(true);
+              }}
+              className={`start-template p-3 rounded-xl border text-left transition-all duration-150 cursor-pointer group flex flex-col justify-between shadow-2xs hover:shadow-md hover:-translate-y-0.5 ${
+                theme === "dark"
+                  ? "bg-[#172033]/90 hover:bg-[#1e293b] border-[#334155] hover:border-[#4f63ef]/60"
+                  : "bg-white hover:bg-[#f8fafc] border-slate-200 hover:border-[#4f63ef]/60"
+              }`}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[13px] font-bold text-slate-800 dark:text-slate-100 group-hover:text-[#4f63ef] dark:group-hover:text-[#a5b4fc] transition-colors flex items-center gap-1.5 flex-wrap">
+                  <item.icon size={14} className="text-[#4f63ef] dark:text-[#a5b4fc]" />
+                  {item.label}
+                  {item.id === "kanban" && <span className="start-badge">Easiest start</span>}
+                </span>
+                <Plus size={14} className="text-slate-400 group-hover:text-[#4f63ef] dark:group-hover:text-[#a5b4fc] transition-colors" />
+              </div>
+              <p className="text-[12px] text-slate-500 dark:text-slate-400 leading-snug line-clamp-2">
+                {item.hint}
+              </p>
+              <span className="text-[12px] font-bold text-[#4f63ef] dark:text-[#a5b4fc] flex items-center gap-0.5">
+                Use this <ArrowRight size={12} />
+              </span>
+            </button>
+          ))}
+        </div>
+      </section>
+
       {/* MAIN CONTAINER */}
-      <main className="dashboard-main max-w-7xl w-full mx-auto px-8 py-8 flex-1 space-y-8">
+      <main className="dashboard-main max-w-7xl w-full mx-auto px-8 py-6 flex-1 space-y-6">
 
         {/* ACTION BAR: SEARCH, TABS, VIEW TOGGLE */}
         <div className={`dashboard-controls flex flex-col md:flex-row md:items-center justify-between gap-4 pb-5 border-b ${theme === "dark" ? "border-[#334155]" : "border-slate-200"
@@ -661,12 +887,23 @@ export default function Dashboard() {
                 placeholder="Search boards…"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className={`w-full rounded-xl pl-10 pr-4 py-2 text-xs focus:outline-none transition-colors ${theme === "dark"
+                className={`w-full rounded-xl pl-10 pr-8 py-2 text-xs focus:outline-none transition-colors ${theme === "dark"
                   ? "bg-[#0f172a] border border-[#334155] text-slate-200 focus:border-[#4051d6] placeholder:text-slate-500"
                   : "bg-white border border-slate-200 text-slate-800 focus:border-[#4f63ef] placeholder:text-slate-400 shadow-xs"
                   }`}
               />
+              {searchQuery && (
+                <button
+                  type="button"
+                  aria-label="Clear search"
+                  onClick={() => setSearchQuery("")}
+                  className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                >
+                  <X size={14} />
+                </button>
+              )}
             </div>
+
 
             {/* Grid / List Switcher */}
             <div className={`flex items-center rounded-xl p-1 shadow-xs border ${theme === "dark" ? "bg-[#0f172a] border-[#334155]" : "bg-white border-slate-200"
@@ -721,9 +958,9 @@ export default function Dashboard() {
           <div className={`dashboard-empty text-center py-20 border-2 border-dashed rounded-3xl ${theme === "dark" ? "border-[#334155] bg-[#0f172a]/50" : "border-slate-200 bg-white/60"
             }`}>
             <FolderKanban className={`mx-auto mb-3 ${theme === "dark" ? "text-slate-500" : "text-slate-400"}`} size={48} />
-            <h3 className={`text-lg font-bold mb-1 ${theme === "dark" ? "text-slate-200" : "text-slate-800"}`}>No boards found</h3>
-            <p className={`text-xs max-w-sm mx-auto mb-6 ${theme === "dark" ? "text-slate-400" : "text-slate-500"}`}>
-              {searchQuery ? "No boards match your search. Try a different name." : activeTab === "starred" ? "Star a board to find it here quickly." : activeTab === "shared" ? "Boards shared with you will appear here." : "Create a board to start managing tasks."}
+            <h3 className={`text-lg font-bold mb-1 ${theme === "dark" ? "text-slate-200" : "text-slate-800"}`}>Nothing in this list yet</h3>
+            <p className={`text-sm max-w-sm mx-auto mb-6 leading-relaxed ${theme === "dark" ? "text-slate-400" : "text-slate-500"}`}>
+              {searchQuery ? "No boards match that name. Clear the search to see everything." : activeTab === "starred" ? "Star a board from its card, and it will show up here." : activeTab === "shared" ? "When someone shares a board with you, it will show up here." : "Create a board to begin. Kanban uses columns such as To do, Doing, and Done."}
             </p>
             <button
               onClick={searchQuery || activeTab !== "all" ? () => { setSearchQuery(""); setActiveTab("all"); } : () => setShowCreateModal(true)}
@@ -756,7 +993,7 @@ export default function Dashboard() {
                       </div>
 
                       {/* Action buttons overlay */}
-                      <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-20">
+                      <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity z-20">
                         <button
                           onClick={(e) => toggleStar(e, board.ID)}
                           className={`p-1.5 rounded-lg transition-colors border shadow-xs ${theme === "dark" ? "bg-[#0f172a]/90 border-[#334155]" : "bg-white/90 border-slate-200"
@@ -795,16 +1032,17 @@ export default function Dashboard() {
                           }`}>
                           {board.Name || "Untitled Board"}
                         </h3>
-                        <div className="flex items-center gap-1 flex-shrink-0">
-                          <span className={`px-2 py-0.5 rounded-md text-[10px] font-semibold ${theme === "dark" ? "bg-[#243052] text-[#c7d2fe]" : "bg-[#eef2ff] text-[#4051d6]"
+                        <div className="flex items-center gap-1.5 flex-shrink-0">
+                          <span className={`px-2 py-0.5 rounded-md text-[10px] font-semibold flex items-center gap-1 ${theme === "dark" ? "bg-[#243052] text-[#c7d2fe]" : "bg-[#eef2ff] text-[#4051d6]"
                             }`}>
+                            {getBoardTypeIcon(board.Type)}
                             {boardTypeLabel(board.Type)}
                           </span>
                           <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold flex-shrink-0 ${board.IsOwner
                             ? theme === "dark" ? "bg-[#4f63ef]/20 text-[#a5b4fc] border border-[#4f63ef]/30" : "bg-[#f8fafc] text-[#4051d6] border border-[#c7d2fe]"
                             : theme === "dark" ? "bg-violet-500/15 text-violet-300 border border-violet-500/30" : "bg-violet-50 text-violet-700 border border-violet-200"
                             }`}>
-                            {board.IsOwner ? "Owner" : "Shared"}
+                            {board.IsOwner ? "Yours" : "Shared"}
                           </span>
                         </div>
                       </div>
@@ -812,12 +1050,13 @@ export default function Dashboard() {
 
                     <div className={`flex items-center justify-between text-xs pt-2 border-t ${theme === "dark" ? "border-[#334155] text-slate-400" : "border-slate-100 text-slate-500"
                       }`}>
-                      <span className="text-[11px] font-semibold">
+                      <span className="text-[13px] font-semibold">
                         {board.Cards?.length || 0} tasks
                       </span>
-
-                      {/* Active Online Users Avatar Stack */}
-                      {renderOnlineAvatars(board.OnlineUsers, "sm")}
+                      <span className="flex items-center gap-3">
+                        {renderOnlineAvatars(board.OnlineUsers, "sm")}
+                        <span className="dashboard-open-cue">Open</span>
+                      </span>
                     </div>
                   </div>
                 </Link>
@@ -833,7 +1072,7 @@ export default function Dashboard() {
               }`}>
               <div className="col-span-5">Name</div>
               <div className="col-span-3 text-center">Online users</div>
-              <div className="col-span-2 text-center">Owner</div>
+              <div className="col-span-2 text-center">Access</div>
               <div className="col-span-2 text-right">Actions</div>
             </div>
 
@@ -869,7 +1108,7 @@ export default function Dashboard() {
                         ? theme === "dark" ? "bg-[#4f63ef]/20 text-[#a5b4fc] border border-[#4f63ef]/30" : "bg-[#f8fafc] text-[#4051d6] border border-[#c7d2fe]"
                         : theme === "dark" ? "bg-violet-500/15 text-violet-300 border border-violet-500/30" : "bg-violet-50 text-violet-700 border border-violet-200"
                         }`}>
-                        {board.IsOwner ? "Owner" : "Shared"}
+                        {board.IsOwner ? "Yours" : "Shared"}
                       </span>
                     </div>
 
@@ -920,7 +1159,7 @@ export default function Dashboard() {
           onClick={() => setShowCreateModal(false)}
         >
           <div
-            className={`w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl border shadow-2xl p-6 flex flex-col gap-4 animate-in zoom-in-95 duration-150 ${theme === "dark" ? "bg-[#172033] border-[#334155] text-slate-100" : "bg-white border-slate-200 text-slate-800"
+            className={`create-board-sheet w-full max-w-2xl max-h-[90vh] overflow-hidden rounded-3xl border shadow-2xl flex flex-col animate-in zoom-in-95 duration-150 ${theme === "dark" ? "bg-[#172033] border-[#334155] text-slate-100" : "bg-white border-slate-200 text-slate-800"
               }`}
             onClick={(e) => e.stopPropagation()}
           >
@@ -931,7 +1170,7 @@ export default function Dashboard() {
                 </div>
                 <div>
                   <h3 className="text-base font-bold">New board</h3>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">Choose how this board presents your work. You can still edit tasks and columns later.</p>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">Name it, then pick a layout. Not sure? Choose Kanban. You can switch views later.</p>
                 </div>
               </div>
               <button
@@ -942,8 +1181,12 @@ export default function Dashboard() {
               </button>
             </div>
 
+            <div className="create-board-scroll">
             <div className="space-y-1.5">
-              <label htmlFor="new-board-name" className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Board name</label>
+              <div className="flex items-center justify-between">
+                <label htmlFor="new-board-name" className="text-[13px] font-semibold text-slate-500">Board name</label>
+                <span className="text-xs text-slate-400">Press Enter to create</span>
+              </div>
               <input
                 id="new-board-name"
                 type="text"
@@ -956,30 +1199,56 @@ export default function Dashboard() {
                 }}
                 className={`w-full px-4 py-3 rounded-xl border text-sm focus:outline-none focus:ring-2 focus:ring-[#4f63ef] font-semibold transition-all ${theme === "dark" ? "bg-[#0f172a] border-[#334155] text-slate-100 placeholder:text-slate-600" : "bg-slate-50 border-slate-200 text-slate-900 placeholder:text-slate-400"
                   }`}
-                placeholder="Untitled board"
+                placeholder="For example, Product launch"
               />
+              {/* Quick suggestions chips */}
+              <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                <span className="text-xs text-slate-400 font-medium">Suggestions:</span>
+                {["Sprint 1", "Product Roadmap", "Team Kanban", "Weekly Milestones", "Brainstorm Ideas"].map((sug) => (
+                  <button
+                    key={sug}
+                    type="button"
+                    onClick={() => setNewBoardName(sug)}
+                    className="text-xs px-2 py-1 rounded-md border border-slate-200 dark:border-slate-700 hover:border-[#4f63ef] text-slate-600 dark:text-slate-300 hover:text-[#4f63ef] dark:hover:text-[#a5b4fc] transition-colors cursor-pointer"
+                  >
+                    {sug}
+                  </button>
+                ))}
+              </div>
             </div>
 
             <div className="space-y-2">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Board type</span>
+              <div className="flex items-center justify-between">
+                <span className="text-[13px] font-semibold text-slate-500">Choose a layout</span>
+                <span className="text-xs text-slate-400">You can switch views anytime</span>
+              </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 {BOARD_TYPES.map((t) => {
                   const selected = newBoardType === t.id;
                   return (
                     <button
                       key={t.id}
-                      onClick={() => setNewBoardType(t.id)}
+                      onClick={() => {
+                        setNewBoardType(t.id);
+                        if (!newBoardName.trim()) setNewBoardName(t.defaultName || "");
+                      }}
                       aria-pressed={selected}
                       className={`text-left p-3 rounded-xl border transition-all cursor-pointer ${selected
-                        ? theme === "dark" ? "border-[#4f63ef] bg-[#4f63ef]/15" : "border-[#4f63ef] bg-[#eef2ff]"
+                        ? theme === "dark" ? "border-[#4f63ef] bg-[#4f63ef]/15 ring-1 ring-[#4f63ef]/50" : "border-[#4f63ef] bg-[#eef2ff] ring-1 ring-[#4f63ef]/30"
                         : theme === "dark" ? "border-[#334155] bg-[#0f172a] hover:border-[#4f63ef]" : "border-slate-200 bg-[#f8fafc] hover:border-[#c7d2fe]"
                         }`}
                     >
                       <div className="flex items-center justify-between">
-                        <span className="text-sm font-bold">{t.label}</span>
+                        <span className="text-sm font-bold flex items-center gap-1.5 flex-wrap">
+                          {t.label}
+                          {t.id === "kanban" && <span className="start-badge">Easiest start</span>}
+                          <span className="text-[11px] font-medium text-slate-400 px-1.5 py-0.5 rounded bg-slate-200/50 dark:bg-slate-800">
+                            {t.category}
+                          </span>
+                        </span>
                         {selected && <Check size={14} className="text-[#4f63ef] dark:text-[#a5b4fc]" />}
                       </div>
-                      <p className={`text-[10px] mt-0.5 ${theme === "dark" ? "text-slate-400" : "text-slate-500"}`}>{t.hint}</p>
+                      <p className={`text-[13px] mt-1 leading-snug ${theme === "dark" ? "text-slate-400" : "text-slate-500"}`}>{t.hint}</p>
                       <div className="h-16 mt-2 overflow-hidden rounded-lg border border-[#e2e8f0] dark:border-[#334155] bg-white dark:bg-[#0f172a] pointer-events-none">
                         <BoardFormatPreview format={t.id} />
                       </div>
@@ -990,8 +1259,9 @@ export default function Dashboard() {
             </div>
 
             {createError && <p role="alert" className="text-xs text-rose-500">{createError}</p>}
+            </div>
 
-            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100 dark:border-slate-800">
+            <div className="create-board-actions flex items-center justify-end gap-2.5">
               <button
                 onClick={() => setShowCreateModal(false)}
                 className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${theme === "dark" ? "bg-slate-800 hover:bg-slate-700 text-slate-300" : "bg-slate-100 hover:bg-slate-200 text-slate-700"

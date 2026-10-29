@@ -17,6 +17,19 @@ export type Card = {
   Swimlane?: string;
   Position?: number;
   Tags?: string;
+  AssigneeID?: number;
+  LatestNote?: string;
+};
+
+export type CardNote = {
+  ID: number;
+  CardID: number;
+  BoardID?: string;
+  UserID?: number;
+  UserName?: string;
+  Kind?: string;
+  Text: string;
+  CreatedAt?: string;
 };
 
 export type UserPresence = { id: number; name: string; avatarUrl: string };
@@ -28,6 +41,21 @@ export type BoardState = Card[];
 export type ConnectionStatus = "connecting" | "connected" | "disconnected";
 
 export type SprintDetails = { name: string; start: string; end: string; status: "planning" | "active" | "completed" };
+
+function tokenUserId(token: string | null): number {
+  if (!token) return 0;
+  try {
+    const part = token.split(".")[1];
+    if (!part) return 0;
+    const base64 = part.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = base64 + "=".repeat((4 - (base64.length % 4)) % 4);
+    const payload = JSON.parse(atob(padded));
+    const id = Number(payload.sub);
+    return Number.isFinite(id) && id > 0 ? id : 0;
+  } catch {
+    return 0;
+  }
+}
 
 const deduplicateAndSortCards = (cards: Card[]): Card[] => {
   const map = new Map<string, Card>();
@@ -41,6 +69,7 @@ const deduplicateAndSortCards = (cards: Card[]): Card[] => {
 
 export function useWebSocket(boardId: string, token: string | null) {
   const [cards, setCardsState] = useState<Card[]>([]);
+  const [noteFeed, setNoteFeed] = useState<CardNote[]>([]);
   const setCards = useCallback((action: React.SetStateAction<Card[]>) => {
     setCardsState((prev) => {
       const next = typeof action === "function" ? action(prev) : action;
@@ -54,8 +83,9 @@ export function useWebSocket(boardId: string, token: string | null) {
 	useEffect(() => {
 		setBoardType("");
 		setSprint({ name: "", start: "", end: "", status: "planning" });
+		setNoteFeed([]);
 	}, [boardId]);
-  const [columns, setColumns] = useState<string[]>(["TODO", "DOING", "DONE"]);
+  const [columns, setColumns] = useState<string[]>(["To do", "Doing", "Done"]);
   const [swimlanes, setSwimlanes] = useState<string[]>([]);
   const [accessLevel, setAccessLevel] = useState<"edit" | "view" | "private">("edit");
   const [boardBackground, setBoardBackground] = useState<string>("default");
@@ -88,6 +118,7 @@ export function useWebSocket(boardId: string, token: string | null) {
   };
 
   const ws = useRef<WebSocket | null>(null);
+  const fetchSeq = useRef(0);
   const readyToEdit = useRef(false);
   const connectionGeneration = useRef(0);
   const activeSocketsRef = useRef<Set<WebSocket>>(new Set());
@@ -111,6 +142,8 @@ export function useWebSocket(boardId: string, token: string | null) {
 
   const fetchBoard = useCallback(async () => {
     const generation = connectionGeneration.current;
+    const seq = ++fetchSeq.current;
+    const stale = () => generation !== connectionGeneration.current || seq !== fetchSeq.current;
     try {
       const jwtToken = sessionStorage.getItem("kanban_jwt") || localStorage.getItem("kanban_jwt");
       const headers: Record<string, string> = jwtToken ? { Authorization: `Bearer ${jwtToken}` } : {};
@@ -119,7 +152,7 @@ export function useWebSocket(boardId: string, token: string | null) {
       const res = await fetch(`${API_URL}/api/boards/${boardId}?inviteToken=${encodeURIComponent(new URLSearchParams(window.location.search).get("inviteToken") || "")}`, {
         headers,
       });
-      if (generation !== connectionGeneration.current) return;
+      if (stale()) return;
       if ([401,403,404].includes(res.status)) {
         terminalError.current = true;
         readyToEdit.current = false;
@@ -129,9 +162,9 @@ export function useWebSocket(boardId: string, token: string | null) {
       }
       if (!res.ok) throw new Error("Unable to refresh board");
       if (res.ok) {
-        setBoardError(null);
         const data = await res.json();
-        if (generation !== connectionGeneration.current) return;
+        if (stale()) return;
+        setBoardError(null);
         setCards(data.Cards || []);
         setBoardName(data.Name || "Untitled Board");
 		setBoardType(data.Type || "kanban");
@@ -164,13 +197,14 @@ export function useWebSocket(boardId: string, token: string | null) {
           });
           if (tokensRes.ok) {
             const tData = await tokensRes.json();
+            if (stale()) return;
             setEditInviteToken(tData.editToken || "");
             setViewInviteToken(tData.viewToken || "");
           }
         }
       }
     } catch (err) {
-      if (generation !== connectionGeneration.current) return;
+      if (stale()) return;
       if (terminalError.current) throw err;
       console.error("Failed to fetch initial board state", err);
       setErrorToast("Could not refresh the board. Please reload before editing.");
@@ -257,6 +291,9 @@ export function useWebSocket(boardId: string, token: string | null) {
         }
 
         if (data.type === "ACCESS_GRANTED" || data.type === "ACCESS_REQUESTED") {
+          if (data.type === "ACCESS_GRANTED" && Number(data.userId) === tokenUserId(tokenRef.current) && (data.role === "edit" || data.role === "view")) {
+            setUserRole(data.role);
+          }
           void fetchBoard().catch(() => {});
           return;
         }
@@ -277,6 +314,16 @@ export function useWebSocket(boardId: string, token: string | null) {
             }
           }).catch(() => socket.close());
           return;
+        }
+
+        const incomingNotes = Array.isArray(data.notes) ? data.notes as CardNote[] : [];
+        if (incomingNotes.length > 0) {
+          const last = incomingNotes[incomingNotes.length - 1];
+          if (last?.CardID != null) {
+            setCards((prev) => prev.map((c) => String(c.ID) === String(last.CardID) ? { ...c, LatestNote: last.Text || "" } : c));
+          }
+          setNoteFeed(incomingNotes);
+          if (data.type === "CARD_NOTE") return;
         }
 
         if (data.type === "MOVE_CARD") {
@@ -310,8 +357,8 @@ export function useWebSocket(boardId: string, token: string | null) {
           });
         } else if (data.type === "EDIT_CARD") {
           if (data.changes) {
-			const fields: Record<string,string> = {title:"Title",description:"Description",dueDate:"DueDate",startDate:"StartDate",checklist:"Checklist",tags:"Tags",swimlane:"Swimlane",dependencies:"Dependencies",parentId:"ParentID",storyPoints:"StoryPoints",inSprint:"InSprint"};
-			const patch = Object.fromEntries(Object.entries(data.changes).filter(([key])=>fields[key]).map(([key,value])=>[fields[key],key === "storyPoints" ? Number(value) : key === "inSprint" ? value === "true" : value]));
+			const fields: Record<string,string> = {title:"Title",description:"Description",dueDate:"DueDate",startDate:"StartDate",checklist:"Checklist",tags:"Tags",swimlane:"Swimlane",dependencies:"Dependencies",parentId:"ParentID",storyPoints:"StoryPoints",inSprint:"InSprint",assigneeId:"AssigneeID"};
+			const patch = Object.fromEntries(Object.entries(data.changes).filter(([key])=>fields[key]).map(([key,value])=>[fields[key],key === "storyPoints" || key === "assigneeId" ? Number(value) : key === "inSprint" ? value === "true" : value]));
             setCards(prev=>prev.map(c=>String(c.ID)===data.cardId ? {...c,...patch} : c));
             return;
           }
@@ -431,10 +478,10 @@ export function useWebSocket(boardId: string, token: string | null) {
   }, [connect, fetchBoard, closeAllSockets]);
 
   const sendWsMsg = useCallback((payload: Record<string, unknown>) => {
-	const tracked = ["ADD_CARD", "EDIT_CARD", "DELETE_CARD", "MOVE_CARD", "UPDATE_CARD_TAGS", "UPDATE_SPRINT"].includes(String(payload.type));
+	const tracked = ["ADD_CARD", "EDIT_CARD", "DELETE_CARD", "MOVE_CARD", "UPDATE_CARD_TAGS", "UPDATE_SPRINT", "ADD_CARD_NOTE"].includes(String(payload.type));
     const requestId = tracked ? crypto.randomUUID() : undefined;
     if (requestId) {
-	  const label = ({ ADD_CARD: "Create task", EDIT_CARD: "Edit task", DELETE_CARD: "Delete task", MOVE_CARD: "Move task", UPDATE_CARD_TAGS: "Update tags", UPDATE_SPRINT: "Update sprint" } as Record<string, string>)[String(payload.type)];
+	  const label = ({ ADD_CARD: "Create task", EDIT_CARD: "Edit task", DELETE_CARD: "Delete task", MOVE_CARD: "Move task", UPDATE_CARD_TAGS: "Update tags", UPDATE_SPRINT: "Update sprint", ADD_CARD_NOTE: "Add note" } as Record<string, string>)[String(payload.type)];
       pending.current.set(requestId, { payload });
       setOperations(prev => [...prev.filter(op => op.state !== "saved"), { id: requestId, label, state: "saving" }]);
     }
@@ -599,21 +646,27 @@ export function useWebSocket(boardId: string, token: string | null) {
 		setSprint(prev => ({ ...prev, ...details }));
 	}, [sendWsMsg, sprint]);
 
-  const editCardDetail = useCallback((cardId: string, details: { title?: string; description?: string; dueDate?: string; startDate?: string; checklist?: string; tags?: string; swimlane?: string; dependencies?: string; parentId?: string; storyPoints?: number; inSprint?: boolean }, baseline?: Record<string,string>) => {
+  const editCardDetail = useCallback((cardId: string, details: { title?: string; description?: string; dueDate?: string; startDate?: string; checklist?: string; tags?: string; swimlane?: string; dependencies?: string; parentId?: string; storyPoints?: number; inSprint?: boolean; assigneeId?: string }, baseline?: Record<string,string>) => {
     const targetCard = cards.find(c => String(c.ID) === cardId);
-	const fields: Record<string, keyof Card> = {title:"Title",description:"Description",dueDate:"DueDate",startDate:"StartDate",checklist:"Checklist",tags:"Tags",swimlane:"Swimlane",dependencies:"Dependencies",parentId:"ParentID",storyPoints:"StoryPoints",inSprint:"InSprint"};
+	const fields: Record<string, keyof Card> = {title:"Title",description:"Description",dueDate:"DueDate",startDate:"StartDate",checklist:"Checklist",tags:"Tags",swimlane:"Swimlane",dependencies:"Dependencies",parentId:"ParentID",storyPoints:"StoryPoints",inSprint:"InSprint",assigneeId:"AssigneeID"};
     const changes: Record<string,string> = {}, expected: Record<string,string> = {};
     const local: Partial<Card> = {};
     for (const [key,value] of Object.entries(details)) {
       if (value === undefined) continue;
 	  changes[key] = String(value);
-	  expected[key] = baseline?.[key] ?? String(targetCard?.[fields[key]] ?? (key === "storyPoints" ? 0 : key === "inSprint" ? false : ""));
-      Object.assign(local, { [fields[key]]: key === "storyPoints" ? Number(value) : key === "inSprint" ? String(value) === "true" : value });
+	  expected[key] = baseline?.[key] ?? String(targetCard?.[fields[key]] ?? (key === "storyPoints" || key === "assigneeId" ? 0 : key === "inSprint" ? false : ""));
+      Object.assign(local, { [fields[key]]: key === "storyPoints" || key === "assigneeId" ? Number(value) : key === "inSprint" ? String(value) === "true" : value });
     }
     if (!sendWsMsg({type:"EDIT_CARD",cardId,changes,expected})) return false;
     setCards(prev => prev.map(c => String(c.ID) === cardId ? {...c,...local} : c));
     return true;
   }, [cards, sendWsMsg]);
+
+  const addCardNote = useCallback((cardId: string, text: string) => {
+    const clean = text.trim();
+    if (!clean) return false;
+    return sendWsMsg({ type: "ADD_CARD_NOTE", cardId, text: clean });
+  }, [sendWsMsg]);
 
   return {
     boardError,
@@ -621,6 +674,7 @@ export function useWebSocket(boardId: string, token: string | null) {
     onlineUsers,
     operations, pendingDeletes, undoDelete, retryOperation,
     refreshBoard: () => fetchBoard().catch(() => {}),
+    applyGrantedRole: (role: "edit" | "view") => { setUserRole(role); },
     dismissOperation: (id: string) => { pending.current.delete(id); setOperations(prev => prev.filter(op => op.id !== id)); },
     cards: cards.filter(card => !pendingDeletes.includes(String(card.ID)) && !operations.some(op => op.state === "saving" && pending.current.get(op.id)?.payload.type === "DELETE_CARD" && pending.current.get(op.id)?.payload.cardId === String(card.ID))),
     boardName,
@@ -641,6 +695,8 @@ export function useWebSocket(boardId: string, token: string | null) {
     addCard,
     editCard,
     editCardDetail,
+    addCardNote,
+    noteFeed,
     updateCardTags,
     deleteCard,
     updateBoardName,

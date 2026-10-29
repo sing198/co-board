@@ -36,6 +36,27 @@ func isOriginAllowed(origin string) bool {
 	return allowedOriginsMap[origin]
 }
 
+func requestUserID(c *gin.Context) uint {
+	tokenString := strings.TrimSpace(c.GetHeader("Authorization"))
+	if !strings.HasPrefix(tokenString, "Bearer ") {
+		return 0
+	}
+	tokenString = strings.TrimSpace(strings.TrimPrefix(tokenString, "Bearer "))
+	token, err := parseJWT(tokenString)
+	if err != nil || token == nil || !token.Valid {
+		return 0
+	}
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return 0
+	}
+	id, ok := claims["sub"].(float64)
+	if !ok {
+		return 0
+	}
+	return uint(id)
+}
+
 // One response shape for every board format. The live workspace consumes the
 // persisted format and sprint settings from this endpoint after reconnects.
 func boardDetailsPayload(board Board, userRole string) gin.H {
@@ -326,6 +347,40 @@ func main() {
 		c.JSON(200, boardDetailsPayload(board, userRole))
 	})
 
+	// Recent activity for one task. Public boards stay readable without a
+	// login, matching GET /api/boards/:id. Private boards need the same role
+	// or invite token as the board itself.
+	r.GET("/api/boards/:id/cards/:cardId/notes", func(c *gin.Context) {
+		id := c.Param("id")
+		var board Board
+		if err := db.Select("id", "owner_id", "access_level").Where("id = ?", id).First(&board).Error; err != nil {
+			c.JSON(404, gin.H{"error": "Board not found"})
+			return
+		}
+		userRole := resolveBoardRole(db, id, board.OwnerID, requestUserID(c))
+		if board.AccessLevel == "private" && userRole != "owner" && userRole != "edit" && userRole != "view" {
+			inviteBoard, _, err := VerifyBoardInviteToken(c.Query("inviteToken"))
+			if err != nil || inviteBoard != id {
+				c.JSON(403, gin.H{"error": "Access denied"})
+				return
+			}
+		}
+		var card Card
+		if err := db.Select("id").Where("id = ? AND board_id = ?", c.Param("cardId"), id).First(&card).Error; err != nil {
+			c.JSON(404, gin.H{"error": "Task not found"})
+			return
+		}
+		var notes []CardActivity
+		if err := db.Where("board_id = ? AND card_id = ?", id, card.ID).Order("id DESC").Limit(20).Find(&notes).Error; err != nil {
+			c.JSON(500, gin.H{"error": "Could not load notes"})
+			return
+		}
+		if notes == nil {
+			notes = []CardActivity{}
+		}
+		c.JSON(200, notes)
+	})
+
 	// Auth Middleware
 	authMiddleware := func(c *gin.Context) {
 		tokenString := c.GetHeader("Authorization")
@@ -488,6 +543,12 @@ func main() {
 			if err := tx.Where("board_id = ?", id).Delete(&AccessRequest{}).Error; err != nil {
 				return err
 			}
+			if err := tx.Where("board_id = ?", id).Delete(&AssignmentNotice{}).Error; err != nil {
+				return err
+			}
+			if err := tx.Where("board_id = ?", id).Delete(&CardActivity{}).Error; err != nil {
+				return err
+			}
 			return tx.Where("id = ?", id).Delete(&Board{}).Error
 		})
 
@@ -574,21 +635,43 @@ func main() {
 		var ownedBoardIDs []string
 		db.Model(&Board{}).Where("owner_id = ?", userID).Pluck("id", &ownedBoardIDs)
 
-		if len(ownedBoardIDs) == 0 {
-			c.JSON(200, gin.H{"notifications": []AccessRequest{}, "unreadCount": 0})
-			return
+		var requests []AccessRequest
+		var unreadCount int64
+		if len(ownedBoardIDs) > 0 {
+			db.Where("board_id IN ?", ownedBoardIDs).Order("created_at DESC").Limit(50).Find(&requests)
+			db.Model(&AccessRequest{}).Where("board_id IN ? AND status = 'pending'", ownedBoardIDs).Count(&unreadCount)
+		}
+		if requests == nil {
+			requests = []AccessRequest{}
 		}
 
-		var requests []AccessRequest
-		db.Where("board_id IN ?", ownedBoardIDs).Order("created_at DESC").Limit(50).Find(&requests)
-
-		var unreadCount int64
-		db.Model(&AccessRequest{}).Where("board_id IN ? AND status = 'pending'", ownedBoardIDs).Count(&unreadCount)
+		var assignments []AssignmentNotice
+		db.Where("recipient_id = ?", userID).Order("id DESC").Limit(20).Find(&assignments)
+		if assignments == nil {
+			assignments = []AssignmentNotice{}
+		}
+		var unseen int64
+		db.Model(&AssignmentNotice{}).Where("recipient_id = ? AND seen = ?", userID, false).Count(&unseen)
 
 		c.JSON(200, gin.H{
 			"notifications": requests,
-			"unreadCount":   unreadCount,
+			"assignments":   assignments,
+			"unreadCount":   unreadCount + unseen,
 		})
+	})
+
+	r.POST("/api/assignments/:id/seen", authMiddleware, func(c *gin.Context) {
+		userID := c.MustGet("userID").(uint)
+		result := db.Model(&AssignmentNotice{}).Where("id = ? AND recipient_id = ?", c.Param("id"), userID).Update("seen", true)
+		if result.Error != nil {
+			c.JSON(500, gin.H{"error": "Could not update the notice"})
+			return
+		}
+		if result.RowsAffected == 0 {
+			c.JSON(404, gin.H{"error": "Notice not found"})
+			return
+		}
+		c.JSON(200, gin.H{"ok": true})
 	})
 
 	// Respond to Access Request (Approve / Dismiss)
@@ -661,13 +744,16 @@ func main() {
 		}
 
 		type MemberItem struct {
-			ID        uint   `json:"id"`
-			Name      string `json:"name"`
-			Email     string `json:"email"`
-			AvatarURL string `json:"avatarUrl"`
-			Role      string `json:"role"` // "owner", "edit", "view"
-			IsOwner   bool   `json:"isOwner"`
+			ID         uint   `json:"id"`
+			Name       string `json:"name"`
+			Email      string `json:"email"`
+			AvatarURL  string `json:"avatarUrl"`
+			Role       string `json:"role"` // "owner", "edit", "view"
+			IsOwner    bool   `json:"isOwner"`
+			Assignable bool   `json:"assignable"`
 		}
+
+		assignable := map[uint]bool{b.OwnerID: true}
 
 		// Collect all relevant user IDs for this board
 		userIDsSet := make(map[uint]bool)
@@ -677,6 +763,7 @@ func main() {
 		db.Model(&BoardMember{}).Where("board_id = ?", boardID).Pluck("user_id", &bmUserIDs)
 		for _, uID := range bmUserIDs {
 			userIDsSet[uID] = true
+			assignable[uID] = true
 		}
 
 		var reqUserIDs []uint
@@ -702,12 +789,13 @@ func main() {
 				role = "view"
 			}
 			members = append(members, MemberItem{
-				ID:        u.ID,
-				Name:      u.Name,
-				Email:     u.Email,
-				AvatarURL: u.AvatarURL,
-				Role:      role,
-				IsOwner:   (u.ID == b.OwnerID),
+				ID:         u.ID,
+				Name:       u.Name,
+				Email:      u.Email,
+				AvatarURL:  u.AvatarURL,
+				Role:       role,
+				IsOwner:    (u.ID == b.OwnerID),
+				Assignable: assignable[u.ID],
 			})
 		}
 

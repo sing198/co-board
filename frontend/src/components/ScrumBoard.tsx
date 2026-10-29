@@ -69,7 +69,7 @@ export default function ScrumBoard({ cards, allCards = cards, columns, sprint, c
   const backlog = useMemo(() => cards.filter(card => !card.InSprint), [cards]);
   const sprintCards = useMemo(() => cards.filter(card => !!card.InSprint), [cards]);
   const allSprintCards = useMemo(() => allCards.filter(card => !!card.InSprint), [allCards]);
-  const workflowColumns = columns.length > 0 ? columns : ["TO DO", "IN PROGRESS", "DONE"];
+  const workflowColumns = columns.length > 0 ? columns : ["To do", "In progress", "Done"];
   const statusColumns = [...new Set([...workflowColumns, ...sprintCards.map(card => card.List).filter(Boolean)])];
   const doneColumn = workflowColumns[workflowColumns.length - 1];
   const completedCards = allSprintCards.filter(card => card.List === doneColumn);

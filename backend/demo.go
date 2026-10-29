@@ -10,15 +10,15 @@ import (
 // boardTemplates seed the starting columns of each board type.
 // The empty key is the default board (classic kanban columns).
 var boardTemplates = map[string]string{
-	"":         "TODO,DOING,DONE",
-	"kanban":   "TODO,DOING,DONE",
-	"todo":     "TO DO,DONE",
-	"sprint":   "BACKLOG,TO DO,IN PROGRESS,REVIEW,DONE",
-	"content":  "IDEAS,DRAFTING,REVIEW,PUBLISHED",
-	"table":    "TODO,DOING,DONE",
-	"calendar": "TODO,DOING,DONE",
-	"timeline": "TODO,DOING,DONE",
-	"mindmap":  "TODO,DOING,DONE",
+	"":         "To do,Doing,Done",
+	"kanban":   "To do,Doing,Done",
+	"todo":     "To do,Done",
+	"sprint":   "Backlog,To do,In progress,Review,Done",
+	"content":  "Ideas,Drafting,Review,Published",
+	"table":    "To do,Doing,Done",
+	"calendar": "To do,Doing,Done",
+	"timeline": "To do,Doing,Done",
+	"mindmap":  "To do,Doing,Done",
 }
 
 // isValidBoardTemplate reports whether POST /api/boards accepts the key.
@@ -37,14 +37,14 @@ func createBoard(db *gorm.DB, ownerID uint, name, template string) (Board, error
 	board := Board{ID: uuid.New().String(), Name: name, OwnerID: ownerID, Type: "kanban", SprintStatus: "planning"}
 	if template == "demo" {
 		board.Name = "Product Launch · Demo"
-		board.Columns = "TODO,DOING,DONE"
+		board.Columns = "To do,Doing,Done"
 		board.Swimlanes = "Product,Engineering"
 		board.Cards = []Card{
-			{Title: "Drag this card into DOING", Description: "Move this task to another column. Open the same board in a second tab to watch changes arrive live.", List: "TODO", Swimlane: "Product", Position: 1000, Tags: "Getting started"},
-			{Title: "Write the launch announcement", Description: "Click a card to explore its description, tags and checklist.", List: "TODO", Swimlane: "Product", Position: 2000, Tags: "Content"},
-			{Title: "Review the mobile layout", Description: "Check the board on a narrow screen before launch.", List: "DOING", Swimlane: "Engineering", Position: 1000, Tags: "UI"},
-			{Title: "Test live collaboration", Description: "Share the board link and move a card while both windows are open.", List: "DOING", Swimlane: "Engineering", Position: 2000, Tags: "Testing"},
-			{Title: "Define launch milestones", Description: "An example of a completed task. This board contains sample data.", List: "DONE", Swimlane: "Product", Position: 1000, Tags: "Planning"},
+			{Title: "Drag this card into Doing", Description: "Move this task to another column. Open the same board in a second tab to watch changes arrive live.", List: "To do", Swimlane: "Product", Position: 1000, Tags: "Getting started"},
+			{Title: "Write the launch announcement", Description: "Click a card to explore its description, tags and checklist.", List: "To do", Swimlane: "Product", Position: 2000, Tags: "Content"},
+			{Title: "Review the mobile layout", Description: "Check the board on a narrow screen before launch.", List: "Doing", Swimlane: "Engineering", Position: 1000, Tags: "UI"},
+			{Title: "Test live collaboration", Description: "Share the board link and move a card while both windows are open.", List: "Doing", Swimlane: "Engineering", Position: 2000, Tags: "Testing"},
+			{Title: "Define launch milestones", Description: "An example of a completed task. This board contains sample data.", List: "Done", Swimlane: "Product", Position: 1000, Tags: "Planning"},
 		}
 	} else if columns, ok := boardTemplates[template]; ok {
 		board.Columns = columns

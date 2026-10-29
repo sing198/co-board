@@ -1,0 +1,367 @@
+--- a/frontend/src/pages/Board.tsx
++++ b/frontend/src/pages/Board.tsx
+@@ -123,6 +123,7 @@
+ };
+ 
+ const TAG_PRESETS = [
++  { name: "Testing", bg: "bg-slate-100 dark:bg-slate-800/60", text: "text-slate-600 dark:text-slate-300", border: "border-slate-200 dark:border-slate-700" },
+   { name: "Bug", bg: "bg-rose-500/15 dark:bg-rose-950/40", text: "text-rose-600 dark:text-rose-400", border: "border-rose-200 dark:border-rose-800/60" },
+   { name: "Feature", bg: "bg-indigo-50 dark:bg-indigo-950/40", text: "text-indigo-600 dark:text-indigo-300", border: "border-indigo-100 dark:border-indigo-800/60" },
+   { name: "Urgent", bg: "bg-amber-500/15 dark:bg-amber-950/40", text: "text-amber-600 dark:text-amber-400", border: "border-amber-200 dark:border-amber-800/60" },
+@@ -538,15 +539,18 @@
+ 
+ function SwimlaneDropZone({
+   id,
+-  children
++  children,
++  isEmpty
+ }: {
+-  id: string,
+-  children: React.ReactNode
++  id: string;
++  children: React.ReactNode;
++  isEmpty?: boolean;
+ }) {
+   const { setNodeRef } = useDroppable({ id });
+   return (
+     <div ref={setNodeRef} className="min-h-[50px] flex flex-col gap-2.5">
+       {children}
++      {isEmpty && <div className="board-empty-drop" aria-hidden="true">Drop here</div>}
+     </div>
+   );
+ }
+@@ -1829,13 +1833,12 @@
+         <div className="overview-copy">
+ 
+           <h2>{boardName}</h2>
+-          <p>{VIEW_HINTS[boardView]}</p>
+ 
+           <div className="overview-meta">{(boardView === "board" || boardView === "scrum") && swimlanes.length > 1 && <span><UserPlus size={14} /> {swimlanes.length} groups</span>}<span className="overview-access">{isOwner ? "Full access" : canEdit ? "Can edit" : "View only"}</span></div>
+         </div>
+         <div className="overview-action">
+           {canEdit && columns.length > 0 && <button className="new-task-button" disabled={status !== "connected"} onClick={openQuickAdd}><Plus size={17} /> {boardView === "mindmap" ? "New idea" : "New task"}</button>}
+-          <div className="overview-task-count"><strong>{cards.length}</strong><span>tasks on this board</span></div>
++          <div className="overview-task-count"><strong>{cards.length}</strong><span>{cards.length === 1 ? "task on this board" : "tasks on this board"}</span></div>
+         </div>
+       </section>
+       <div className="board-view-tabs">
+@@ -1847,7 +1850,7 @@
+             <button aria-pressed={boardView === "timeline"} title="Tasks across a date range" onClick={() => chooseBoardView("timeline")}><GanttChart size={15} /> Timeline</button>
+             <button aria-pressed={boardView === "mindmap"} title="Ideas connected as branches" onClick={() => chooseBoardView("mindmap")}><Network size={15} /> Mind map</button>
+             {boardType === "sprint" && <button aria-pressed={boardView === "scrum"} title="Backlog and the current sprint" onClick={() => chooseBoardView("scrum")}><Timer size={15} /> Sprint</button>}
+-            <button aria-pressed={boardView === "due"} title="What is overdue, due today, or later" onClick={() => chooseBoardView("due")}><Calendar size={15} /> Due</button>
++            <button aria-pressed={boardView === "due"} title="What is overdue, due today, or later" onClick={() => chooseBoardView("due")}><Clock size={15} /> Due</button>
+           </div>
+           <div className="board-view-more-wrap" ref={viewsMenuRef}>
+             <button
+@@ -1866,7 +1869,7 @@
+                 <button type="button" role="menuitem" aria-pressed={boardView === "timeline"} onClick={() => { chooseBoardView("timeline"); setViewsOpen(false); }}><GanttChart size={15} /> Timeline</button>
+                 <button type="button" role="menuitem" aria-pressed={boardView === "mindmap"} onClick={() => { chooseBoardView("mindmap"); setViewsOpen(false); }}><Network size={15} /> Mind map</button>
+                 {boardType === "sprint" && <button type="button" role="menuitem" aria-pressed={boardView === "scrum"} onClick={() => { chooseBoardView("scrum"); setViewsOpen(false); }}><Timer size={15} /> Sprint</button>}
+-                <button type="button" role="menuitem" aria-pressed={boardView === "due"} onClick={() => { chooseBoardView("due"); setViewsOpen(false); }}><Calendar size={15} /> Due</button>
++                <button type="button" role="menuitem" aria-pressed={boardView === "due"} onClick={() => { chooseBoardView("due"); setViewsOpen(false); }}><Clock size={15} /> Due</button>
+               </div>
+             )}
+           </div>
+@@ -1908,7 +1911,7 @@
+             <option value="later">Later</option>
+             <option value="none">No due date</option>
+           </select>
+-          {user && <button type="button" className="board-mine-filter" aria-pressed={mineOnly} onClick={() => setMineOnly((current) => !current)}>Mine</button>}
++          {user && <button type="button" className="board-mine-filter" aria-pressed={mineOnly} title="Show only tasks assigned to me" onClick={() => setMineOnly((current) => !current)}>Mine</button>}
+ 
+           <div className="board-filter-chips flex items-center gap-1.5 overflow-x-auto py-0.5 max-w-full">
+             <button
+@@ -2173,7 +2176,7 @@
+                           <div key={col} className="board-column flex-1 min-w-0 flex flex-col justify-between min-h-[100px] group/col">
+                             <div className="flex flex-col">
+                               <SortableContext items={swimCardIds} strategy={verticalListSortingStrategy}>
+-                                <SwimlaneDropZone id={dropKey}>
++                                <SwimlaneDropZone id={dropKey} isEmpty={swimCards.length === 0 && !searchQuery && selectedTagFilter === "All" && selectedDueFilter === "all" && !mineOnly}>
+                                   {swimCards.map((c: any) => (
+                                     <DraggableCard
+                                       key={c.ID}
+@@ -2293,7 +2296,7 @@
+ 
+       {/* Miro Floating Toolbar at Bottom Center */}
+       {canEdit && boardView === "board" && (
+-        <div className={`board-create-toolbar fixed bottom-6 left-1/2 -translate-x-1/2 z-40 backdrop-blur-xl px-3 py-1.5 rounded-2xl border shadow-xl flex items-center gap-1.5 ${theme === "dark" ? "bg-[#0f172a]/95 border-[#334155] text-slate-200" : "bg-white/95 border-slate-200 text-slate-700"
++        <div className={`board-create-toolbar mx-auto mb-8 w-fit backdrop-blur-xl px-3 py-1.5 rounded-2xl border shadow-xl flex items-center gap-1.5 ${theme === "dark" ? "bg-[#0f172a]/95 border-[#334155] text-slate-200" : "bg-white/95 border-slate-200 text-slate-700"
+           }`}>
+           <button
+             onClick={() => {
+--- a/frontend/src/pages/Dashboard.tsx
++++ b/frontend/src/pages/Dashboard.tsx
+@@ -31,7 +31,6 @@
+ } from "lucide-react";
+ import { API_URL } from "../config";
+ import WorkspaceSidebar, { KanbanMark } from "../components/WorkspaceSidebar";
+-import StartHere from "../components/StartHere";
+ import { BoardFormatPreview } from "../components/BoardCanvasViews";
+ import { useNotifications } from "../useNotifications";
+ import AssignmentNotices from "../components/AssignmentNotices";
+@@ -130,13 +129,6 @@
+   const [deleteModalData, setDeleteModalData] = useState<{ boardId: string; name: string } | null>(null);
+   const [isDeletingBoard, setIsDeletingBoard] = useState(false);
+   const [deleteError, setDeleteError] = useState<string | null>(null);
+-  const [showHomeTips, setShowHomeTips] = useState(() => {
+-    try { return localStorage.getItem("co_board_home_tips") !== "hidden"; } catch { return true; }
+-  });
+-  const dismissHomeTips = () => {
+-    setShowHomeTips(false);
+-    try { localStorage.setItem("co_board_home_tips", "hidden"); } catch { /* Tips can stay visible if storage is blocked. */ }
+-  };
+   const navigate = useNavigate();
+ 
+   const renderOnlineAvatars = (users?: UserPresence[], size: "sm" | "md" = "sm") => {
+@@ -514,7 +506,7 @@
+                 </section>
+                 <section>
+                   <header><i className="is-doing" /> Doing <span>1</span></header>
+-                  <article className="is-lift"><small>Build</small><strong>Drag this card here</strong></article>
++                  <article className="is-lift"><small>Build</small><strong>Drag this card to Done</strong></article>
+                 </section>
+                 <section>
+                   <header><i className="is-done" /> Done <span>1</span></header>
+@@ -556,7 +548,7 @@
+ 
+       <WorkspaceSidebar onLogout={handleWorkspaceLogout} user={user} activePage="dashboard" boardCount={boards.length} role="Personal workspace"
+         boardFilter={activeTab}
+-        note="Pick a template, or open a board you already have."
++        note="Star a board to pin it under Starred."
+         onOverview={() => window.scrollTo({ top: 0 })} onAllBoards={() => { setActiveTab("all"); setSearchQuery(""); }}>
+         <div className="sidebar-section-label">QUICK ACCESS</div>
+         <button className={`sidebar-stream ${activeTab === "my" ? "active" : ""}`} aria-pressed={activeTab === "my"} onClick={() => setActiveTab("my")}><FolderKanban size={15} /> My boards</button>
+@@ -720,10 +712,11 @@
+           <h2>My workspace</h2>
+           <p>Open a board to move tasks, or create one from a template. Kanban is the easiest place to begin.</p>
+           <div className="overview-meta">
+-            <span><Layers3 size={14} /> {boards.length} boards</span>
++            <span><Layers3 size={14} /> {boards.length} {boards.length === 1 ? "board" : "boards"}</span>
+             <span><Star size={14} /> {boards.filter(b => starredIds.includes(b.ID)).length} starred</span>
++            <span>{boards.reduce((n, b) => n + (b.Cards?.length || 0), 0)} {boards.reduce((n, b) => n + (b.Cards?.length || 0), 0) === 1 ? "task" : "tasks"} across your boards</span>
+             {user?.email === "guest@kanban.demo" && (
+-              <span className="overview-access font-bold">Guest Session</span>
++              <span className="overview-access font-bold">Guest session</span>
+             )}
+           </div>
+         </div>
+@@ -731,20 +724,9 @@
+           <button className="new-task-button" onClick={() => { setNewBoardName(""); setShowCreateModal(true); }}>
+             <Plus size={17} /> New board
+           </button>
+-          <div className="overview-task-count">
+-            <strong>{boards.reduce((n, b) => n + (b.Cards?.length || 0), 0)}</strong>
+-            <span>tasks across your boards</span>
+-          </div>
+         </div>
+       </section>
+ 
+-      {showHomeTips && (
+-        <StartHere
+-          message="Pick a template below, name the board, then press Create."
+-          onDismiss={dismissHomeTips}
+-        />
+-      )}
+-
+       {attention.length > 0 && (
+         <section className="due-soon" aria-label="Tasks that need attention">
+           <div className="due-soon-counts">
+@@ -781,47 +763,6 @@
+         </section>
+       )}
+ 
+-      <section className="start-templates" aria-label="Quick templates">
+-        <div className="flex items-center justify-between mb-3">
+-          <span className="text-[13px] font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
+-            <Sparkles size={14} className="text-[#4f63ef] dark:text-[#a5b4fc]" /> Start from a template
+-          </span>
+-          <span className="text-[12px] text-slate-500 hidden sm:inline">You can rename it and switch views later</span>
+-        </div>
+-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
+-          {BOARD_TYPES.slice(0, 6).map((item) => (
+-            <button
+-              key={item.id}
+-              onClick={() => {
+-                setNewBoardType(item.id);
+-                setNewBoardName(item.defaultName || "");
+-                setShowCreateModal(true);
+-              }}
+-              className={`start-template p-3 rounded-xl border text-left transition-all duration-150 cursor-pointer group flex flex-col justify-between shadow-2xs hover:shadow-md hover:-translate-y-0.5 ${
+-                theme === "dark"
+-                  ? "bg-[#172033]/90 hover:bg-[#1e293b] border-[#334155] hover:border-[#4f63ef]/60"
+-                  : "bg-white hover:bg-[#f8fafc] border-slate-200 hover:border-[#4f63ef]/60"
+-              }`}
+-            >
+-              <div className="flex items-center justify-between gap-2">
+-                <span className="text-[13px] font-bold text-slate-800 dark:text-slate-100 group-hover:text-[#4f63ef] dark:group-hover:text-[#a5b4fc] transition-colors flex items-center gap-1.5 flex-wrap">
+-                  <item.icon size={14} className="text-[#4f63ef] dark:text-[#a5b4fc]" />
+-                  {item.label}
+-                  {item.id === "kanban" && <span className="start-badge">Easiest start</span>}
+-                </span>
+-                <Plus size={14} className="text-slate-400 group-hover:text-[#4f63ef] dark:group-hover:text-[#a5b4fc] transition-colors" />
+-              </div>
+-              <p className="text-[12px] text-slate-500 dark:text-slate-400 leading-snug line-clamp-2">
+-                {item.hint}
+-              </p>
+-              <span className="text-[12px] font-bold text-[#4f63ef] dark:text-[#a5b4fc] flex items-center gap-0.5">
+-                Use this <ArrowRight size={12} />
+-              </span>
+-            </button>
+-          ))}
+-        </div>
+-      </section>
+-
+       {/* MAIN CONTAINER */}
+       <main className="dashboard-main max-w-7xl w-full mx-auto px-8 py-6 flex-1 space-y-6">
+ 
+@@ -1051,7 +992,7 @@
+                     <div className={`flex items-center justify-between text-xs pt-2 border-t ${theme === "dark" ? "border-[#334155] text-slate-400" : "border-slate-100 text-slate-500"
+                       }`}>
+                       <span className="text-[13px] font-semibold">
+-                        {board.Cards?.length || 0} tasks
++                        {board.Cards?.length || 0} {(board.Cards?.length || 0) === 1 ? "task" : "tasks"}
+                       </span>
+                       <span className="flex items-center gap-3">
+                         {renderOnlineAvatars(board.OnlineUsers, "sm")}
+@@ -1093,7 +1034,7 @@
+                           }`}>
+                           {board.Name || "Untitled Board"}
+                         </h4>
+-                        <p className={`text-[11px] ${theme === "dark" ? "text-slate-400" : "text-slate-500"}`}>{board.Cards?.length || 0} tasks · {boardTypeLabel(board.Type)}</p>
++                        <p className={`text-[11px] ${theme === "dark" ? "text-slate-400" : "text-slate-500"}`}>{(board.Cards?.length || 0)} {(board.Cards?.length || 0) === 1 ? "task" : "tasks"} · {boardTypeLabel(board.Type)}</p>
+                       </div>
+                     </div>
+ 
+@@ -1149,6 +1090,49 @@
+         )}
+       </main>
+ 
++      <section className="start-templates" aria-label="Quick templates">
++        <div className="flex items-center justify-between mb-3">
++          <span className="text-[13px] font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
++            <Sparkles size={14} className="text-[#4f63ef] dark:text-[#a5b4fc]" /> Start from a template
++          </span>
++          <span className="text-[12px] text-slate-500 hidden sm:inline">You can rename it and switch views later</span>
++        </div>
++        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
++          {BOARD_TYPES.slice(0, 6).map((item) => (
++            <button
++              key={item.id}
++              onClick={() => {
++                setNewBoardType(item.id);
++                setNewBoardName(item.defaultName || "");
++                setShowCreateModal(true);
++              }}
++              className={`start-template p-3 rounded-xl border text-left transition-all duration-150 cursor-pointer group flex flex-col justify-between shadow-2xs hover:shadow-md ${
++                theme === "dark"
++                  ? "bg-[#172033]/90 hover:bg-[#1e293b] border-[#334155] hover:border-[#4f63ef]/60"
++                  : "bg-white hover:bg-[#f8fafc] border-slate-200 hover:border-[#4f63ef]/60"
++              }`}
++            >
++              <div className="flex items-center justify-between gap-2">
++                <span className="text-[13px] font-bold text-slate-800 dark:text-slate-100 group-hover:text-[#4f63ef] dark:group-hover:text-[#a5b4fc] transition-colors flex items-center gap-1.5 flex-wrap">
++                  <item.icon size={14} className="text-[#4f63ef] dark:text-[#a5b4fc]" />
++                  {item.label}
++                </span>
++                <Plus size={14} className="text-slate-400 group-hover:text-[#4f63ef] dark:group-hover:text-[#a5b4fc] transition-colors flex-shrink-0" />
++              </div>
++              {item.id === "kanban" && <span className="start-badge self-start">Easiest start</span>}
++              <p className="text-[12px] text-slate-500 dark:text-slate-400 leading-snug line-clamp-2">
++                {item.hint}
++              </p>
++              <span className="text-[12px] font-bold text-[#4f63ef] dark:text-[#a5b4fc] flex items-center gap-0.5">
++                Use this <ArrowRight size={12} />
++              </span>
++            </button>
++          ))}
++        </div>
++      </section>
++
++      </main>
++
+       {/* Centered Glassmorphic Create Board Modal */}
+       {showCreateModal && (
+         <div
+--- a/frontend/src/components/WorkspaceSidebar.tsx
++++ b/frontend/src/components/WorkspaceSidebar.tsx
+@@ -30,8 +30,8 @@
+       <WorkspaceLogo onClick={onOverview} />
+       <div className="workspace-switcher"><span className="workspace-avatar">{user?.name?.[0] || "K"}</span><div><strong>My workspace</strong><small>{user?.email === "guest@kanban.demo" ? "Guest session" : "Personal workspace"}</small></div></div>
+       <div className="sidebar-section-label">WORKSPACE</div>
+-      <button className={`sidebar-nav ${allBoardsActive ? "active" : ""}`} onClick={onAllBoards} aria-current={allBoardsActive ? "page" : undefined}><LayoutDashboard size={17} /> All boards {activePage === "dashboard" ? <span>{boardCount}</span> : <ArrowUpRight size={14} />}</button>
+-      {activePage === "board" && <button className="sidebar-nav active" onClick={() => document.getElementById("board-content")?.scrollIntoView({ block: "start" })} aria-current="page"><Layers3 size={17} /> Current board <span>{cardCount}</span></button>}
++      <button className={`sidebar-nav ${allBoardsActive ? "active" : ""}`} onClick={onAllBoards} aria-current={allBoardsActive ? "page" : undefined}><LayoutDashboard size={17} /> All boards {activePage === "dashboard" ? <span title="Number of boards">{boardCount}</span> : <ArrowUpRight size={14} />}</button>
++      {activePage === "board" && <button className="sidebar-nav active" onClick={() => document.getElementById("board-content")?.scrollIntoView({ block: "start" })} aria-current="page"><Layers3 size={17} /> Current board <span title="Number of tasks">{cardCount}</span></button>}
+       {children}
+       <div className="sidebar-bottom">
+         <div className="workspace-note"><Sparkles size={18} /><strong>New here?</strong><p>{note || "Drag a card to move it. Click a card to add details."}</p></div>
+--- a/frontend/src/index.css
++++ b/frontend/src/index.css
+@@ -104,11 +104,11 @@
+ .board-brand { min-width:0; }
+ .board-brand > button, .board-brand > div { display:none; }
+ .board-title { font-size:13px; font-weight:600; color:var(--board-muted); overflow-wrap:anywhere; }
+-.board-title::before { content:'Workspace /'; font-weight:400; color:var(--board-muted); white-space:nowrap; }
++.board-title::before { content:'Workspace / '; font-weight:400; color:var(--board-muted); white-space:nowrap; }
+ .board-title > span { display:none; }
+ .board-top-actions { flex-shrink:0; gap:12px; }
+ .board-top-actions button { box-shadow:none; }
+-.board-overview { display:flex; align-items:center; justify-content:space-between; gap:25px; padding:36px 36px 30px; position:relative; }
++.board-overview { display:flex; align-items:center; justify-content:space-between; gap:25px; padding:24px 36px 20px; position:relative; }
+ .overview-copy { min-width:0; }
+ .board-eyebrow { display:flex; align-items:center; gap:7px; font-size:10px; font-weight:650; letter-spacing:1.3px; color:var(--board-muted); margin-bottom:13px; }
+ .board-eyebrow > span { width:5px; height:5px; border-radius:50%; background:#4f63ef; }
+@@ -128,10 +128,10 @@
+ .board-view-tabs > span > span { padding:0 5px; background:#4f63ef14; border-radius:4px; font-size:10px; }
+ .board-view-tabs > p { flex-basis:100%; margin:8px 2px 0; font-size:13px; line-height:1.45; color:var(--board-muted); }
+ .board-toolbar { margin:0 36px; padding:19px 0 13px; border:0; background:transparent; gap:14px; align-items:flex-start; }
+-.board-filter-group { display:grid; grid-template-columns:minmax(200px,310px) max-content; gap:10px 12px; align-items:center; }
++.board-filter-group { display:flex; flex-wrap:wrap; gap:10px 12px; align-items:center; }
+ .board-search { background:var(--board-panel); min-height:36px; max-width:310px; border-color:var(--board-line); border-radius:8px; box-shadow:none; }
+ .board-search input { font-size:13px; color:var(--board-ink); }
+-.board-filter-chips { grid-column:1 / -1; scrollbar-width:thin; gap:6px; }
++.board-filter-chips { scrollbar-width:thin; gap:6px; }
+ .board-filter-chips button { white-space:nowrap; flex-shrink:0; min-height:30px; font-size:11px; font-weight:550; border-radius:6px; box-shadow:none; }
+ .board-filter-chips button[aria-pressed=true] { background:#eef2ff; color:#4051d6; border-color:#c7d2fe; box-shadow:none; }
+ .dark .board-filter-chips button[aria-pressed=true] { background:#243052; color:#b7c3ff; border-color:#4b5a85; }
+@@ -155,6 +155,8 @@
+ .workstream-heading > span:first-of-type { background:transparent; box-shadow:none; padding:3px 0; font-size:11px; color:var(--board-ink); font-family:'Plus Jakarta Sans', 'Inter', system-ui, sans-serif; }
+ .workstream-heading > span:nth-of-type(2) { font-size:10px; color:var(--board-muted); font-weight:400; }
+ .board-column { padding:12px; border:1px solid #e2e8f0; background:#f8fafc; border-radius:14px; }
++.board-empty-drop { padding:14px; border:1px dashed #cbd5e1; border-radius:10px; text-align:center; font-size:11px; font-weight:600; color:#64748b; }
++.dark .board-empty-drop { border-color:#334155; color:#94a3b8; }
+ .dark .board-column { background:#111c30; border-color:#334155; }
+ .board-task-card { border:1px solid var(--board-line); border-radius:10px; background:var(--board-panel); box-shadow:0 1px 3px #10182b0a; padding:14px; gap:9px; transition:border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease; }
+ .board-task-card:hover { border-color:#bac5f5; box-shadow:0 6px 18px #10182b14; transform:translateY(-1px); }
+@@ -183,7 +185,7 @@
+ .dark .task-assignee { background:#1e293b; color:#e2e8f0; }
+ .dark .task-assignee > span { background:#243052; color:#c7d2fe; }
+ .task-due { display:inline-flex; align-items:center; gap:5px; min-height:24px; padding:2px 8px; border-radius:999px; font-size:12px; font-weight:700; line-height:1.2; }
+-.board-mine-filter { min-height:36px; padding:0 12px; border:1px solid var(--board-line); border-radius:8px; background:var(--board-panel); color:var(--board-ink); font-size:13px; font-weight:700; cursor:pointer; }
++.board-mine-filter { min-height:28px; padding:0 10px; border:1px solid var(--board-line); border-radius:999px; background:var(--board-panel); color:var(--board-ink); font-size:12px; font-weight:700; cursor:pointer; }
+ .board-mine-filter[aria-pressed=true] { color:#fff; background:#4f63ef; border-color:#4f63ef; }
+ .task-due-overdue { color:#c2410c; background:#fff7ed; }
+ .task-due-today { color:#a16207; background:#fefce8; }
+@@ -313,7 +315,7 @@
+  .dashboard-main { padding:0 20px 30px; }
+  .dashboard-top-actions { width:100%; flex-wrap:wrap; }
+  .dashboard-tabs { gap:14px; }
+- .dashboard-topbar .board-title::before { content:'Workspace /'; display:inline; margin-right:6px; }
++ .dashboard-topbar .board-title::before { content:'Workspace / '; display:inline; margin-right:6px; }
+ }
+ @media (max-width:520px) {
+  .dashboard-controls > :last-child { width:100%; gap:8px; }
+@@ -371,9 +373,9 @@
+  .board-topbar .workspace-mobile-account img { width:22px; height:22px; }
+ }
+ /* Keep the task area close to the workspace header. */
+-#board-overview { padding-top:22px; padding-bottom:18px; }
+-#board-overview h2 { font-size:clamp(24px,2.2vw,32px); }
+-#board-overview .overview-meta { margin-top:10px; }
++#board-overview { padding-top:14px; padding-bottom:10px; }
++#board-overview h2 { font-size:clamp(20px,1.8vw,26px); }
++#board-overview .overview-meta { margin-top:6px; }
+ #board-overview .overview-action { gap:8px; }
+ .guest-session-notice { margin:14px 36px 0; padding:9px 12px; display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px; background:#4f63ef0d; border:1px solid var(--board-line); border-radius:8px; color:var(--board-muted); font-size:11px; }
+ .guest-session-notice button { color:var(--board-accent); font-weight:600; cursor:pointer; }

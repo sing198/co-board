@@ -1,0 +1,184 @@
+--- a/frontend/src/pages/Board.tsx
++++ b/frontend/src/pages/Board.tsx
+@@ -540,17 +540,20 @@
+ function SwimlaneDropZone({
+   id,
+   children,
+-  isEmpty
++  isEmpty,
++  isDragging
+ }: {
+   id: string;
+   children: React.ReactNode;
+   isEmpty?: boolean;
++  isDragging?: boolean;
+ }) {
+   const { setNodeRef } = useDroppable({ id });
+   return (
+     <div ref={setNodeRef} className="min-h-[50px] flex flex-col gap-2.5">
+       {children}
+-      {isEmpty && <div className="board-empty-drop" aria-hidden="true">Drop here</div>}
++      {isEmpty && isDragging && <div className="board-empty-drop" aria-hidden="true">Drop here</div>}
++      {isEmpty && !isDragging && <div className="board-empty-note" aria-hidden="true">No tasks yet</div>}
+     </div>
+   );
+ }
+@@ -1034,6 +1037,7 @@
+   const [selectedTagFilter, setSelectedTagFilter] = useState<string>("All");
+   const [selectedDueFilter, setSelectedDueFilter] = useState("all");
+   const [mineOnly, setMineOnly] = useState(false);
++  const [isDraggingCard, setIsDraggingCard] = useState(false);
+   const [boardView, setBoardView] = useState<BoardView>(() => {
+     try {
+       const saved = localStorage.getItem(`co_board_view_v2_${boardId}`);
+@@ -1834,11 +1838,10 @@
+ 
+           <h2>{boardName}</h2>
+ 
+-          <div className="overview-meta">{(boardView === "board" || boardView === "scrum") && swimlanes.length > 1 && <span><UserPlus size={14} /> {swimlanes.length} groups</span>}<span className="overview-access">{isOwner ? "Full access" : canEdit ? "Can edit" : "View only"}</span></div>
++          <div className="overview-meta">{(boardView === "board" || boardView === "scrum") && swimlanes.length > 1 && <span><UserPlus size={14} /> {swimlanes.length} groups</span>}<span className="overview-access">{isOwner ? "Full access" : canEdit ? "Can edit" : "View only"}</span><span><strong>{cards.length}</strong> {cards.length === 1 ? "task on this board" : "tasks on this board"}</span></div>
+         </div>
+         <div className="overview-action">
+           {canEdit && columns.length > 0 && <button className="new-task-button" disabled={status !== "connected"} onClick={openQuickAdd}><Plus size={17} /> {boardView === "mindmap" ? "New idea" : "New task"}</button>}
+-          <div className="overview-task-count"><strong>{cards.length}</strong><span>{cards.length === 1 ? "task on this board" : "tasks on this board"}</span></div>
+         </div>
+       </section>
+       <div className="board-view-tabs">
+@@ -1911,13 +1914,13 @@
+             <option value="later">Later</option>
+             <option value="none">No due date</option>
+           </select>
+-          {user && <button type="button" className="board-mine-filter" aria-pressed={mineOnly} title="Show only tasks assigned to me" onClick={() => setMineOnly((current) => !current)}>Mine</button>}
++          {user && <button type="button" className="board-mine-filter" aria-pressed={mineOnly} title={mineOnly ? "Showing only tasks assigned to me" : "Show only tasks assigned to me"} onClick={() => setMineOnly((current) => !current)}>{mineOnly ? "✓ Mine" : "Mine"}</button>}
+ 
+           <div className="board-filter-chips flex items-center gap-1.5 overflow-x-auto py-0.5 max-w-full">
+             <button
+               aria-pressed={selectedTagFilter === "All"}
+               onClick={() => setSelectedTagFilter("All")}
+-              className={`px-2.5 py-1 rounded-xl text-xs font-bold transition-all border cursor-pointer ${
++              className={`px-2.5 py-1 rounded-full text-xs font-bold transition-all border cursor-pointer ${
+                 selectedTagFilter === "All"
+                   ? "bg-[#4f63ef] text-white border-[#4f63ef] shadow-2xs"
+                   : theme === "dark" ? "bg-[#172033] text-slate-300 border-[#334155] hover:bg-slate-800" : "bg-white text-slate-600 border-slate-200 hover:bg-slate-100"
+@@ -1933,7 +1936,7 @@
+                   key={tagName}
+                   aria-pressed={active}
+                   onClick={() => setSelectedTagFilter(active ? "All" : tagName)}
+-                  className={`px-2.5 py-1 rounded-xl text-xs font-extrabold border transition-all cursor-pointer ${colorObj?.bg || ''} ${colorObj?.text || ''} ${
++                  className={`px-2.5 py-1 rounded-full text-xs font-extrabold border transition-all cursor-pointer ${colorObj?.bg || ''} ${colorObj?.text || ''} ${
+                     active ? "ring-2 ring-[#4f63ef] shadow-2xs" : (colorObj?.border || '') + " opacity-80 hover:opacity-100"
+                   }`}
+                 >
+@@ -2043,7 +2046,7 @@
+           </div>
+         )}
+ 
+-        <DndContext sensors={sensors} collisionDetection={closestCorners} onDragEnd={handleDragEnd}>
++        <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={() => setIsDraggingCard(true)} onDragCancel={() => setIsDraggingCard(false)} onDragEnd={(event) => { setIsDraggingCard(false); handleDragEnd(event); }}>
+ 
+           {/* Top Column Headers Row */}
+           <div className="flex gap-6 items-center w-full px-1">
+@@ -2088,6 +2091,24 @@
+                 </div>
+               );
+             })}
++            {canEdit && (
++              <button
++                type="button"
++                onClick={() => {
++                  let name = "Column 1";
++                  let count = 1;
++                  while (columns.includes(name)) {
++                    name = `Column ${++count}`;
++                  }
++                  addColumn(name);
++                }}
++                disabled={status !== "connected"}
++                title="Add a column, such as Review"
++                className="board-add-column-trailing"
++              >
++                <Plus size={14} /> Add column
++              </button>
++            )}
+           </div>
+ 
+           {/* Unified Swimlane Rows Section */}
+@@ -2176,7 +2197,7 @@
+                           <div key={col} className="board-column flex-1 min-w-0 flex flex-col justify-between min-h-[100px] group/col">
+                             <div className="flex flex-col">
+                               <SortableContext items={swimCardIds} strategy={verticalListSortingStrategy}>
+-                                <SwimlaneDropZone id={dropKey} isEmpty={swimCards.length === 0 && !searchQuery && selectedTagFilter === "All" && selectedDueFilter === "all" && !mineOnly}>
++                                <SwimlaneDropZone id={dropKey} isEmpty={swimCards.length === 0 && !searchQuery && selectedTagFilter === "All" && selectedDueFilter === "all" && !mineOnly} isDragging={isDraggingCard}>
+                                   {swimCards.map((c: any) => (
+                                     <DraggableCard
+                                       key={c.ID}
+--- a/frontend/src/pages/Dashboard.tsx
++++ b/frontend/src/pages/Dashboard.tsx
+@@ -708,9 +708,9 @@
+ 
+       <section className="board-overview" aria-label="Workspace overview">
+         <div className="overview-copy">
+-          <div className="board-eyebrow"><span /> START HERE</div>
++          {boards.length === 0 && <div className="board-eyebrow"><span /> START HERE</div>}
+           <h2>My workspace</h2>
+-          <p>Open a board to move tasks, or create one from a template. Kanban is the easiest place to begin.</p>
++          <p>{boards.length === 0 ? "Open a board to move tasks, or create one from a template. Kanban is the easiest place to begin." : "Open a board to move tasks, or create one from a template."}</p>
+           <div className="overview-meta">
+             <span><Layers3 size={14} /> {boards.length} {boards.length === 1 ? "board" : "boards"}</span>
+             <span><Star size={14} /> {boards.filter(b => starredIds.includes(b.ID)).length} starred</span>
+@@ -1119,7 +1119,7 @@
+                 </span>
+                 <Plus size={14} className="text-slate-400 group-hover:text-[#4f63ef] dark:group-hover:text-[#a5b4fc] transition-colors flex-shrink-0" />
+               </div>
+-              {item.id === "kanban" && <span className="start-badge self-start">Easiest start</span>}
++              <span className="start-badge-row">{item.id === "kanban" && <span className="start-badge">Easiest start</span>}</span>
+               <p className="text-[12px] text-slate-500 dark:text-slate-400 leading-snug line-clamp-2">
+                 {item.hint}
+               </p>
+--- a/frontend/src/components/WorkspaceSidebar.tsx
++++ b/frontend/src/components/WorkspaceSidebar.tsx
+@@ -30,8 +30,8 @@
+       <WorkspaceLogo onClick={onOverview} />
+       <div className="workspace-switcher"><span className="workspace-avatar">{user?.name?.[0] || "K"}</span><div><strong>My workspace</strong><small>{user?.email === "guest@kanban.demo" ? "Guest session" : "Personal workspace"}</small></div></div>
+       <div className="sidebar-section-label">WORKSPACE</div>
+-      <button className={`sidebar-nav ${allBoardsActive ? "active" : ""}`} onClick={onAllBoards} aria-current={allBoardsActive ? "page" : undefined}><LayoutDashboard size={17} /> All boards {activePage === "dashboard" ? <span title="Number of boards">{boardCount}</span> : <ArrowUpRight size={14} />}</button>
+-      {activePage === "board" && <button className="sidebar-nav active" onClick={() => document.getElementById("board-content")?.scrollIntoView({ block: "start" })} aria-current="page"><Layers3 size={17} /> Current board <span title="Number of tasks">{cardCount}</span></button>}
++      <button className={`sidebar-nav ${allBoardsActive ? "active" : ""}`} onClick={onAllBoards} aria-current={allBoardsActive ? "page" : undefined}><LayoutDashboard size={17} /> All boards {activePage === "dashboard" ? <span title="Number of boards">{boardCount} {boardCount === 1 ? "board" : "boards"}</span> : <ArrowUpRight size={14} />}</button>
++      {activePage === "board" && <button className="sidebar-nav active" onClick={() => document.getElementById("board-content")?.scrollIntoView({ block: "start" })} aria-current="page"><Layers3 size={17} /> Current board <span title="Number of tasks">{cardCount} {cardCount === 1 ? "task" : "tasks"}</span></button>}
+       {children}
+       <div className="sidebar-bottom">
+         <div className="workspace-note"><Sparkles size={18} /><strong>New here?</strong><p>{note || "Drag a card to move it. Click a card to add details."}</p></div>
+--- a/frontend/src/index.css
++++ b/frontend/src/index.css
+@@ -129,6 +129,13 @@
+ .board-view-tabs > p { flex-basis:100%; margin:8px 2px 0; font-size:13px; line-height:1.45; color:var(--board-muted); }
+ .board-toolbar { margin:0 36px; padding:19px 0 13px; border:0; background:transparent; gap:14px; align-items:flex-start; }
+ .board-filter-group { display:flex; flex-wrap:wrap; gap:10px 12px; align-items:center; }
++.board-filter-chips button { height:36px; display:inline-flex; align-items:center; border-radius:999px; }
++.board-add-column-trailing { flex-shrink:0; display:inline-flex; align-items:center; gap:6px; height:32px; padding:0 12px; border:1px dashed #cbd5e1; border-radius:999px; background:transparent; color:#64748b; font-size:12px; font-weight:700; cursor:pointer; white-space:nowrap; }
++.board-add-column-trailing:hover { border-color:#4f63ef; color:#4f63ef; }
++.dark .board-add-column-trailing { border-color:#334155; color:#94a3b8; }
++.dark .board-add-column-trailing:hover { border-color:#a5b4fc; color:#a5b4fc; }
++.start-badge-row { display:flex; align-items:center; min-height:20px; }
++.start-badge-row .start-badge { margin-left:0; }
+ .board-search { background:var(--board-panel); min-height:36px; max-width:310px; border-color:var(--board-line); border-radius:8px; box-shadow:none; }
+ .board-search input { font-size:13px; color:var(--board-ink); }
+ .board-filter-chips { scrollbar-width:thin; gap:6px; }
+@@ -155,6 +162,8 @@
+ .workstream-heading > span:first-of-type { background:transparent; box-shadow:none; padding:3px 0; font-size:11px; color:var(--board-ink); font-family:'Plus Jakarta Sans', 'Inter', system-ui, sans-serif; }
+ .workstream-heading > span:nth-of-type(2) { font-size:10px; color:var(--board-muted); font-weight:400; }
+ .board-column { padding:12px; border:1px solid #e2e8f0; background:#f8fafc; border-radius:14px; }
++.board-empty-note { padding:14px; text-align:center; font-size:11px; font-weight:500; color:#94a3b8; }
++.dark .board-empty-note { color:#64748b; }
+ .board-empty-drop { padding:14px; border:1px dashed #cbd5e1; border-radius:10px; text-align:center; font-size:11px; font-weight:600; color:#64748b; }
+ .dark .board-empty-drop { border-color:#334155; color:#94a3b8; }
+ .dark .board-column { background:#111c30; border-color:#334155; }
+@@ -185,7 +194,7 @@
+ .dark .task-assignee { background:#1e293b; color:#e2e8f0; }
+ .dark .task-assignee > span { background:#243052; color:#c7d2fe; }
+ .task-due { display:inline-flex; align-items:center; gap:5px; min-height:24px; padding:2px 8px; border-radius:999px; font-size:12px; font-weight:700; line-height:1.2; }
+-.board-mine-filter { min-height:28px; padding:0 10px; border:1px solid var(--board-line); border-radius:999px; background:var(--board-panel); color:var(--board-ink); font-size:12px; font-weight:700; cursor:pointer; }
++.board-mine-filter { min-height:36px; padding:0 10px; border:1px solid var(--board-line); border-radius:999px; background:var(--board-panel); color:var(--board-ink); font-size:12px; font-weight:700; cursor:pointer; }
+ .board-mine-filter[aria-pressed=true] { color:#fff; background:#4f63ef; border-color:#4f63ef; }
+ .task-due-overdue { color:#c2410c; background:#fff7ed; }
+ .task-due-today { color:#a16207; background:#fefce8; }

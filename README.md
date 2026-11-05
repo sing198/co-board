@@ -4,11 +4,9 @@ A collaborative workspace for small teams: create a Kanban, sortable Table, Cale
 
 **React + TypeScript · Go + Gin · WebSocket · GORM · Redis Pub/Sub**
 
-[Live demo](https://kanban-board-eta-five.vercel.app/) · [Deployment test report](docs/deployment-validation.md) · [Interview walkthrough](docs/portfolio-case-study.md)
+**[Live Demo](https://kanban-board-eta-five.vercel.app/) · [Interactive Case Study](https://thanaphat-ku.is-a.dev/#case-study-co-board) · [Deployment Validation](docs/deployment-validation.md) · [Case Study Notes](docs/portfolio-case-study.md)**
 
 ![Latest local board](screenshot/current/board.png)
-
-Screenshots show the local implementation on 5 October 2026, including the clean white/slate/blue theme and alternate board views. Production was last inspected on 28 September 2026 and may run an earlier revision; the latest local changes are not yet verified there.
 
 ## Try it in 60 seconds
 
@@ -19,7 +17,7 @@ Start the app using the instructions below, then open **http://localhost**.
 3. Open the same board URL in a second tab and watch a move appear in both views.
 4. Open a card to explore descriptions and tags.
 
-Each demo creates a separate board rather than modifying a shared sample. Guest sessions are temporary; use sample data. The [hosted demo](https://kanban-board-eta-five.vercel.app/) may run an earlier revision. For all features below, use the current local source.
+Each demo session creates an isolated sample board. Guest sessions are temporary and require no sign-up.
 
 ## What to explore
 

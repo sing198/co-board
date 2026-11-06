@@ -28,7 +28,8 @@ import {
   ArrowRight,
   FileText,
   CheckCircle2,
-  LayoutDashboard
+  LayoutDashboard,
+  Copy
 } from "lucide-react";
 import { API_URL } from "../config";
 import WorkspaceSidebar, { KanbanMark } from "../components/WorkspaceSidebar";
@@ -177,6 +178,7 @@ export default function Dashboard() {
   const [deleteModalData, setDeleteModalData] = useState<{ boardId: string; name: string } | null>(null);
   const [isDeletingBoard, setIsDeletingBoard] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [duplicatingBoardId, setDuplicatingBoardId] = useState<string | null>(null);
   const navigate = useNavigate();
 
   const renderOnlineAvatars = (users?: UserPresence[], size: "sm" | "md" = "sm") => {
@@ -436,6 +438,43 @@ export default function Dashboard() {
       try { localStorage.setItem(starredStorageKey, JSON.stringify(next)); } catch { /* ignore */ }
       return next;
     });
+  };
+
+  const handleDuplicateBoard = async (e: React.MouseEvent, board: Board) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (duplicatingBoardId) return;
+    setDuplicatingBoardId(board.ID);
+    try {
+      const copySuffix = t("Copy", "สำเนา");
+      const copyName = `${board.Name || t("Untitled Board", "บอร์ดไม่มีชื่อ")} (${copySuffix})`;
+      const res = await fetch(`${API_URL}/api/boards`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${(localStorage.getItem("kanban_jwt") || sessionStorage.getItem("kanban_jwt"))}`,
+        },
+        body: JSON.stringify({
+          name: copyName,
+          template: board.Type || "kanban",
+          sourceBoardId: board.ID,
+        }),
+      });
+      if (!res.ok) throw new Error(t("Could not duplicate board.", "ไม่สามารถคัดลอกบอร์ดได้"));
+      const cloned = await res.json();
+      setBoards((prev) => [
+        {
+          ...cloned,
+          IsOwner: true,
+          Cards: Array.isArray(cloned.Cards) ? cloned.Cards : (board.Cards || []),
+        },
+        ...prev,
+      ]);
+    } catch (err) {
+      console.error("Failed to duplicate board", err);
+    } finally {
+      setDuplicatingBoardId(null);
+    }
   };
 
   const attention = useMemo(() => {
@@ -1099,26 +1138,37 @@ export default function Dashboard() {
                         >
                           <Star size={13} fill={isStarred ? "currentColor" : "none"} />
                         </button>
-                        {board.IsOwner && (
-                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
-                            <button
-                              onClick={(e) => openRenameModal(e, board.ID, board.Name)}
-                              className={`p-1.5 rounded-lg transition-colors border shadow-xs ${theme === "dark" ? "bg-[#0f172a]/90 border-[#334155] text-slate-400 hover:text-[#a5b4fc]" : "bg-white/90 border-slate-200 text-slate-500 hover:text-[#4051d6]"
-                                }`}
-                              title={t("Rename", "เปลี่ยนชื่อบอร์ด")}
-                            >
-                              <Edit2 size={13} />
-                            </button>
-                            <button
-                              onClick={(e) => openDeleteModal(e, board.ID, board.Name)}
-                              className={`p-1.5 rounded-lg transition-colors border shadow-xs ${theme === "dark" ? "bg-[#0f172a]/90 border-[#334155] text-slate-400 hover:text-rose-400" : "bg-white/90 border-slate-200 text-slate-500 hover:text-rose-600"
-                                }`}
-                              title={t("Delete", "ลบบอร์ด")}
-                            >
-                              <Trash2 size={13} />
-                            </button>
-                          </div>
-                        )}
+                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
+                          <button
+                            onClick={(e) => handleDuplicateBoard(e, board)}
+                            disabled={duplicatingBoardId === board.ID}
+                            className={`p-1.5 rounded-lg transition-colors border shadow-xs ${theme === "dark" ? "bg-[#0f172a]/90 border-[#334155] text-slate-400 hover:text-[#a5b4fc]" : "bg-white/90 border-slate-200 text-slate-500 hover:text-[#4051d6]"
+                              } disabled:opacity-50`}
+                            title={t("Duplicate Board", "คัดลอกบอร์ด")}
+                          >
+                            <Copy size={13} />
+                          </button>
+                          {board.IsOwner && (
+                            <>
+                              <button
+                                onClick={(e) => openRenameModal(e, board.ID, board.Name)}
+                                className={`p-1.5 rounded-lg transition-colors border shadow-xs ${theme === "dark" ? "bg-[#0f172a]/90 border-[#334155] text-slate-400 hover:text-[#a5b4fc]" : "bg-white/90 border-slate-200 text-slate-500 hover:text-[#4051d6]"
+                                  }`}
+                                title={t("Rename", "เปลี่ยนชื่อบอร์ด")}
+                              >
+                                <Edit2 size={13} />
+                              </button>
+                              <button
+                                onClick={(e) => openDeleteModal(e, board.ID, board.Name)}
+                                className={`p-1.5 rounded-lg transition-colors border shadow-xs ${theme === "dark" ? "bg-[#0f172a]/90 border-[#334155] text-slate-400 hover:text-rose-400" : "bg-white/90 border-slate-200 text-slate-500 hover:text-rose-600"
+                                  }`}
+                                title={t("Delete", "ลบบอร์ด")}
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            </>
+                          )}
+                        </div>
                       </div>
                     </div>
 
@@ -1218,6 +1268,14 @@ export default function Dashboard() {
                         title={t("Star Board", "ติดดาวบอร์ด")}
                       >
                         <Star size={14} fill={isStarred ? "currentColor" : "none"} />
+                      </button>
+                      <button
+                        onClick={(e) => handleDuplicateBoard(e, board)}
+                        disabled={duplicatingBoardId === board.ID}
+                        className={`p-1.5 transition-colors disabled:opacity-50 ${theme === "dark" ? "text-slate-400 hover:text-[#a5b4fc]" : "text-slate-400 hover:text-[#4051d6]"}`}
+                        title={t("Duplicate Board", "คัดลอกบอร์ด")}
+                      >
+                        <Copy size={14} />
                       </button>
                       {board.IsOwner && (
                         <>

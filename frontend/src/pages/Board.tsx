@@ -18,7 +18,7 @@ import {
   arrayMove
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Plus, Link as LinkIcon, Edit2, Trash2, LogOut, AlertCircle, Wifi, WifiOff, X, ChevronDown, ChevronRight, Sun, Moon, UserPlus, Globe, Bell, Check, Search, Tag, FileText, Image, Calendar, Clock, CheckSquare, LayoutDashboard, GanttChart, Network, Timer, MoreHorizontal, Lock, Eye } from "lucide-react";
+import { Plus, Link as LinkIcon, Edit2, Trash2, LogOut, AlertCircle, Wifi, WifiOff, X, ChevronDown, ChevronRight, Sun, Moon, UserPlus, Globe, Bell, Check, Search, Tag, FileText, Image, Calendar, Clock, CheckSquare, LayoutDashboard, GanttChart, Network, Timer, MoreHorizontal, Lock, Eye, Download, Command, ArrowLeft } from "lucide-react";
 
 import { toPng } from "html-to-image";
 
@@ -197,14 +197,14 @@ const BOARD_BACKGROUND_PRESETS: Record<string, { name: string; class: string; pr
   },
 };
 
-const getDueDateBadge = (dueDateStr?: string) => {
+const getDueDateBadge = (dueDateStr?: string, lang: "th" | "en" = "en") => {
   const bucket = dueBucket(dueDateStr);
   const date = localDate(dueDateStr);
   if (!date || bucket === "none") return null;
-  const short = date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
-  if (bucket === "overdue") return { label: `Overdue · ${short}`, tone: "overdue" as const };
-  if (bucket === "today") return { label: "Today", tone: "today" as const };
-  if (bucket === "upcoming") return { label: `Due ${short}`, tone: "upcoming" as const };
+  const short = date.toLocaleDateString(lang === "th" ? "th-TH" : undefined, { month: "short", day: "numeric" });
+  if (bucket === "overdue") return { label: lang === "th" ? `เลยกำหนด · ${short}` : `Overdue · ${short}`, tone: "overdue" as const };
+  if (bucket === "today") return { label: lang === "th" ? "ส่งวันนี้" : "Today", tone: "today" as const };
+  if (bucket === "upcoming") return { label: lang === "th" ? `ครบกำหนด ${short}` : `Due ${short}`, tone: "upcoming" as const };
   return { label: short, tone: "later" as const };
 };
 
@@ -244,6 +244,7 @@ function DraggableCard({
   const editBase = useRef(title);
   const [isTagPopoverOpen, setIsTagPopoverOpen] = useState(false);
   const [customTagInput, setCustomTagInput] = useState("");
+  const { lang, t } = useLanguage();
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -307,7 +308,7 @@ function DraggableCard({
   }
 
   const activeListeners = isTagPopoverOpen ? {} : listeners;
-  const dueBadge = getDueDateBadge(cardData.DueDate);
+  const dueBadge = getDueDateBadge(cardData.DueDate, lang);
 
   return (
     <div
@@ -340,7 +341,7 @@ function DraggableCard({
               setIsEditing(true);
             }}
             className="p-1 text-slate-400 hover:text-[#4f63ef] dark:hover:text-[#a5b4fc] rounded transition-colors"
-            aria-label="Rename Task" title="Rename Task"
+            aria-label="Rename Task" title={t("Rename Task", "เปลี่ยนชื่องาน")}
           >
             <Edit2 size={13} />
           </button>
@@ -352,7 +353,7 @@ function DraggableCard({
               onDelete(id);
             }}
             className="p-1 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 rounded transition-colors"
-            aria-label="Delete Task" title="Delete Task"
+            aria-label="Delete Task" title={t("Delete Task", "ลบงาน")}
           >
             <Trash2 size={13} />
           </button>
@@ -364,7 +365,7 @@ function DraggableCard({
           {assignee && (
             <span className="task-assignee" title={assignee.name}>
               {assignee.avatarUrl ? <img src={assignee.avatarUrl} alt="" /> : <span aria-hidden="true">{(assignee.name[0] || "?").toUpperCase()}</span>}
-              {assignee.name === "Assigned" ? "Assigned" : (assignee.name.split(" ")[0] || assignee.name)}
+              {assignee.name === "Assigned" ? t("Assigned", "มอบหมายแล้ว") : (assignee.name.split(" ")[0] || assignee.name)}
             </span>
           )}
           {dueBadge && (
@@ -423,10 +424,10 @@ function DraggableCard({
               className={`p-1 rounded-md text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-opacity flex items-center gap-0.5 text-[10px] font-bold cursor-pointer ${
                 isTagPopoverOpen ? "opacity-100" : "opacity-0 group-hover:opacity-100"
               }`}
-              title="Add / Edit Tags"
+              title={t("Add / Edit Tags", "เพิ่ม / แก้ไขแท็ก")}
             >
               <Tag size={11} />
-              {cardTags.length === 0 && <span className="text-[10px]">+ Tag</span>}
+              {cardTags.length === 0 && <span className="text-[10px]">{t("+ Tag", "+ แท็ก")}</span>}
             </button>
 
             {isTagPopoverOpen && (
@@ -454,7 +455,7 @@ function DraggableCard({
                   className="absolute left-0 top-full mt-2 w-48 p-2.5 bg-white dark:bg-[#172033] border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl z-50 flex flex-col gap-1.5 text-xs animate-in fade-in zoom-in-95 duration-100 max-h-72 overflow-y-auto"
                 >
                   <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-1 pb-1 border-b border-slate-100 dark:border-slate-800">
-                    Select Tags
+                    {t("Select Tags", "เลือกแท็ก")}
                   </div>
 
                   {/* Preset Tags */}
@@ -503,12 +504,12 @@ function DraggableCard({
                   {/* Add Custom Tag Input Section */}
                   <div className="pt-1.5 border-t border-slate-100 dark:border-slate-800 flex flex-col gap-1">
                     <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-1">
-                      Custom Tag
+                      {t("Custom Tag", "แท็กกำหนดเอง")}
                     </div>
                     <div className="flex items-center gap-1">
                       <input
                         type="text"
-                        placeholder="New tag..."
+                        placeholder={t("New tag...", "ชื่อแท็กใหม่...")}
                         value={customTagInput}
                         onChange={(e) => setCustomTagInput(e.target.value)}
                         onKeyDown={(e) => {
@@ -560,11 +561,12 @@ function SwimlaneDropZone({
   isDragging?: boolean;
 }) {
   const { setNodeRef } = useDroppable({ id });
+  const { t } = useLanguage();
   return (
     <div ref={setNodeRef} className="min-h-[50px] flex flex-col gap-2.5">
       {children}
-      {isEmpty && isDragging && <div className="board-empty-drop" aria-hidden="true">Drop here</div>}
-      {isEmpty && !isDragging && <div className="board-empty-note" aria-hidden="true">No tasks yet</div>}
+      {isEmpty && isDragging && <div className="board-empty-drop" aria-hidden="true">{t("Drop here", "วางการ์ดที่นี่")}</div>}
+      {isEmpty && !isDragging && <div className="board-empty-note" aria-hidden="true">{t("No tasks yet", "ยังไม่มีงานในช่องนี้")}</div>}
     </div>
   );
 }
@@ -659,10 +661,15 @@ export function CardDetailModal({
     }
   });
   const [newItemText, setNewItemText] = useState("");
+  const [modalCustomTag, setModalCustomTag] = useState("");
   const [notes, setNotes] = useState<CardNote[]>([]);
   const [showEarlier, setShowEarlier] = useState(false);
   const [draft, setDraft] = useState("");
   const { t } = useLanguage();
+  const modalCardTags = useMemo(
+    () => (card.Tags ? String(card.Tags).split(",").map((s: string) => s.trim()).filter(Boolean) : []),
+    [card.Tags]
+  );
 
   const cardId = card.ID.toString();
 
@@ -985,6 +992,97 @@ export function CardDetailModal({
               )}
             </div>
 
+            {/* Tags & Custom Tag Editor */}
+            <div className="flex flex-col gap-2 pt-2 border-t border-slate-200/70 dark:border-slate-800">
+              <div className="flex items-center gap-1.5 text-xs font-bold text-slate-400 uppercase tracking-wider">
+                <Tag size={13} className="text-[#4f63ef] dark:text-[#a5b4fc]" />
+                <span>{t("Tags", "แท็ก")}</span>
+              </div>
+
+              <div className="flex flex-wrap gap-1.5">
+                {TAG_PRESETS.map((preset) => {
+                  const hasTag = modalCardTags.some((item) => item.toLowerCase() === preset.name.toLowerCase());
+                  return (
+                    <button
+                      key={preset.name}
+                      type="button"
+                      disabled={!canEdit}
+                      onClick={() => {
+                        const next = hasTag
+                          ? modalCardTags.filter((item) => item.toLowerCase() !== preset.name.toLowerCase())
+                          : [...modalCardTags, preset.name];
+                        saveDetail(cardId, { tags: next.join(",") });
+                      }}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-extrabold border transition-all flex items-center gap-1 ${preset.bg} ${preset.text} ${preset.border} ${
+                        hasTag ? "ring-2 ring-[#4f63ef] shadow-2xs" : "opacity-65 hover:opacity-100"
+                      } ${canEdit ? "cursor-pointer" : "cursor-default"}`}
+                    >
+                      <span>{preset.name}</span>
+                      {hasTag && <Check size={11} />}
+                    </button>
+                  );
+                })}
+                {modalCardTags
+                  .filter((tagItem) => !TAG_PRESETS.some((p) => p.name.toLowerCase() === tagItem.toLowerCase()))
+                  .map((customTag) => {
+                    const colorObj = getTagColor(customTag);
+                    return (
+                      <button
+                        key={customTag}
+                        type="button"
+                        disabled={!canEdit}
+                        onClick={() => {
+                          const next = modalCardTags.filter((item) => item.toLowerCase() !== customTag.toLowerCase());
+                          saveDetail(cardId, { tags: next.join(",") });
+                        }}
+                        className={`px-2.5 py-1 rounded-lg text-[11px] font-extrabold border transition-all flex items-center gap-1 ring-2 ring-[#4f63ef] shadow-2xs ${colorObj?.bg || ""} ${colorObj?.text || ""} ${colorObj?.border || ""} ${canEdit ? "cursor-pointer" : "cursor-default"}`}
+                      >
+                        <span>{customTag}</span>
+                        {canEdit && <X size={11} className="hover:text-rose-500" />}
+                      </button>
+                    );
+                  })}
+              </div>
+
+              {canEdit && (
+                <div className="flex items-center gap-1.5 mt-1">
+                  <input
+                    type="text"
+                    aria-label="New custom tag"
+                    placeholder={t("Add custom tag...", "พิมพ์แท็กกำหนดเอง...")}
+                    value={modalCustomTag}
+                    onChange={(e) => setModalCustomTag(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        const trimmed = modalCustomTag.trim().replace(/,/g, "");
+                        if (trimmed && !modalCardTags.some((item) => item.toLowerCase() === trimmed.toLowerCase())) {
+                          saveDetail(cardId, { tags: [...modalCardTags, trimmed].join(",") });
+                          setModalCustomTag("");
+                        }
+                      }
+                    }}
+                    className={`flex-1 px-2.5 py-1.5 rounded-xl border text-xs focus:outline-none focus:ring-2 focus:ring-[#4f63ef] ${
+                      theme === "dark" ? "bg-slate-900/80 border-slate-700 text-slate-100" : "bg-white border-slate-200 text-slate-800"
+                    }`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const trimmed = modalCustomTag.trim().replace(/,/g, "");
+                      if (trimmed && !modalCardTags.some((item) => item.toLowerCase() === trimmed.toLowerCase())) {
+                        saveDetail(cardId, { tags: [...modalCardTags, trimmed].join(",") });
+                        setModalCustomTag("");
+                      }
+                    }}
+                    className="px-3 py-1.5 bg-[#4f63ef] hover:bg-[#4051d6] text-white text-xs font-bold rounded-xl transition-all cursor-pointer"
+                  >
+                    {t("Add", "เพิ่ม")}
+                  </button>
+                </div>
+              )}
+            </div>
+
             <TaskPlanningFields card={card} cards={cards} boardType={boardType} canEdit={canEdit} onSave={changes => saveDetail(cardId, changes)} />
           </div>
         </div>
@@ -1082,8 +1180,21 @@ export default function Board() {
     setBoardView(view);
     try { localStorage.setItem(`co_board_view_v2_${boardId}`, view); } catch { /* Local preferences are optional. */ }
   };
+  const [isCommandOpen, setIsCommandOpen] = useState(false);
+  const [commandQuery, setCommandQuery] = useState("");
+  const commandInputRef = useRef<HTMLInputElement>(null);
+
   useEffect(() => {
     const handleShortcuts = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setIsCommandOpen((prev) => {
+          const next = !prev;
+          if (next) setCommandQuery("");
+          return next;
+        });
+        return;
+      }
       const element = event.target as HTMLElement | null;
       if (event.metaKey || event.ctrlKey || event.altKey || element?.closest("input, textarea, select, [contenteditable], [role=dialog]")) return;
       if (event.key === "/") {
@@ -1112,6 +1223,12 @@ export default function Board() {
     window.addEventListener("keydown", handleShortcuts);
     return () => window.removeEventListener("keydown", handleShortcuts);
   });
+
+  useEffect(() => {
+    if (isCommandOpen) {
+      window.setTimeout(() => commandInputRef.current?.focus(), 20);
+    }
+  }, [isCommandOpen]);
 
   const [isExporting, setIsExporting] = useState(false);
 
@@ -1163,6 +1280,81 @@ export default function Board() {
   const handleExportPDF = () => {
     window.print();
   };
+
+  const handleExportCSV = () => {
+    const escapeCell = (val: unknown) => {
+      const str = String(val ?? "").replace(/"/g, '""');
+      return `"${str}"`;
+    };
+    const headers = [
+      t("Task ID", "รหัสงาน"),
+      t("Title", "ชื่องาน"),
+      t("Column / Status", "คอลัมน์ / สถานะ"),
+      t("Group", "กลุ่มงาน"),
+      t("Assignee", "ผู้รับผิดชอบ"),
+      t("Start Date", "วันเริ่มต้น"),
+      t("Due Date", "วันครบกำหนด"),
+      t("Tags", "แท็ก"),
+      t("Checklist", "รายการย่อย"),
+      t("Description", "รายละเอียด"),
+    ];
+    const rows = cards.map((c) => {
+      const assigneeName = memberById.get(Number(c.AssigneeID || 0))?.name || "";
+      let checklistSummary = "";
+      if (c.Checklist) {
+        try {
+          const parsed = JSON.parse(c.Checklist);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            const done = parsed.filter((i: any) => i.done).length;
+            checklistSummary = `${done}/${parsed.length}`;
+          }
+        } catch {
+          checklistSummary = "";
+        }
+      }
+      return [
+        `TSK-${String(c.ID).padStart(3, "0")}`,
+        c.Title || "",
+        c.List || "",
+        c.Swimlane && c.Swimlane !== "Untitled" ? c.Swimlane : "",
+        assigneeName,
+        c.StartDate || "",
+        c.DueDate || "",
+        c.Tags || "",
+        checklistSummary,
+        c.Description || "",
+      ].map(escapeCell).join(",");
+    });
+    const csvContent = "\uFEFF" + [headers.map(escapeCell).join(","), ...rows].join("\r\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${(boardName || "board").replace(/[^a-z0-9ก-๙_-]/gi, "_").toLowerCase()}-tasks.csv`;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
+  const boardProgress = useMemo(() => {
+    const total = cards.length;
+    if (total === 0) return { total: 0, done: 0, percent: 0, overdue: 0 };
+    const lastCol = columns.length > 0 ? columns[columns.length - 1] : "Done";
+    const done = cards.filter((c) => {
+      const list = (c.List || "").trim();
+      return list === lastCol || /^(done|completed?|published|เสร็จ|เสร็จสิ้น)$/i.test(list);
+    }).length;
+    const overdue = cards.filter((c) => {
+      const list = (c.List || "").trim();
+      const isDone = list === lastCol || /^(done|completed?|published|เสร็จ|เสร็จสิ้น)$/i.test(list);
+      return !isDone && dueBucket(c.DueDate) === "overdue";
+    }).length;
+    return {
+      total,
+      done,
+      percent: Math.round((done / total) * 100),
+      overdue,
+    };
+  }, [cards, columns]);
 
   const filteredCards = cards.filter((c) => {
     const query = searchQuery.toLowerCase().trim();
@@ -1922,7 +2114,28 @@ export default function Board() {
         <div className="overview-copy">
           <div className="overview-title-row">
             <h2>{boardName}</h2>
-            <div className="overview-meta">{(boardView === "board" || boardView === "scrum") && swimlanes.length > 1 && <span><UserPlus size={14} /> {swimlanes.length} {t("groups", "กลุ่มงาน")}</span>}<span className="overview-access">{isOwner ? t("Full access", "เจ้าของบอร์ด") : canEdit ? t("Can edit", "แก้ไขได้") : t("View only", "ดูอย่างเดียว")}</span><span><strong>{cards.length}</strong> {t(cards.length === 1 ? "task" : "tasks", "งาน")}</span></div>
+            <div className="overview-meta">
+              {(boardView === "board" || boardView === "scrum") && swimlanes.length > 1 && <span><UserPlus size={14} /> {swimlanes.length} {t("groups", "กลุ่มงาน")}</span>}
+              <span className="overview-access">{isOwner ? t("Full access", "เจ้าของบอร์ด") : canEdit ? t("Can edit", "แก้ไขได้") : t("View only", "ดูอย่างเดียว")}</span>
+              <span><strong>{cards.length}</strong> {t(cards.length === 1 ? "task" : "tasks", "งาน")}</span>
+              {boardProgress.total > 0 && (
+                <span className="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20" title={t("Completed tasks on this board", "สัดส่วนงานที่เสร็จสมบูรณ์ในบอร์ดนี้")}>
+                  <span>{boardProgress.done}/{boardProgress.total} {t("done", "เสร็จแล้ว")} ({boardProgress.percent}%)</span>
+                  <span className="w-14 h-1.5 rounded-full bg-emerald-950/15 dark:bg-emerald-950/60 overflow-hidden inline-flex">
+                    <span className="h-full bg-emerald-500 transition-all duration-300 rounded-full" style={{ width: `${boardProgress.percent}%` }} />
+                  </span>
+                </span>
+              )}
+              {boardProgress.overdue > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedDueFilter(selectedDueFilter === "overdue" ? "all" : "overdue")}
+                  className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-500/10 text-rose-600 dark:text-rose-300 border border-rose-500/20 cursor-pointer hover:bg-rose-500/20 transition-colors"
+                >
+                  <Clock size={12} /> {boardProgress.overdue} {t("overdue", "เลยกำหนด")}
+                </button>
+              )}
+            </div>
           </div>
           <div className="board-view-switch" role="group" aria-label="Board view">
             <button aria-pressed={boardView === "board"} title={t("Drag cards between columns", "ลากการ์ดย้ายระหว่างคอลัมน์")} onClick={() => chooseBoardView("board")}><LayoutDashboard size={15} /> {t("Board", "บอร์ด")}</button>
@@ -2030,56 +2243,75 @@ export default function Board() {
           </div>
         </div>
 
-        <div className="relative" ref={moreMenuRef}>
+        <div className="flex items-center gap-2">
           <button
             type="button"
-            aria-expanded={moreOpen}
-            aria-haspopup="menu"
-            onClick={() => setMoreOpen((open) => !open)}
+            onClick={() => { setCommandQuery(""); setIsCommandOpen(true); }}
+            title={t("Quick Command & Jump to Task (Ctrl+K / Cmd+K)", "ค้นหาด่วนและคำสั่งลัด (Ctrl+K / Cmd+K)")}
             className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all border flex items-center gap-1.5 cursor-pointer ${
               theme === "dark"
                 ? "bg-[#172033] hover:bg-[#334155] text-slate-200 border-[#334155]"
                 : "bg-white hover:bg-slate-100 text-slate-700 border-slate-200 shadow-2xs"
             }`}
           >
-            <MoreHorizontal size={16} />
-            <span>{t("More", "เพิ่มเติม")}</span>
+            <Command size={14} className="text-[#4f63ef] dark:text-[#a5b4fc]" />
+            <span className="hidden sm:inline">{t("Commands", "คำสั่งด่วน")}</span>
+            <kbd className={`px-1.5 py-0.5 text-[10px] rounded border ${theme === "dark" ? "bg-slate-900 border-slate-700 text-slate-400" : "bg-slate-100 border-slate-200 text-slate-500"}`}>⌘K</kbd>
           </button>
-          {moreOpen && (
-            <div role="menu" className={`board-more-menu absolute right-0 mt-2 w-72 rounded-2xl border shadow-xl p-3 z-50 ${theme === "dark" ? "bg-[#172033] border-[#334155] text-slate-100" : "bg-white border-slate-200 text-slate-800"}`}>
-              <p className="board-more-label">{t("Background", "พื้นหลังบอร์ด")}</p>
-              <div className="flex flex-col gap-1 mb-3">
-                {Object.entries(BOARD_BACKGROUND_PRESETS).map(([bgKey, bgItem]) => (
-                  <button
-                    key={bgKey}
-                    type="button"
-                    role="menuitem"
-                    onClick={() => { updateBoardBackground(bgKey); setMoreOpen(false); }}
-                    className={`flex items-center gap-2.5 w-full px-2.5 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                      boardBackground === bgKey
-                        ? "bg-[#4f63ef]/10 text-[#4f63ef] dark:text-[#a5b4fc]"
-                        : "hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300"
-                    }`}
-                  >
-                    <span className={`w-4 h-4 rounded-full bg-gradient-to-tr ${bgItem.previewBg} border border-white/20`} />
-                    <span>{bgItem.name}</span>
-                    {boardBackground === bgKey && <Check size={12} className="ml-auto" />}
-                  </button>
-                ))}
+
+          <div className="relative" ref={moreMenuRef}>
+            <button
+              type="button"
+              aria-expanded={moreOpen}
+              aria-haspopup="menu"
+              onClick={() => setMoreOpen((open) => !open)}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all border flex items-center gap-1.5 cursor-pointer ${
+                theme === "dark"
+                  ? "bg-[#172033] hover:bg-[#334155] text-slate-200 border-[#334155]"
+                  : "bg-white hover:bg-slate-100 text-slate-700 border-slate-200 shadow-2xs"
+              }`}
+            >
+              <MoreHorizontal size={16} />
+              <span>{t("More", "เพิ่มเติม")}</span>
+            </button>
+            {moreOpen && (
+              <div role="menu" className={`board-more-menu absolute right-0 mt-2 w-72 rounded-2xl border shadow-xl p-3 z-50 ${theme === "dark" ? "bg-[#172033] border-[#334155] text-slate-100" : "bg-white border-slate-200 text-slate-800"}`}>
+                <p className="board-more-label">{t("Background", "พื้นหลังบอร์ด")}</p>
+                <div className="flex flex-col gap-1 mb-3">
+                  {Object.entries(BOARD_BACKGROUND_PRESETS).map(([bgKey, bgItem]) => (
+                    <button
+                      key={bgKey}
+                      type="button"
+                      role="menuitem"
+                      onClick={() => { updateBoardBackground(bgKey); setMoreOpen(false); }}
+                      className={`flex items-center gap-2.5 w-full px-2.5 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                        boardBackground === bgKey
+                          ? "bg-[#4f63ef]/10 text-[#4f63ef] dark:text-[#a5b4fc]"
+                          : "hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300"
+                      }`}
+                    >
+                      <span className={`w-4 h-4 rounded-full bg-gradient-to-tr ${bgItem.previewBg} border border-white/20`} />
+                      <span>{bgItem.name}</span>
+                      {boardBackground === bgKey && <Check size={12} className="ml-auto" />}
+                    </button>
+                  ))}
+                </div>
+                <p className="board-more-label">{t("Save a copy", "ส่งออกบอร์ด")}</p>
+                <button type="button" role="menuitem" disabled={isExporting} onClick={() => { setMoreOpen(false); handleExportPNG(); }} className="board-more-action"><Image size={15} /> {isExporting ? t("Saving…", "กำลังบันทึกภาพ…") : t("Save as image", "บันทึกเป็นรูปภาพ (PNG)")}</button>
+                <button type="button" role="menuitem" onClick={() => { setMoreOpen(false); handleExportCSV(); }} className="board-more-action"><Download size={15} /> {t("Export as CSV (Excel)", "ส่งออกเป็นไฟล์ CSV (Excel)")}</button>
+                <button type="button" role="menuitem" onClick={() => { setMoreOpen(false); handleExportPDF(); }} className="board-more-action"><FileText size={15} /> {t("Print this board", "พิมพ์หรือบันทึกเป็น PDF")}</button>
+                <p className="board-more-label">{t("Handy keys", "คีย์ลัดแป้นพิมพ์")}</p>
+                <div className="board-more-keys">
+                  <span>{t("Command palette", "หน้าต่างคำสั่งด่วน")} <kbd>⌘K</kbd></span>
+                  <span>{t("New task", "สร้างงานใหม่")} <kbd>N</kbd></span>
+                  <span>{t("Find a task", "ค้นหางาน")} <kbd>/</kbd></span>
+                  <span>{t("My tasks filter", "กรองเฉพาะงานของฉัน")} <kbd>M</kbd></span>
+                  <span>{t("Switch views", "สลับมุมมองบอร์ด")} <kbd>1–6</kbd></span>
+                  <span>{t("Close or cancel", "ปิดหน้าต่าง / ยกเลิก")} <kbd>Esc</kbd></span>
+                </div>
               </div>
-              <p className="board-more-label">{t("Save a copy", "ส่งออกบอร์ด")}</p>
-              <button type="button" role="menuitem" disabled={isExporting} onClick={() => { setMoreOpen(false); handleExportPNG(); }} className="board-more-action"><Image size={15} /> {isExporting ? t("Saving…", "กำลังบันทึกภาพ…") : t("Save as image", "บันทึกเป็นรูปภาพ (PNG)")}</button>
-              <button type="button" role="menuitem" onClick={() => { setMoreOpen(false); handleExportPDF(); }} className="board-more-action"><FileText size={15} /> {t("Print this board", "พิมพ์หรือบันทึกเป็น PDF")}</button>
-              <p className="board-more-label">{t("Handy keys", "คีย์ลัดแป้นพิมพ์")}</p>
-              <div className="board-more-keys">
-                <span>{t("New task", "สร้างงานใหม่")} <kbd>N</kbd></span>
-                <span>{t("Find a task", "ค้นหางาน")} <kbd>/</kbd></span>
-                <span>{t("My tasks filter", "กรองเฉพาะงานของฉัน")} <kbd>M</kbd></span>
-                <span>{t("Switch views", "สลับมุมมองบอร์ด")} <kbd>1–6</kbd></span>
-                <span>{t("Close or cancel", "ปิดหน้าต่าง / ยกเลิก")} <kbd>Esc</kbd></span>
-              </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </div>
 
@@ -2828,6 +3060,234 @@ export default function Board() {
           </div>
         </div>
       )}
+
+      {/* Command Palette Modal (Ctrl+K / Cmd+K) */}
+      {isCommandOpen && (() => {
+        const q = commandQuery.toLowerCase().trim();
+        const matchingCards = cards
+          .filter((c) => !q || `${c.Title} ${c.Description || ""} ${c.Tags || ""} TSK-${String(c.ID).padStart(3, "0")}`.toLowerCase().includes(q))
+          .slice(0, 6);
+
+        const quickCommands = [
+          ...(canEdit && columns.length > 0 && status === "connected"
+            ? [{
+                id: "new-task",
+                label: t("Create new task", "สร้างงานใหม่"),
+                kbd: "N",
+                icon: Plus,
+                run: () => { setIsCommandOpen(false); openQuickAdd(); },
+              }]
+            : []),
+          {
+            id: "view-board",
+            label: t("Switch to Board view", "สลับไปมุมมองบอร์ด (Kanban)"),
+            kbd: "1",
+            icon: LayoutDashboard,
+            run: () => { setIsCommandOpen(false); chooseBoardView("board"); },
+          },
+          {
+            id: "view-list",
+            label: t("Switch to List view", "สลับไปมุมมองรายการ (List)"),
+            kbd: "2",
+            icon: FileText,
+            run: () => { setIsCommandOpen(false); chooseBoardView("list"); },
+          },
+          {
+            id: "view-calendar",
+            label: t("Switch to Calendar view", "สลับไปมุมมองปฏิทิน (Calendar)"),
+            kbd: "3",
+            icon: Calendar,
+            run: () => { setIsCommandOpen(false); chooseBoardView("calendar"); },
+          },
+          {
+            id: "view-timeline",
+            label: t("Switch to Timeline view", "สลับไปมุมมองไทม์ไลน์ (Timeline)"),
+            kbd: "4",
+            icon: GanttChart,
+            run: () => { setIsCommandOpen(false); chooseBoardView("timeline"); },
+          },
+          {
+            id: "view-mindmap",
+            label: t("Switch to Mind map view", "สลับไปมุมมองแผนผังความคิด (Mind map)"),
+            kbd: "5",
+            icon: Network,
+            run: () => { setIsCommandOpen(false); chooseBoardView("mindmap"); },
+          },
+          {
+            id: "view-due",
+            label: t("Switch to Due dates view", "สลับไปมุมมองกำหนดส่ง (Due)"),
+            kbd: "6",
+            icon: Clock,
+            run: () => { setIsCommandOpen(false); chooseBoardView("due"); },
+          },
+          ...(user
+            ? [{
+                id: "toggle-mine",
+                label: mineOnly ? t("Show all team tasks", "แสดงงานของทุกคนในทีม") : t("Filter only my tasks", "กรองเฉพาะงานที่มอบหมายให้ฉัน"),
+                kbd: "M",
+                icon: CheckSquare,
+                run: () => { setIsCommandOpen(false); setMineOnly((cur) => !cur); },
+              }]
+            : []),
+          {
+            id: "export-csv",
+            label: t("Export board to CSV (Excel)", "ส่งออกงานในบอร์ดเป็นไฟล์ CSV (Excel)"),
+            kbd: "CSV",
+            icon: Download,
+            run: () => { setIsCommandOpen(false); handleExportCSV(); },
+          },
+          {
+            id: "toggle-theme",
+            label: theme === "dark" ? t("Switch to Light mode", "เปลี่ยนเป็นโหมดสว่าง (Light)") : t("Switch to Dark mode", "เปลี่ยนเป็นโหมดมืด (Dark)"),
+            kbd: "",
+            icon: theme === "dark" ? Sun : Moon,
+            run: () => { setIsCommandOpen(false); toggleTheme(); },
+          },
+          {
+            id: "toggle-lang",
+            label: lang === "th" ? "Switch language to English (EN)" : "เปลี่ยนภาษาเป็นภาษาไทย (TH)",
+            kbd: lang === "th" ? "EN" : "TH",
+            icon: Globe,
+            run: () => { setIsCommandOpen(false); setLang(lang === "th" ? "en" : "th"); },
+          },
+          {
+            id: "go-dashboard",
+            label: t("Back to all boards (Dashboard)", "กลับไปหน้าแดชบอร์ดรวมบอร์ดทั้งหมด"),
+            kbd: "",
+            icon: ArrowLeft,
+            run: () => { setIsCommandOpen(false); navigate("/"); },
+          },
+        ].filter((cmd) => !q || cmd.label.toLowerCase().includes(q));
+
+        return (
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={t("Command Palette", "หน้าต่างคำสั่งด่วน")}
+            className="fixed inset-0 z-[120] bg-slate-950/60 backdrop-blur-sm flex items-start justify-center pt-[12vh] p-4 animate-in fade-in duration-100"
+            onClick={() => setIsCommandOpen(false)}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") {
+                  e.stopPropagation();
+                  setIsCommandOpen(false);
+                } else if (e.key === "Enter") {
+                  if (matchingCards.length > 0 && q) {
+                    e.preventDefault();
+                    setIsCommandOpen(false);
+                    handleOpenCardDetail(matchingCards[0]);
+                  } else if (quickCommands.length > 0) {
+                    e.preventDefault();
+                    quickCommands[0].run();
+                  }
+                }
+              }}
+              className={`w-full max-w-xl rounded-2xl border shadow-2xl overflow-hidden flex flex-col max-h-[75vh] ${
+                theme === "dark" ? "bg-[#172033] border-[#334155] text-slate-100" : "bg-white border-slate-200 text-slate-800"
+              }`}
+            >
+              <div className="flex items-center gap-3 px-4 py-3.5 border-b border-slate-100 dark:border-slate-800">
+                <Search size={16} className="text-[#4f63ef] dark:text-[#a5b4fc] flex-shrink-0" />
+                <input
+                  ref={commandInputRef}
+                  type="text"
+                  value={commandQuery}
+                  onChange={(e) => setCommandQuery(e.target.value)}
+                  placeholder={t("Type a command or search tasks (e.g. TSK-001)...", "พิมพ์คำสั่ง หรือค้นหาชื่องาน / รหัสงาน...")}
+                  className="w-full bg-transparent text-sm font-medium focus:outline-none placeholder:text-slate-400"
+                />
+                <button
+                  type="button"
+                  onClick={() => setIsCommandOpen(false)}
+                  className="px-2 py-0.5 text-[11px] font-bold rounded-md border border-slate-200 dark:border-slate-700 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                >
+                  Esc
+                </button>
+              </div>
+
+              <div className="overflow-y-auto p-3 space-y-4">
+                {matchingCards.length > 0 && (
+                  <div>
+                    <div className="px-2.5 pb-1.5 text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
+                      {t("Jump to task", "เปิดดูงานในบอร์ด")} ({matchingCards.length})
+                    </div>
+                    <div className="space-y-1">
+                      {matchingCards.map((c) => (
+                        <button
+                          key={c.ID}
+                          type="button"
+                          onClick={() => {
+                            setIsCommandOpen(false);
+                            handleOpenCardDetail(c);
+                          }}
+                          className={`w-full px-3 py-2 rounded-xl text-left text-xs flex items-center justify-between gap-3 transition-colors cursor-pointer ${
+                            theme === "dark" ? "hover:bg-slate-800/80 text-slate-200" : "hover:bg-slate-100 text-slate-800"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <span className="text-[10px] font-extrabold uppercase tracking-wider text-[#4f63ef] dark:text-[#a5b4fc] flex-shrink-0">
+                              TSK-{String(c.ID).padStart(3, "0")}
+                            </span>
+                            <span className="font-semibold truncate">{c.Title}</span>
+                          </div>
+                          <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold flex-shrink-0 ${
+                            theme === "dark" ? "bg-slate-800 text-slate-300" : "bg-slate-100 text-slate-600"
+                          }`}>
+                            {c.List}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {quickCommands.length > 0 && (
+                  <div>
+                    <div className="px-2.5 pb-1.5 text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
+                      {t("Quick actions", "คำสั่งด่วน")}
+                    </div>
+                    <div className="space-y-1">
+                      {quickCommands.map((cmd) => {
+                        const IconComp = cmd.icon;
+                        return (
+                          <button
+                            key={cmd.id}
+                            type="button"
+                            onClick={cmd.run}
+                            className={`w-full px-3 py-2 rounded-xl text-left text-xs flex items-center justify-between gap-3 transition-colors cursor-pointer ${
+                              theme === "dark" ? "hover:bg-slate-800/80 text-slate-200" : "hover:bg-slate-100 text-slate-800"
+                            }`}
+                          >
+                            <span className="flex items-center gap-2.5 font-semibold">
+                              <IconComp size={14} className="text-[#4f63ef] dark:text-[#a5b4fc]" />
+                              {cmd.label}
+                            </span>
+                            {cmd.kbd && (
+                              <kbd className={`px-1.5 py-0.5 text-[10px] font-bold rounded border ${
+                                theme === "dark" ? "bg-slate-900 border-slate-700 text-slate-400" : "bg-slate-50 border-slate-200 text-slate-500"
+                              }`}>
+                                {cmd.kbd}
+                              </kbd>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {matchingCards.length === 0 && quickCommands.length === 0 && (
+                  <div className="py-8 text-center text-xs text-slate-400">
+                    {t("No matching tasks or commands found.", "ไม่พบงานหรือคำสั่งที่ค้นหา")}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

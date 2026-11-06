@@ -556,11 +556,21 @@ func main() {
 	r.POST("/api/boards", authMiddleware, func(c *gin.Context) {
 		userID := c.MustGet("userID").(uint)
 		var req struct {
-			Name     string `json:"name"`
-			Template string `json:"template"`
+			Name          string `json:"name"`
+			Template      string `json:"template"`
+			SourceBoardID string `json:"sourceBoardId"`
 		}
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(400, gin.H{"error": "Invalid payload"})
+			return
+		}
+		if req.SourceBoardID != "" {
+			board, err := duplicateBoard(db, userID, req.SourceBoardID, strings.TrimSpace(req.Name))
+			if err != nil {
+				c.JSON(500, gin.H{"error": "Could not duplicate board"})
+				return
+			}
+			c.JSON(200, board)
 			return
 		}
 		if !isValidBoardTemplate(req.Template) {

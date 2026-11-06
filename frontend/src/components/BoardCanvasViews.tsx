@@ -91,7 +91,7 @@ function MindMapView({ cards, allCards = cards, totalCards, boardName, canEdit, 
   const graph = useMemo(() => buildMindMap(contextCards), [contextCards]);
   const visibleIds = new Set(cards.map(card => card.ID));
   const byId = new Map(graph.nodes.map(node => [String(node.card.ID), node]));
-  return <><div className="format-toolbar"><div><GitBranch size={18} /><h2>Mind map</h2></div><button type="button" className="format-primary" disabled={!canEdit || !connected} onClick={() => onCreate()}><Plus size={14} /> Add idea</button></div><p className="format-hint">Build ideas from the board root. Click a node to open its details or add a child to extend a branch.</p><div className="format-mindmap-scroll"><div className="format-mindmap" style={{ width: graph.width, height: graph.height }}><svg className="format-mindmap-lines" aria-hidden="true" width={graph.width} height={graph.height}>{graph.nodes.map(node => {
+  return <><div className="format-toolbar"><div><GitBranch size={18} /><h2>Mind map</h2></div><p className="format-hint format-hint-inline">Click a node to open details, or click + to add a branch.</p></div><div className="format-mindmap-scroll"><div className="format-mindmap" style={{ width: graph.width, height: graph.height }}><svg className="format-mindmap-lines" aria-hidden="true" width={graph.width} height={graph.height}>{graph.nodes.map(node => {
     const parent = node.parentId ? byId.get(node.parentId) : null;
     const fromX = parent ? parent.x + 216 : 240;
     const fromY = parent ? parent.y : graph.rootY;

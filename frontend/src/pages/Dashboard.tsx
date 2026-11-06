@@ -934,17 +934,17 @@ export default function Dashboard() {
                       </div>
 
                       {/* Action buttons overlay */}
-                      <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity z-20">
+                      <div className={`absolute top-2 right-2 flex items-center gap-1 transition-opacity z-20 ${isStarred ? "opacity-100" : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"}`}>
                         <button
                           onClick={(e) => toggleStar(e, board.ID)}
                           className={`p-1.5 rounded-lg transition-colors border shadow-xs ${theme === "dark" ? "bg-[#0f172a]/90 border-[#334155]" : "bg-white/90 border-slate-200"
-                            } ${isStarred ? "text-[#4f63ef] dark:text-[#a5b4fc]" : "text-slate-400 hover:text-[#4f63ef] dark:hover:text-[#a5b4fc]"}`}
+                            } ${isStarred ? "text-amber-500 dark:text-amber-400" : "text-slate-400 hover:text-[#4f63ef] dark:hover:text-[#a5b4fc]"}`}
                           title="Star Board"
                         >
                           <Star size={13} fill={isStarred ? "currentColor" : "none"} />
                         </button>
                         {board.IsOwner && (
-                          <>
+                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
                             <button
                               onClick={(e) => openRenameModal(e, board.ID, board.Name)}
                               className={`p-1.5 rounded-lg transition-colors border shadow-xs ${theme === "dark" ? "bg-[#0f172a]/90 border-[#334155] text-slate-400 hover:text-[#a5b4fc]" : "bg-white/90 border-slate-200 text-slate-500 hover:text-[#4051d6]"
@@ -961,7 +961,7 @@ export default function Dashboard() {
                             >
                               <Trash2 size={13} />
                             </button>
-                          </>
+                          </div>
                         )}
                       </div>
                     </div>

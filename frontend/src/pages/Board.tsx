@@ -237,7 +237,7 @@ function DraggableCard({
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
-    opacity: isDragging ? 0.3 : 1,
+    opacity: isDragging ? 0.45 : 1,
     zIndex: isDragging ? 50 : isTagPopoverOpen ? 30 : 1,
   };
 
@@ -309,7 +309,7 @@ function DraggableCard({
           onOpenDetail(cardData);
         }
       }}
-      className={`board-task-card bg-white dark:bg-[#172033] border ${colStyle.cardBorder} p-4 rounded-2xl ${isTagPopoverOpen ? "cursor-default" : "cursor-pointer"} group transition-all duration-150 w-full max-w-full flex flex-col gap-2.5 shadow-xs hover:shadow-md relative`}
+      className={`board-task-card ${isDragging ? "is-dragging" : ""} bg-white dark:bg-[#172033] border ${colStyle.cardBorder} p-4 rounded-2xl ${isTagPopoverOpen ? "cursor-default" : "cursor-pointer"} group transition-all duration-150 w-full max-w-full flex flex-col gap-2.5 shadow-xs hover:shadow-md relative`}
     >
       <div className="task-eyebrow"><span>TSK-{String(id).padStart(3, "0")}</span><span className="task-status-dot" style={{ background: ["#94a3b8", "#6366f1", "#10b981"][columnIndex % 3] }} /></div>
       <button type="button" aria-label={`Open task: ${title}`} onPointerDown={e => e.stopPropagation()} onKeyDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); onOpenDetail?.(cardData); }} className={`task-title-button text-left text-sm font-semibold text-slate-800 dark:text-slate-100 w-full min-w-0 [overflow-wrap:anywhere] [word-break:break-word] whitespace-pre-wrap leading-relaxed ${canEdit ? "pr-6" : ""}`}>
@@ -1835,49 +1835,47 @@ export default function Board() {
       )}
       <section id="board-overview" className="board-overview" aria-label="Board overview">
         <div className="overview-copy">
-
-          <h2>{boardName}</h2>
-
-          <div className="overview-meta">{(boardView === "board" || boardView === "scrum") && swimlanes.length > 1 && <span><UserPlus size={14} /> {swimlanes.length} groups</span>}<span className="overview-access">{isOwner ? "Full access" : canEdit ? "Can edit" : "View only"}</span><span><strong>{cards.length}</strong> {cards.length === 1 ? "task on this board" : "tasks on this board"}</span></div>
+          <div className="overview-title-row">
+            <h2>{boardName}</h2>
+            <div className="overview-meta">{(boardView === "board" || boardView === "scrum") && swimlanes.length > 1 && <span><UserPlus size={14} /> {swimlanes.length} groups</span>}<span className="overview-access">{isOwner ? "Full access" : canEdit ? "Can edit" : "View only"}</span><span><strong>{cards.length}</strong> {cards.length === 1 ? "task" : "tasks"}</span></div>
+          </div>
+          <div className="board-view-switch" role="group" aria-label="Board view">
+            <button aria-pressed={boardView === "board"} title="Drag cards between columns" onClick={() => chooseBoardView("board")}><LayoutDashboard size={15} /> Board</button>
+            <button aria-pressed={boardView === "list"} title="Every task in a list" onClick={() => chooseBoardView("list")}><FileText size={15} /> List</button>
+            <div className="board-view-extra">
+              <button aria-pressed={boardView === "calendar"} title="Tasks on their due dates" onClick={() => chooseBoardView("calendar")}><Calendar size={15} /> Calendar</button>
+              <button aria-pressed={boardView === "timeline"} title="Tasks across a date range" onClick={() => chooseBoardView("timeline")}><GanttChart size={15} /> Timeline</button>
+              <button aria-pressed={boardView === "mindmap"} title="Ideas connected as branches" onClick={() => chooseBoardView("mindmap")}><Network size={15} /> Mind map</button>
+              {boardType === "sprint" && <button aria-pressed={boardView === "scrum"} title="Backlog and the current sprint" onClick={() => chooseBoardView("scrum")}><Timer size={15} /> Sprint</button>}
+              <button aria-pressed={boardView === "due"} title="What is overdue, due today, or later" onClick={() => chooseBoardView("due")}><Clock size={15} /> Due</button>
+            </div>
+            <div className="board-view-more-wrap" ref={viewsMenuRef}>
+              <button
+                type="button"
+                className="board-view-more"
+                aria-expanded={viewsOpen}
+                aria-haspopup="menu"
+                aria-pressed={boardView !== "board" && boardView !== "list"}
+                onClick={() => setViewsOpen((open) => !open)}
+              >
+                {boardView === "calendar" ? "Calendar" : boardView === "timeline" ? "Timeline" : boardView === "mindmap" ? "Mind map" : boardView === "scrum" ? "Sprint" : boardView === "due" ? "Due" : "Views"}
+              </button>
+              {viewsOpen && (
+                <div className="board-view-menu" role="menu">
+                  <button type="button" role="menuitem" aria-pressed={boardView === "calendar"} onClick={() => { chooseBoardView("calendar"); setViewsOpen(false); }}><Calendar size={15} /> Calendar</button>
+                  <button type="button" role="menuitem" aria-pressed={boardView === "timeline"} onClick={() => { chooseBoardView("timeline"); setViewsOpen(false); }}><GanttChart size={15} /> Timeline</button>
+                  <button type="button" role="menuitem" aria-pressed={boardView === "mindmap"} onClick={() => { chooseBoardView("mindmap"); setViewsOpen(false); }}><Network size={15} /> Mind map</button>
+                  {boardType === "sprint" && <button type="button" role="menuitem" aria-pressed={boardView === "scrum"} onClick={() => { chooseBoardView("scrum"); setViewsOpen(false); }}><Timer size={15} /> Sprint</button>}
+                  <button type="button" role="menuitem" aria-pressed={boardView === "due"} onClick={() => { chooseBoardView("due"); setViewsOpen(false); }}><Clock size={15} /> Due</button>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
         <div className="overview-action">
           {canEdit && columns.length > 0 && <button className="new-task-button" disabled={status !== "connected"} onClick={openQuickAdd}><Plus size={17} /> {boardView === "mindmap" ? "New idea" : "New task"}</button>}
         </div>
       </section>
-      <div className="board-view-tabs">
-        <div className="board-view-switch" role="group" aria-label="Board view">
-          <button aria-pressed={boardView === "board"} title="Drag cards between columns" onClick={() => chooseBoardView("board")}><LayoutDashboard size={15} /> Board</button>
-          <button aria-pressed={boardView === "list"} title="Every task in a list" onClick={() => chooseBoardView("list")}><FileText size={15} /> List</button>
-          <div className="board-view-extra">
-            <button aria-pressed={boardView === "calendar"} title="Tasks on their due dates" onClick={() => chooseBoardView("calendar")}><Calendar size={15} /> Calendar</button>
-            <button aria-pressed={boardView === "timeline"} title="Tasks across a date range" onClick={() => chooseBoardView("timeline")}><GanttChart size={15} /> Timeline</button>
-            <button aria-pressed={boardView === "mindmap"} title="Ideas connected as branches" onClick={() => chooseBoardView("mindmap")}><Network size={15} /> Mind map</button>
-            {boardType === "sprint" && <button aria-pressed={boardView === "scrum"} title="Backlog and the current sprint" onClick={() => chooseBoardView("scrum")}><Timer size={15} /> Sprint</button>}
-            <button aria-pressed={boardView === "due"} title="What is overdue, due today, or later" onClick={() => chooseBoardView("due")}><Clock size={15} /> Due</button>
-          </div>
-          <div className="board-view-more-wrap" ref={viewsMenuRef}>
-            <button
-              type="button"
-              className="board-view-more"
-              aria-expanded={viewsOpen}
-              aria-haspopup="menu"
-              aria-pressed={boardView !== "board" && boardView !== "list"}
-              onClick={() => setViewsOpen((open) => !open)}
-            >
-              {boardView === "calendar" ? "Calendar" : boardView === "timeline" ? "Timeline" : boardView === "mindmap" ? "Mind map" : boardView === "scrum" ? "Sprint" : boardView === "due" ? "Due" : "Views"}
-            </button>
-            {viewsOpen && (
-              <div className="board-view-menu" role="menu">
-                <button type="button" role="menuitem" aria-pressed={boardView === "calendar"} onClick={() => { chooseBoardView("calendar"); setViewsOpen(false); }}><Calendar size={15} /> Calendar</button>
-                <button type="button" role="menuitem" aria-pressed={boardView === "timeline"} onClick={() => { chooseBoardView("timeline"); setViewsOpen(false); }}><GanttChart size={15} /> Timeline</button>
-                <button type="button" role="menuitem" aria-pressed={boardView === "mindmap"} onClick={() => { chooseBoardView("mindmap"); setViewsOpen(false); }}><Network size={15} /> Mind map</button>
-                {boardType === "sprint" && <button type="button" role="menuitem" aria-pressed={boardView === "scrum"} onClick={() => { chooseBoardView("scrum"); setViewsOpen(false); }}><Timer size={15} /> Sprint</button>}
-                <button type="button" role="menuitem" aria-pressed={boardView === "due"} onClick={() => { chooseBoardView("due"); setViewsOpen(false); }}><Clock size={15} /> Due</button>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
       {/* Search stays in view. Background, export, and shortcuts live in More. */}
       <div className={`board-toolbar px-6 py-2.5 border-b flex flex-wrap items-center justify-between gap-3 ${
         theme === "dark" ? "bg-[#0f172a]/80 border-[#334155]" : "bg-slate-50 border-slate-200"
@@ -2176,7 +2174,7 @@ export default function Board() {
 
                   {/* Swimlane Columns Grid */}
                   {!isCollapsed && (
-                    <div className="flex gap-6 items-stretch w-full">
+                    <div className="flex gap-6 items-start w-full">
                       {columns.map((col, colIdx) => {
                         const rowSwim = swim || "Untitled";
                         const swimCards = filteredCards

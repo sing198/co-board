@@ -254,8 +254,19 @@ func clearDeletedCardReferences(tx *gorm.DB, boardID string, deleted map[uint]bo
 }
 
 func addCardWithMetadata(db *gorm.DB, boardID string, msg WsMessage) (Card, error) {
-	card := Card{Title: msg.Title, List: msg.ToList, Swimlane: msg.Swimlane, BoardID: boardID,
-		Position: msg.Position, Tags: msg.Tags, DueDate: msg.DueDate, StartDate: msg.StartDate, ParentID: msg.ParentID}
+	card := Card{
+		Title:       msg.Title,
+		Description: msg.Description,
+		Checklist:   msg.Checklist,
+		List:        msg.ToList,
+		Swimlane:    msg.Swimlane,
+		BoardID:     boardID,
+		Position:    msg.Position,
+		Tags:        msg.Tags,
+		DueDate:     msg.DueDate,
+		StartDate:   msg.StartDate,
+		ParentID:    msg.ParentID,
+	}
 	err := db.Transaction(func(tx *gorm.DB) error {
 		if err := validateCardMetadata(tx, &card); err != nil {
 			return err

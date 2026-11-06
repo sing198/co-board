@@ -526,7 +526,7 @@ export function useWebSocket(boardId: string, token: string | null) {
     );
   }, [sendWsMsg]);
 
-  const addCard = useCallback((title: string, list: string, position?: number, swimlane?: string, details?: { dueDate?: string; startDate?: string; parentId?: string }) => {
+  const addCard = useCallback((title: string, list: string, position?: number, swimlane?: string, details?: { dueDate?: string; startDate?: string; parentId?: string; tags?: string; description?: string; checklist?: string }) => {
     return sendWsMsg({ type: "ADD_CARD", title, toList: list, position, swimlane: swimlane || "Untitled", ...details });
   }, [sendWsMsg]);
 

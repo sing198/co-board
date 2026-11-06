@@ -18,7 +18,7 @@ import {
   arrayMove
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Plus, Link as LinkIcon, Edit2, Trash2, LogOut, AlertCircle, Wifi, WifiOff, X, ChevronDown, ChevronRight, Sun, Moon, UserPlus, Globe, Bell, Check, Search, Tag, FileText, Image, Calendar, Clock, CheckSquare, LayoutDashboard, GanttChart, Network, Timer, MoreHorizontal, Lock, Eye, Download, Command, ArrowLeft } from "lucide-react";
+import { Plus, Link as LinkIcon, Edit2, Trash2, LogOut, AlertCircle, Wifi, WifiOff, X, ChevronDown, ChevronRight, Sun, Moon, UserPlus, Globe, Bell, Check, Search, Tag, FileText, Image, Calendar, Clock, CheckSquare, LayoutDashboard, GanttChart, Network, Timer, MoreHorizontal, Lock, Eye, Download, Command, ArrowLeft, Copy, Upload, BarChart3, Gauge } from "lucide-react";
 
 import { toPng } from "html-to-image";
 
@@ -218,6 +218,7 @@ function DraggableCard({
   swimlaneIndex,
   onEdit,
   onUpdateTags,
+  onDuplicate,
   onDelete,
   onOpenDetail,
   canEdit,
@@ -232,6 +233,7 @@ function DraggableCard({
   swimlaneIndex?: number,
   onEdit: (id: string, newTitle: string, expectedTitle?: string) => void,
   onUpdateTags?: (id: string, newTags: string) => void,
+  onDuplicate?: (card: any) => void,
   onDelete: (id: string) => void,
   onOpenDetail?: (card: any) => void,
   canEdit: boolean,
@@ -345,6 +347,20 @@ function DraggableCard({
           >
             <Edit2 size={13} />
           </button>
+          {onDuplicate && (
+            <button
+              onPointerDown={(e) => e.stopPropagation()}
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+                onDuplicate(cardData);
+              }}
+              className="p-1 text-slate-400 hover:text-[#4f63ef] dark:hover:text-[#a5b4fc] rounded transition-colors cursor-pointer"
+              aria-label="Duplicate Task" title={t("Duplicate Task", "คัดลอกงานนี้")}
+            >
+              <Copy size={13} />
+            </button>
+          )}
           <button
             onPointerDown={(e) => e.stopPropagation()}
             onMouseDown={(e) => e.stopPropagation()}
@@ -614,6 +630,7 @@ export function CardDetailModal({
   onMove,
   onClose,
   onEditDetail,
+  onDuplicateCard,
   onDeleteCard,
 }: {
   card: any;
@@ -632,6 +649,7 @@ export function CardDetailModal({
   onMove: (cardId: string, column: string) => void;
   onClose: () => void;
   onEditDetail: (cardId: string, details: any, baseline?: Record<string,string>) => boolean | void;
+  onDuplicateCard?: (card: any) => void;
   onDeleteCard: (cardId: string, title: string) => void;
 }) {
   const baseline = useRef<Record<string,string>>({title:card.Title || "",description:card.Description || "",dueDate:card.DueDate || "",startDate:card.StartDate || "",dependencies:card.Dependencies || "",parentId:card.ParentID || "",storyPoints:String(card.StoryPoints || 0),inSprint:String(!!card.InSprint),assigneeId:String(card.AssigneeID || 0),checklist:card.Checklist || "",tags:card.Tags || "",swimlane:card.Swimlane || ""});
@@ -1088,14 +1106,27 @@ export function CardDetailModal({
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between border-t pt-4 border-slate-100 dark:border-slate-800 mt-2">
+        <div className="flex items-center justify-between gap-2 border-t pt-4 border-slate-100 dark:border-slate-800 mt-2">
           {canEdit && (
-            <button
-              onClick={() => onDeleteCard(cardId, card.Title)}
-              className="px-3.5 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 text-xs font-bold rounded-xl border border-rose-500/20 transition-all cursor-pointer flex items-center gap-1.5"
-            >
-              <Trash2 size={14} /> {t("Delete Task", "ลบงานนี้")}
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => onDeleteCard(cardId, card.Title)}
+                className="px-3.5 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 text-xs font-bold rounded-xl border border-rose-500/20 transition-all cursor-pointer flex items-center gap-1.5"
+              >
+                <Trash2 size={14} /> {t("Delete Task", "ลบงานนี้")}
+              </button>
+              {onDuplicateCard && (
+                <button
+                  onClick={() => {
+                    onDuplicateCard(card);
+                    onClose();
+                  }}
+                  className="px-3.5 py-1.5 bg-indigo-500/10 hover:bg-indigo-500/20 text-[#4f63ef] dark:text-[#a5b4fc] text-xs font-bold rounded-xl border border-indigo-500/20 transition-all cursor-pointer flex items-center gap-1.5"
+                >
+                  <Copy size={14} /> {t("Duplicate Task", "คัดลอกงานนี้")}
+                </button>
+              )}
+            </div>
           )}
 
           <button
@@ -1333,6 +1364,167 @@ export default function Board() {
     link.download = `${(boardName || "board").replace(/[^a-z0-9ก-๙_-]/gi, "_").toLowerCase()}-tasks.csv`;
     link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
+  const csvInputRef = useRef<HTMLInputElement>(null);
+  const [isInsightsOpen, setIsInsightsOpen] = useState(false);
+  const [wipLimits, setWipLimits] = useState<Record<string, number>>(() => {
+    try {
+      const raw = localStorage.getItem(`co_board_wip_${boardId}`);
+      return raw ? JSON.parse(raw) : {};
+    } catch {
+      return {};
+    }
+  });
+  const [editingWipCol, setEditingWipCol] = useState<string | null>(null);
+  const [wipInputVal, setWipInputVal] = useState("");
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(`co_board_wip_${boardId}`);
+      setWipLimits(raw ? JSON.parse(raw) : {});
+    } catch {
+      setWipLimits({});
+    }
+  }, [boardId]);
+
+  const saveColumnWipLimit = (col: string, rawVal: string) => {
+    const num = Math.max(0, parseInt(rawVal.trim(), 10) || 0);
+    setWipLimits((prev) => {
+      const next = { ...prev };
+      if (num > 0) next[col] = num;
+      else delete next[col];
+      try {
+        localStorage.setItem(`co_board_wip_${boardId}`, JSON.stringify(next));
+      } catch { /* ignore */ }
+      return next;
+    });
+    setEditingWipCol(null);
+  };
+
+  const handleDuplicateTask = useCallback((card: any) => {
+    if (!canEdit || status !== "connected") return;
+    const copySuffix = t("Copy", "สำเนา");
+    const targetCol = card.List || columns[0] || "To do";
+    const targetSwim = card.Swimlane || swimlanes[0] || "Untitled";
+    const maxPos = Math.max(
+      0,
+      ...cards
+        .filter((item) => item.List === targetCol && (item.Swimlane || "Untitled") === targetSwim)
+        .map((item) => item.Position || 0)
+    );
+    let resetChecklist = "";
+    if (card.Checklist) {
+      try {
+        const parsed = JSON.parse(card.Checklist);
+        if (Array.isArray(parsed)) {
+          resetChecklist = JSON.stringify(
+            parsed.map((item: any, idx: number) => ({
+              id: `${Date.now()}-${idx}`,
+              text: String(item.text || ""),
+              done: false,
+            }))
+          );
+        }
+      } catch {
+        resetChecklist = "";
+      }
+    }
+    addCard(
+      `${card.Title || t("Untitled", "งานไม่มีชื่อ")} (${copySuffix})`,
+      targetCol,
+      maxPos + 1000,
+      targetSwim,
+      {
+        description: card.Description || "",
+        tags: card.Tags || "",
+        dueDate: card.DueDate || "",
+        startDate: card.StartDate || "",
+        checklist: resetChecklist,
+      }
+    );
+  }, [canEdit, status, t, columns, swimlanes, cards, addCard]);
+
+  const handleImportCSVFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file || !canEdit || status !== "connected") return;
+    try {
+      const text = (await file.text()).replace(/^\uFEFF/, "");
+      const parseCSVRows = (raw: string): string[][] => {
+        const rows: string[][] = [];
+        let row: string[] = [];
+        let cell = "";
+        let inQuotes = false;
+        for (let i = 0; i < raw.length; i++) {
+          const ch = raw[i];
+          if (inQuotes) {
+            if (ch === '"' && raw[i + 1] === '"') {
+              cell += '"';
+              i++;
+            } else if (ch === '"') {
+              inQuotes = false;
+            } else {
+              cell += ch;
+            }
+          } else if (ch === '"') {
+            inQuotes = true;
+          } else if (ch === ",") {
+            row.push(cell.trim());
+            cell = "";
+          } else if (ch === "\r" || ch === "\n") {
+            if (ch === "\r" && raw[i + 1] === "\n") i++;
+            row.push(cell.trim());
+            if (row.some((v) => v !== "")) rows.push(row);
+            row = [];
+            cell = "";
+          } else {
+            cell += ch;
+          }
+        }
+        row.push(cell.trim());
+        if (row.some((v) => v !== "")) rows.push(row);
+        return rows;
+      };
+
+      const allRows = parseCSVRows(text);
+      if (allRows.length < 2) return;
+      const header = allRows[0].map((h) => h.toLowerCase());
+      const findCol = (patterns: RegExp) => header.findIndex((h) => patterns.test(h));
+      const titleIdx = findCol(/title|task|name|ชื่องาน|งาน/);
+      const statusIdx = findCol(/column|status|list|คอลัมน์|สถานะ/);
+      const groupIdx = findCol(/group|swimlane|กลุ่มงาน/);
+      const startIdx = findCol(/start|วันเริ่ม/);
+      const dueIdx = findCol(/due|กำหนดส่ง|วันครบกำหนด/);
+      const tagsIdx = findCol(/tag|แท็ก/);
+      const descIdx = findCol(/desc|รายละเอียด/);
+
+      const effectiveTitleIdx = titleIdx >= 0 ? titleIdx : (header[0]?.includes("id") || header[0]?.includes("รหัส") ? 1 : 0);
+      let basePos = Math.max(0, ...cards.map((c) => c.Position || 0)) + 1000;
+
+      allRows.slice(1, 51).forEach((r) => {
+        const title = (r[effectiveTitleIdx] || "").trim();
+        if (!title) return;
+        const rawCol = statusIdx >= 0 ? (r[statusIdx] || "").trim() : "";
+        const targetCol = columns.find((col) => col.toLowerCase() === rawCol.toLowerCase()) || columns[0] || "To do";
+        const rawSwim = groupIdx >= 0 ? (r[groupIdx] || "").trim() : "";
+        const targetSwim = swimlanes.find((s) => s.toLowerCase() === rawSwim.toLowerCase()) || swimlanes[0] || "Untitled";
+        const startDate = startIdx >= 0 && /^\d{4}-\d{2}-\d{2}$/.test(r[startIdx] || "") ? r[startIdx] : "";
+        const dueDate = dueIdx >= 0 && /^\d{4}-\d{2}-\d{2}$/.test(r[dueIdx] || "") ? r[dueIdx] : "";
+        const tags = tagsIdx >= 0 ? (r[tagsIdx] || "").trim() : "";
+        const description = descIdx >= 0 ? (r[descIdx] || "").trim() : "";
+
+        addCard(title, targetCol, basePos, targetSwim, {
+          startDate,
+          dueDate,
+          tags,
+          description,
+        });
+        basePos += 1000;
+      });
+    } catch (err) {
+      console.error("Failed to import CSV:", err);
+    }
   };
 
   const boardProgress = useMemo(() => {
@@ -2119,13 +2311,26 @@ export default function Board() {
               <span className="overview-access">{isOwner ? t("Full access", "เจ้าของบอร์ด") : canEdit ? t("Can edit", "แก้ไขได้") : t("View only", "ดูอย่างเดียว")}</span>
               <span><strong>{cards.length}</strong> {t(cards.length === 1 ? "task" : "tasks", "งาน")}</span>
               {boardProgress.total > 0 && (
-                <span className="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20" title={t("Completed tasks on this board", "สัดส่วนงานที่เสร็จสมบูรณ์ในบอร์ดนี้")}>
+                <button
+                  type="button"
+                  onClick={() => setIsInsightsOpen(true)}
+                  className="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20 cursor-pointer transition-colors"
+                  title={t("Click to view Board Insights & Workload", "คลิกเพื่อดูสรุปสถิติและภาระงานในบอร์ด")}
+                >
                   <span>{boardProgress.done}/{boardProgress.total} {t("done", "เสร็จแล้ว")} ({boardProgress.percent}%)</span>
                   <span className="w-14 h-1.5 rounded-full bg-emerald-950/15 dark:bg-emerald-950/60 overflow-hidden inline-flex">
                     <span className="h-full bg-emerald-500 transition-all duration-300 rounded-full" style={{ width: `${boardProgress.percent}%` }} />
                   </span>
-                </span>
+                </button>
               )}
+              <button
+                type="button"
+                onClick={() => setIsInsightsOpen(true)}
+                className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-indigo-500/10 hover:bg-indigo-500/20 text-[#4f63ef] dark:text-[#a5b4fc] border border-indigo-500/20 cursor-pointer transition-colors"
+                title={t("View Board Insights & Workload", "ดูสรุปสถิติโปรเจกต์และภาระงาน")}
+              >
+                <BarChart3 size={12} /> {t("Insights", "สถิติบอร์ด")}
+              </button>
               {boardProgress.overdue > 0 && (
                 <button
                   type="button"
@@ -2296,9 +2501,13 @@ export default function Board() {
                     </button>
                   ))}
                 </div>
-                <p className="board-more-label">{t("Save a copy", "ส่งออกบอร์ด")}</p>
+                <p className="board-more-label">{t("Save a copy", "ส่งออก / นำเข้าข้อมูล")}</p>
+                <button type="button" role="menuitem" onClick={() => { setMoreOpen(false); setIsInsightsOpen(true); }} className="board-more-action"><BarChart3 size={15} /> {t("Board Insights & Workload", "ดูสถิติภาพรวมและภาระงาน")}</button>
                 <button type="button" role="menuitem" disabled={isExporting} onClick={() => { setMoreOpen(false); handleExportPNG(); }} className="board-more-action"><Image size={15} /> {isExporting ? t("Saving…", "กำลังบันทึกภาพ…") : t("Save as image", "บันทึกเป็นรูปภาพ (PNG)")}</button>
                 <button type="button" role="menuitem" onClick={() => { setMoreOpen(false); handleExportCSV(); }} className="board-more-action"><Download size={15} /> {t("Export as CSV (Excel)", "ส่งออกเป็นไฟล์ CSV (Excel)")}</button>
+                {canEdit && status === "connected" && (
+                  <button type="button" role="menuitem" onClick={() => { setMoreOpen(false); csvInputRef.current?.click(); }} className="board-more-action"><Upload size={15} /> {t("Import tasks from CSV", "นำเข้างานจากไฟล์ CSV")}</button>
+                )}
                 <button type="button" role="menuitem" onClick={() => { setMoreOpen(false); handleExportPDF(); }} className="board-more-action"><FileText size={15} /> {t("Print this board", "พิมพ์หรือบันทึกเป็น PDF")}</button>
                 <p className="board-more-label">{t("Handy keys", "คีย์ลัดแป้นพิมพ์")}</p>
                 <div className="board-more-keys">
@@ -2370,14 +2579,42 @@ export default function Board() {
             {columns.map((col, colIdx) => {
               const totalColCards = cards.filter((c: any) => c.List === col).length;
               const colStyle = COLUMN_STYLES[colIdx % COLUMN_STYLES.length];
+              const colWip = wipLimits[col] || 0;
+              const isOverWip = colWip > 0 && totalColCards > colWip;
 
               return (
                 <div key={col} className="board-column-heading flex-1 min-w-0 flex items-center justify-between group">
-                  <div className="flex items-center gap-3">
-                    <span className={`px-3 py-1 rounded-xl text-xs font-bold ${colStyle.headerPill}`}>
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <span className={`px-3 py-1 rounded-xl text-xs font-bold truncate ${colStyle.headerPill}`}>
                       {col}
                     </span>
-                    <span className={`text-xs font-semibold ${theme === "dark" ? "text-slate-400" : "text-slate-500"}`}>{totalColCards}</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!canEdit) return;
+                        setEditingWipCol(col);
+                        setWipInputVal(colWip > 0 ? String(colWip) : "");
+                      }}
+                      title={
+                        isOverWip
+                          ? t(`Over WIP limit (${totalColCards}/${colWip}). Click to adjust.`, `จำนวนงานเกินลิมิตที่ตั้งไว้ (${totalColCards}/${colWip}) คลิกเพื่อปรับลิมิต`)
+                          : colWip > 0
+                            ? t(`WIP limit: ${colWip} tasks. Click to change.`, `ลิมิตงานสูงสุด: ${colWip} งาน คลิกเพื่อแก้ไข`)
+                            : t("Click to set column WIP limit", "คลิกเพื่อกำหนดจำนวนงานสูงสุด (WIP Limit)")
+                      }
+                      className={`px-2 py-0.5 rounded-lg text-xs font-bold inline-flex items-center gap-1 transition-colors ${
+                        isOverWip
+                          ? "bg-rose-500/15 text-rose-600 dark:text-rose-300 border border-rose-500/30"
+                          : colWip > 0
+                            ? "bg-indigo-500/10 text-[#4f63ef] dark:text-[#a5b4fc] border border-indigo-500/20"
+                            : theme === "dark"
+                              ? "text-slate-400 hover:text-slate-200"
+                              : "text-slate-500 hover:text-slate-800"
+                      } ${canEdit ? "cursor-pointer" : "cursor-default"}`}
+                    >
+                      {isOverWip && <AlertCircle size={12} />}
+                      <span>{colWip > 0 ? `${totalColCards}/${colWip}` : totalColCards}</span>
+                    </button>
                   </div>
 
                   {canEdit && (
@@ -2385,21 +2622,31 @@ export default function Board() {
                       <button
                         onClick={() => openColumnQuickAdd(col)}
                         className="p-1 text-slate-400 hover:text-[#4f63ef] dark:hover:text-[#a5b4fc] rounded transition-colors cursor-pointer"
-                        aria-label={`Add task to ${col}`} title={`Add task to ${col}`}
+                        aria-label={`Add task to ${col}`} title={t(`Add task to ${col}`, `เพิ่มงานใน ${col}`)}
                       >
                         <Plus size={12} />
                       </button>
                       <button
-                        onClick={() => openRenameModal("Rename Column", col, (newName) => renameColumn(col, newName))}
+                        onClick={() => {
+                          setEditingWipCol(col);
+                          setWipInputVal(colWip > 0 ? String(colWip) : "");
+                        }}
+                        className="p-1 text-slate-400 hover:text-[#4f63ef] dark:hover:text-[#a5b4fc] rounded transition-colors cursor-pointer"
+                        aria-label="Set WIP Limit" title={t("Set WIP Limit", "กำหนดลิมิตงาน (WIP)")}
+                      >
+                        <Gauge size={12} />
+                      </button>
+                      <button
+                        onClick={() => openRenameModal(t("Rename Column", "เปลี่ยนชื่อคอลัมน์"), col, (newName) => renameColumn(col, newName))}
                         className="p-1 text-slate-400 hover:text-[#4f63ef] dark:hover:text-[#a5b4fc] rounded transition-colors"
-                        aria-label="Rename Column" title="Rename Column"
+                        aria-label="Rename Column" title={t("Rename Column", "เปลี่ยนชื่อคอลัมน์")}
                       >
                         <Edit2 size={12} />
                       </button>
                       <button
-                        onClick={() => openConfirmModal("Delete Column?", `Are you sure you want to delete column "${col}" and all its tasks?`, () => deleteColumn(col))}
+                        onClick={() => openConfirmModal(t("Delete Column?", "ลบคอลัมน์นี้?"), t(`Are you sure you want to delete column "${col}" and all its tasks?`, `คุณแน่ใจหรือไม่ว่าต้องการลบคอลัมน์ "${col}" และงานทั้งหมดในคอลัมน์นี้?`), () => deleteColumn(col))}
                         className="p-1 text-slate-400 hover:text-rose-600 rounded transition-colors"
-                        aria-label="Delete Column" title="Delete Column"
+                        aria-label="Delete Column" title={t("Delete Column", "ลบคอลัมน์")}
                       >
                         <Trash2 size={12} />
                       </button>
@@ -2527,6 +2774,7 @@ export default function Board() {
                                       swimlaneIndex={swimIdx}
                                       onEdit={(id, title, expectedTitle) => editCard(id, title, undefined, expectedTitle)}
                                       onUpdateTags={updateCardTags}
+                                      onDuplicate={handleDuplicateTask}
                                       onDelete={(cardId) => openConfirmModal(t("Delete Task?", "ลบงานนี้?"), t(`Are you sure you want to delete task "${c.Title}"?`, `คุณแน่ใจหรือไม่ว่าต้องการลบงาน "${c.Title}"?`), () => deleteCard(cardId))}
                                       onOpenDetail={handleOpenCardDetail}
                                       canEdit={canEdit}
@@ -2619,7 +2867,7 @@ export default function Board() {
         </DndContext>
       </main>
       </div> : <div ref={boardContainerRef} className="task-view-export">
-        {(boardView === "list" || boardView === "due") ? <BoardTaskViews cards={filteredCards} totalCards={cards.length} columns={columns} swimlanes={swimlanes} assignees={Object.fromEntries([...memberById].map(([id, person]) => [id, person.name]))} canEdit={canEdit} connected={status === "connected"} mode={boardView} onOpen={handleOpenCardDetail} onMove={moveFromAlternateView} onCreate={openQuickAdd} />
+        {(boardView === "list" || boardView === "due") ? <BoardTaskViews cards={filteredCards} totalCards={cards.length} columns={columns} swimlanes={swimlanes} assignees={Object.fromEntries([...memberById].map(([id, person]) => [id, person.name]))} canEdit={canEdit} connected={status === "connected"} mode={boardView} onOpen={handleOpenCardDetail} onMove={moveFromAlternateView} onDelete={deleteCard} onDuplicate={handleDuplicateTask} onCreate={openQuickAdd} />
         : boardView === "scrum" ? <ScrumBoard cards={filteredCards} allCards={cards} columns={columns} sprint={sprint} saving={operations.some(operation => operation.label === "Update sprint" && operation.state === "saving")} canEdit={canEdit} connected={status === "connected"} onOpen={handleOpenCardDetail} onMove={moveFromAlternateView} onEdit={(card, changes) => editCardDetail(String(card.ID), changes)} onUpdateSprint={updateSprint} onCreate={openQuickAdd} />
         : <BoardCanvasViews cards={filteredCards} allCards={cards} totalCards={cards.length} boardName={boardName} mode={boardView} canEdit={canEdit} connected={status === "connected"} onOpen={handleOpenCardDetail} onCreate={openFormatTask} onReschedule={(card, dueDate) => editCardDetail(String(card.ID), { dueDate })} />}
       </div>}
@@ -2929,6 +3177,7 @@ export default function Board() {
           swimlanes={swimlanes}
           onClose={() => setSelectedCardDetail(null)}
           onEditDetail={editCardDetail}
+          onDuplicateCard={handleDuplicateTask}
           onDeleteCard={(cardId, title) => {
             openConfirmModal(t("Delete Task?", "ลบงานนี้?"), t(`Are you sure you want to delete task "${title}"?`, `คุณแน่ใจหรือไม่ว่าต้องการลบงาน "${title}"?`), () => {
               deleteCard(cardId);
@@ -3130,12 +3379,28 @@ export default function Board() {
               }]
             : []),
           {
+            id: "open-insights",
+            label: t("View Board Insights & Workload", "ดูสถิติภาพรวมบอร์ดและภาระงานของทีม"),
+            kbd: "",
+            icon: BarChart3,
+            run: () => { setIsCommandOpen(false); setIsInsightsOpen(true); },
+          },
+          {
             id: "export-csv",
             label: t("Export board to CSV (Excel)", "ส่งออกงานในบอร์ดเป็นไฟล์ CSV (Excel)"),
             kbd: "CSV",
             icon: Download,
             run: () => { setIsCommandOpen(false); handleExportCSV(); },
           },
+          ...(canEdit && status === "connected"
+            ? [{
+                id: "import-csv",
+                label: t("Import tasks from CSV file", "นำเข้างานจากไฟล์ CSV"),
+                kbd: "",
+                icon: Upload,
+                run: () => { setIsCommandOpen(false); csvInputRef.current?.click(); },
+              }]
+            : []),
           {
             id: "toggle-theme",
             label: theme === "dark" ? t("Switch to Light mode", "เปลี่ยนเป็นโหมดสว่าง (Light)") : t("Switch to Dark mode", "เปลี่ยนเป็นโหมดมืด (Dark)"),
@@ -3283,6 +3548,256 @@ export default function Board() {
                     {t("No matching tasks or commands found.", "ไม่พบงานหรือคำสั่งที่ค้นหา")}
                   </div>
                 )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Hidden CSV File Input for Bulk Task Import */}
+      <input
+        ref={csvInputRef}
+        type="file"
+        accept=".csv,text/csv"
+        onChange={handleImportCSVFile}
+        className="hidden"
+      />
+
+      {/* Column WIP Limit Modal */}
+      {editingWipCol && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label={t("Set Column WIP Limit", "กำหนดลิมิตงานสูงสุดต่อคอลัมน์")}
+          className="fixed inset-0 z-[110] bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-100"
+          onClick={() => setEditingWipCol(null)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className={`w-full max-w-sm rounded-2xl border shadow-2xl p-5 flex flex-col gap-4 ${
+              theme === "dark" ? "bg-[#172033] border-[#334155] text-slate-100" : "bg-white border-slate-200 text-slate-800"
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-extrabold flex items-center gap-2">
+                <Gauge size={16} className="text-[#4f63ef] dark:text-[#a5b4fc]" />
+                {t("Column WIP Limit", "กำหนดลิมิตงานสูงสุด (WIP Limit)")}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setEditingWipCol(null)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+              {t(
+                `Set the maximum number of tasks allowed in "${editingWipCol}". Leave empty or 0 for no limit.`,
+                `กำหนดจำนวนงานสูงสุดที่ควรมีในคอลัมน์ "${editingWipCol}" หากเกินลิมิตจะแสดงสีแจ้งเตือน (เว้นว่างหรือใส่ 0 หากไม่จำกัด)`
+              )}
+            </p>
+            <input
+              type="number"
+              min="0"
+              max="999"
+              autoFocus
+              value={wipInputVal}
+              onChange={(e) => setWipInputVal(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") saveColumnWipLimit(editingWipCol, wipInputVal);
+                else if (e.key === "Escape") setEditingWipCol(null);
+              }}
+              placeholder={t("e.g. 5 (or 0 for unlimited)", "เช่น 5 (หรือ 0 เพื่อไม่จำกัด)")}
+              className={`w-full px-3.5 py-2 rounded-xl border text-xs font-bold focus:outline-none focus:ring-2 focus:ring-[#4f63ef] ${
+                theme === "dark" ? "bg-slate-900 border-slate-700 text-slate-100" : "bg-slate-50 border-slate-200 text-slate-800"
+              }`}
+            />
+            <div className="flex items-center justify-between gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => saveColumnWipLimit(editingWipCol, "0")}
+                className="px-3 py-1.5 rounded-xl text-xs font-semibold text-rose-500 hover:bg-rose-500/10 transition-colors cursor-pointer"
+              >
+                {t("Clear limit", "ยกเลิกลิมิต")}
+              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingWipCol(null)}
+                  className="px-3.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-xs font-semibold cursor-pointer"
+                >
+                  {t("Cancel", "ยกเลิก")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => saveColumnWipLimit(editingWipCol, wipInputVal)}
+                  className="px-4 py-1.5 rounded-xl bg-[#4f63ef] hover:bg-[#4051d6] text-white text-xs font-bold cursor-pointer"
+                >
+                  {t("Save", "บันทึก")}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Board Insights & Workload Modal */}
+      {isInsightsOpen && (() => {
+        const total = cards.length;
+        const lastCol = columns.length > 0 ? columns[columns.length - 1] : "Done";
+        const isCardDone = (c: Card) => {
+          const list = (c.List || "").trim();
+          return list === lastCol || /^(done|completed?|published|เสร็จ|เสร็จสิ้น)$/i.test(list);
+        };
+        const doneCount = cards.filter(isCardDone).length;
+        const overdueCount = cards.filter((c) => !isCardDone(c) && dueBucket(c.DueDate) === "overdue").length;
+        const dueTodayCount = cards.filter((c) => !isCardDone(c) && dueBucket(c.DueDate) === "today").length;
+        const activeCount = Math.max(0, total - doneCount);
+
+        const workloadMap = new Map<string, { name: string; count: number; done: number }>();
+        cards.forEach((c) => {
+          const assigneeId = Number(c.AssigneeID || 0);
+          const name = assigneeId
+            ? (memberById.get(assigneeId)?.name || t("Assigned", "มอบหมายแล้ว"))
+            : t("Unassigned", "ยังไม่มอบหมาย");
+          const key = assigneeId ? `id:${assigneeId}` : "unassigned";
+          const current = workloadMap.get(key) || { name, count: 0, done: 0 };
+          current.count += 1;
+          if (isCardDone(c)) current.done += 1;
+          workloadMap.set(key, current);
+        });
+        const workloadList = Array.from(workloadMap.values()).sort((a, b) => b.count - a.count);
+
+        return (
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={t("Board Insights & Workload", "สรุปสถิติบอร์ดและภาระงาน")}
+            className="fixed inset-0 z-[115] bg-slate-950/65 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-150"
+            onClick={() => setIsInsightsOpen(false)}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className={`w-full max-w-2xl rounded-3xl border shadow-2xl p-6 flex flex-col gap-6 max-h-[88vh] overflow-y-auto ${
+                theme === "dark" ? "bg-[#172033] border-[#334155] text-slate-100" : "bg-white border-slate-200 text-slate-800"
+              }`}
+            >
+              <div className="flex items-center justify-between border-b pb-4 border-slate-100 dark:border-slate-800">
+                <div>
+                  <h2 className="text-base font-extrabold flex items-center gap-2">
+                    <BarChart3 size={18} className="text-[#4f63ef] dark:text-[#a5b4fc]" />
+                    {t("Board Insights & Team Workload", "สรุปสถิติโปรเจกต์และภาระงานของทีม")}
+                  </h2>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                    {boardName} · {total} {t(total === 1 ? "task" : "tasks", "งานทั้งหมด")}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsInsightsOpen(false)}
+                  className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              {/* 4 KPI Summary Cards */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className={`p-3.5 rounded-2xl border ${theme === "dark" ? "bg-slate-900/50 border-slate-800" : "bg-slate-50 border-slate-200/80"}`}>
+                  <span className="text-[11px] font-bold text-slate-400 uppercase">{t("Total Tasks", "งานทั้งหมด")}</span>
+                  <div className="text-2xl font-extrabold mt-1">{total}</div>
+                </div>
+                <div className="p-3.5 rounded-2xl border bg-emerald-500/10 border-emerald-500/20 text-emerald-700 dark:text-emerald-300">
+                  <span className="text-[11px] font-bold uppercase opacity-80">{t("Completed", "เสร็จสิ้นแล้ว")}</span>
+                  <div className="text-2xl font-extrabold mt-1">{doneCount} <span className="text-xs font-bold">({boardProgress.percent}%)</span></div>
+                </div>
+                <div className="p-3.5 rounded-2xl border bg-indigo-500/10 border-indigo-500/20 text-[#4f63ef] dark:text-[#a5b4fc]">
+                  <span className="text-[11px] font-bold uppercase opacity-80">{t("In Progress", "กำลังดำเนินการ")}</span>
+                  <div className="text-2xl font-extrabold mt-1">{activeCount}</div>
+                </div>
+                <div className="p-3.5 rounded-2xl border bg-rose-500/10 border-rose-500/20 text-rose-600 dark:text-rose-300">
+                  <span className="text-[11px] font-bold uppercase opacity-80">{t("Overdue / Today", "เลยกำหนด / วันนี้")}</span>
+                  <div className="text-2xl font-extrabold mt-1">{overdueCount} <span className="text-xs font-bold">/ {dueTodayCount}</span></div>
+                </div>
+              </div>
+
+              {/* Breakdown by Column */}
+              <div className="flex flex-col gap-3">
+                <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-400">
+                  {t("Tasks by Column", "สัดส่วนงานในแต่ละคอลัมน์")}
+                </h3>
+                <div className="space-y-2.5">
+                  {columns.map((col) => {
+                    const count = cards.filter((c) => c.List === col).length;
+                    const pct = total > 0 ? Math.round((count / total) * 100) : 0;
+                    const limit = wipLimits[col] || 0;
+                    const over = limit > 0 && count > limit;
+                    return (
+                      <div key={col} className="space-y-1">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="font-bold flex items-center gap-2">
+                            {col}
+                            {limit > 0 && (
+                              <span className={`px-1.5 py-0.5 rounded text-[10px] font-extrabold ${over ? "bg-rose-500/15 text-rose-500" : "bg-slate-500/10 text-slate-400"}`}>
+                                WIP {count}/{limit}
+                              </span>
+                            )}
+                          </span>
+                          <span className="font-semibold text-slate-500 dark:text-slate-400">{count} ({pct}%)</span>
+                        </div>
+                        <div className="w-full h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all duration-300 ${over ? "bg-rose-500" : "bg-[#4f63ef]"}`}
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Workload by Assignee */}
+              <div className="flex flex-col gap-3">
+                <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-400">
+                  {t("Team Workload (by Assignee)", "ภาระงานของสมาชิกในทีม")}
+                </h3>
+                {workloadList.length === 0 ? (
+                  <p className="text-xs text-slate-400">{t("No tasks yet.", "ยังไม่มีงานในบอร์ด")}</p>
+                ) : (
+                  <div className="space-y-2.5">
+                    {workloadList.map((person) => {
+                      const pct = total > 0 ? Math.round((person.count / total) * 100) : 0;
+                      return (
+                        <div key={person.name} className="space-y-1">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="font-bold">{person.name}</span>
+                            <span className="font-semibold text-slate-500 dark:text-slate-400">
+                              {person.count} {t("tasks", "งาน")} · {person.done} {t("done", "เสร็จแล้ว")} ({pct}%)
+                            </span>
+                          </div>
+                          <div className="w-full h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                            <div
+                              className="h-full rounded-full bg-emerald-500 transition-all duration-300"
+                              style={{ width: `${pct}%` }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              <div className="flex justify-end border-t pt-4 border-slate-100 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setIsInsightsOpen(false)}
+                  className="px-5 py-2 rounded-xl bg-[#4f63ef] hover:bg-[#4051d6] text-white text-xs font-bold cursor-pointer"
+                >
+                  {t("Close", "ปิดหน้าต่าง")}
+                </button>
               </div>
             </div>
           </div>

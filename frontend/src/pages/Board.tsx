@@ -1188,6 +1188,51 @@ export default function Board() {
     userRole
   } = useWebSocket(boardId || "", token);
 
+  // Access Request & Permissions System (Declared early so handlers like handleDuplicateTask can safely reference canEdit)
+  const { notifications, assignments, markAssignmentSeen, unreadCount, requestAccess, respondToAccess } = useNotifications();
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [isRequestingAccess, setIsRequestingAccess] = useState(false);
+  const [accessRequestStatus, setAccessRequestStatus] = useState<"none" | "pending" | "approved">("none");
+
+  const handleRequestAccess = async () => {
+    if (!boardId) return;
+    setIsRequestingAccess(true);
+    const res = await requestAccess(boardId);
+    setIsRequestingAccess(false);
+    if (!res) return;
+    if (res.status === "approved") {
+      applyGrantedRole("edit");
+      void refreshBoard();
+      return;
+    }
+    setAccessRequestStatus("pending");
+  };
+
+  useEffect(() => {
+    if (userRole === "edit" || userRole === "owner") setAccessRequestStatus("none");
+  }, [userRole]);
+
+  const urlParams = new URLSearchParams(window.location.search);
+  const currentInviteToken = urlParams.get("inviteToken");
+  const inviteRole = decodeInviteRole(currentInviteToken);
+
+  const isLoggedIn = !!user;
+  const isOwner = isLoggedIn && ownerId !== null && user.id === ownerId;
+  const isGrantedEditor = userRole === "edit" || (userRole !== "view" && accessRequestStatus === "approved");
+
+  const canEditIfLoggedIn =
+    isGrantedEditor ||
+    inviteRole === "edit" ||
+    (accessLevel === "edit" && inviteRole !== "view");
+
+  const canEdit =
+    isLoggedIn && (
+      isOwner ||
+      canEditIfLoggedIn
+    );
+  const showViewOnlyNote = user ? !canEdit : !canEditIfLoggedIn;
+  const signedInViewer = !!user && user.email !== "guest@kanban.demo";
+
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedTagFilter, setSelectedTagFilter] = useState<string>("All");
   const [selectedDueFilter, setSelectedDueFilter] = useState("all");
@@ -1713,54 +1758,6 @@ export default function Board() {
     isLoggingInRef.current = true;
     login(bId);
   }, [login]);
-
-
-
-  // Access Request & Notifications System
-  const { notifications, assignments, markAssignmentSeen, unreadCount, requestAccess, respondToAccess } = useNotifications();
-  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
-  const [isRequestingAccess, setIsRequestingAccess] = useState(false);
-  const [accessRequestStatus, setAccessRequestStatus] = useState<"none" | "pending" | "approved">("none");
-
-  const handleRequestAccess = async () => {
-    if (!boardId) return;
-    setIsRequestingAccess(true);
-    const res = await requestAccess(boardId);
-    setIsRequestingAccess(false);
-    if (!res) return;
-    // The server only returns approved when this person is already an editor.
-    if (res.status === "approved") {
-      applyGrantedRole("edit");
-      void refreshBoard();
-      return;
-    }
-    setAccessRequestStatus("pending");
-  };
-
-  useEffect(() => {
-    if (userRole === "edit" || userRole === "owner") setAccessRequestStatus("none");
-  }, [userRole]);
-
-  const urlParams = new URLSearchParams(window.location.search);
-  const currentInviteToken = urlParams.get("inviteToken");
-  const inviteRole = decodeInviteRole(currentInviteToken);
-
-  const isLoggedIn = !!user;
-  const isOwner = isLoggedIn && ownerId !== null && user.id === ownerId;
-  const isGrantedEditor = userRole === "edit" || (userRole !== "view" && accessRequestStatus === "approved");
-
-  const canEditIfLoggedIn =
-    isGrantedEditor ||
-    inviteRole === "edit" ||
-    (accessLevel === "edit" && inviteRole !== "view");
-
-  const canEdit =
-    isLoggedIn && (
-      isOwner ||
-      canEditIfLoggedIn
-    );
-  const showViewOnlyNote = user ? !canEdit : !canEditIfLoggedIn;
-  const signedInViewer = !!user && user.email !== "guest@kanban.demo";
 
   // Intercept Browser Back Button (<) and Tab Closing (X) for Guest Owners
   useEffect(() => {

@@ -663,7 +663,7 @@ export function CardDetailModal({
       return;
     }
     setNotes([]);
-    const jwt = sessionStorage.getItem("kanban_jwt") || localStorage.getItem("kanban_jwt");
+    const jwt = localStorage.getItem("kanban_jwt") || sessionStorage.getItem("kanban_jwt");
     const headers: Record<string, string> = jwt ? { Authorization: `Bearer ${jwt}` } : {};
     const invite = new URLSearchParams(window.location.search).get("inviteToken") || "";
     const query = invite ? `?inviteToken=${encodeURIComponent(invite)}` : "";
@@ -1006,7 +1006,7 @@ export default function Board() {
   const { user, login, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
 
-  const token = (sessionStorage.getItem("kanban_jwt") || localStorage.getItem("kanban_jwt"));
+  const token = (localStorage.getItem("kanban_jwt") || sessionStorage.getItem("kanban_jwt"));
 
   const {
     cards,
@@ -1292,7 +1292,7 @@ export default function Board() {
 
   const fetchBoardMembers = useCallback(async () => {
     if (!boardId) return;
-    const token = (sessionStorage.getItem("kanban_jwt") || localStorage.getItem("kanban_jwt"));
+    const token = (localStorage.getItem("kanban_jwt") || sessionStorage.getItem("kanban_jwt"));
     if (!token) return;
     try {
       const res = await fetch(`${API_URL}/api/boards/${boardId}/members`, {
@@ -2593,7 +2593,7 @@ export default function Board() {
                             onChange={async (event) => {
                               const newRole = event.target.value === "Editor" ? "edit" : "view";
                               setBoardMembers((prev) => prev.map((item) => item.id === member.id ? { ...item, role: newRole } : item));
-                              const token = sessionStorage.getItem("kanban_jwt") || localStorage.getItem("kanban_jwt");
+                              const token = localStorage.getItem("kanban_jwt") || sessionStorage.getItem("kanban_jwt");
                               if (!token) return;
                               try {
                                 const res = await fetch(`${API_URL}/api/boards/${boardId}/members/${member.id}`, {
@@ -2746,7 +2746,7 @@ export default function Board() {
                   setIsDiscardingGuestBoard(true);
                   setGuestExitError("");
                   try {
-                    const token = sessionStorage.getItem("kanban_jwt") || localStorage.getItem("kanban_jwt");
+                    const token = localStorage.getItem("kanban_jwt") || sessionStorage.getItem("kanban_jwt");
                     if (!token || !boardId) throw new Error("Missing session");
                     const response = await fetch(`${API_URL}/api/boards/${boardId}`, {
                       method: "DELETE", headers: { Authorization: `Bearer ${token}` },

@@ -213,6 +213,17 @@ func GoogleCallback(db *gorm.DB) gin.HandlerFunc {
 				if err := db.Where("email = ?", "guest@kanban.demo").First(&guestUser).Error; err == nil {
 					if targetBoard.OwnerID == guestUser.ID {
 						db.Model(&Board{}).Where("id = ?", boardID).Update("owner_id", user.ID)
+						db.Where("board_id = ? AND user_id = ?", boardID, guestUser.ID).Delete(&BoardMember{})
+						var existingMember BoardMember
+						if err := db.Where("board_id = ? AND user_id = ?", boardID, user.ID).First(&existingMember).Error; err != nil {
+							db.Create(&BoardMember{
+								BoardID: boardID,
+								UserID:  user.ID,
+								Role:    "owner",
+							})
+						} else {
+							db.Model(&existingMember).Update("role", "owner")
+						}
 						log.Printf("🎉 Transferred Guest board %s ownership to User %s (%s)\n", boardID, user.Name, user.Email)
 					}
 				}

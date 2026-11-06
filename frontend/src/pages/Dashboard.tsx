@@ -294,7 +294,7 @@ export default function Dashboard() {
       if (showLoading) setIsLoadingBoards(true);
       const res = await fetch(`${API_URL}/api/me/boards`, {
         headers: {
-          Authorization: `Bearer ${(sessionStorage.getItem("kanban_jwt") || localStorage.getItem("kanban_jwt"))}`,
+          Authorization: `Bearer ${(localStorage.getItem("kanban_jwt") || sessionStorage.getItem("kanban_jwt"))}`,
         },
       });
       if (!res.ok) throw new Error("Could not load boards. Check your connection and try again.");
@@ -342,7 +342,7 @@ export default function Dashboard() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${(sessionStorage.getItem("kanban_jwt") || localStorage.getItem("kanban_jwt"))}`,
+          Authorization: `Bearer ${(localStorage.getItem("kanban_jwt") || sessionStorage.getItem("kanban_jwt"))}`,
         },
         body: JSON.stringify({ name: newBoardName.trim() || "Untitled board", template: newBoardType }),
       });
@@ -378,7 +378,7 @@ export default function Dashboard() {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${(sessionStorage.getItem("kanban_jwt") || localStorage.getItem("kanban_jwt"))}`,
+          Authorization: `Bearer ${(localStorage.getItem("kanban_jwt") || sessionStorage.getItem("kanban_jwt"))}`,
         },
         body: JSON.stringify({ name: renameInputValue.trim() }),
       });
@@ -409,7 +409,7 @@ export default function Dashboard() {
       const res = await fetch(`${API_URL}/api/boards/${deleteModalData.boardId}`, {
         method: "DELETE",
         headers: {
-          Authorization: `Bearer ${(sessionStorage.getItem("kanban_jwt") || localStorage.getItem("kanban_jwt"))}`,
+          Authorization: `Bearer ${(localStorage.getItem("kanban_jwt") || sessionStorage.getItem("kanban_jwt"))}`,
         },
       });
       if (!res.ok) throw new Error("Could not delete this board. Please try again.");

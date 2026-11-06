@@ -32,7 +32,7 @@ export function useNotifications() {
   const [isLoading, setIsLoading] = useState(false);
 
   const fetchNotifications = useCallback(async () => {
-    const token = (sessionStorage.getItem("kanban_jwt") || localStorage.getItem("kanban_jwt"));
+    const token = (localStorage.getItem("kanban_jwt") || sessionStorage.getItem("kanban_jwt"));
     if (!token || !user) return;
 
     try {
@@ -63,7 +63,7 @@ export function useNotifications() {
   }, [user, fetchNotifications]);
 
   const requestAccess = async (boardId: string): Promise<AccessRequestItem | null> => {
-    const token = (sessionStorage.getItem("kanban_jwt") || localStorage.getItem("kanban_jwt"));
+    const token = (localStorage.getItem("kanban_jwt") || sessionStorage.getItem("kanban_jwt"));
     if (!token) return null;
 
     try {
@@ -86,7 +86,7 @@ export function useNotifications() {
   };
 
   const respondToAccess = async (requestId: number, action: "approve" | "dismiss"): Promise<boolean> => {
-    const token = (sessionStorage.getItem("kanban_jwt") || localStorage.getItem("kanban_jwt"));
+    const token = (localStorage.getItem("kanban_jwt") || sessionStorage.getItem("kanban_jwt"));
     if (!token) return false;
 
     try {
@@ -110,7 +110,7 @@ export function useNotifications() {
   };
 
   const markAssignmentSeen = async (noticeId: number): Promise<void> => {
-    const token = (sessionStorage.getItem("kanban_jwt") || localStorage.getItem("kanban_jwt"));
+    const token = (localStorage.getItem("kanban_jwt") || sessionStorage.getItem("kanban_jwt"));
     if (!token) return;
     try {
       const res = await fetch(`${API_URL}/api/assignments/${noticeId}/seen`, {

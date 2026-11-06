@@ -34,17 +34,29 @@ const TOKEN_KEY = "kanban_jwt";
 export function useAuth() {
   // Read initial token: real Google tokens from localStorage, Guest tokens from sessionStorage
   const [token, setToken] = useState<string | null>(() => {
-    // Purge any legacy guest tokens from localStorage
+    // 1. If returning from OAuth redirect (?token=...), consume it immediately before any child mounts
+    const urlParams = new URLSearchParams(window.location.search);
+    const incomingUrlToken = urlParams.get("token");
+    if (incomingUrlToken) {
+      localStorage.setItem(TOKEN_KEY, incomingUrlToken);
+      sessionStorage.removeItem(TOKEN_KEY);
+      return incomingUrlToken;
+    }
+
+    // 2. Purge any legacy guest tokens from localStorage; if a valid real user token exists, clear stale guest sessionStorage
     const localSaved = localStorage.getItem(TOKEN_KEY);
     if (localSaved) {
       const payload = parseJwt(localSaved);
       if (payload && (payload.email === "guest@kanban.demo" || payload.sub === "guest")) {
         localStorage.removeItem(TOKEN_KEY);
-      } else {
+      } else if (payload && (!payload.exp || payload.exp * 1000 > Date.now())) {
+        sessionStorage.removeItem(TOKEN_KEY);
         return localSaved;
+      } else {
+        localStorage.removeItem(TOKEN_KEY);
       }
     }
-    // Read session-only token for Guest
+    // 3. Read session-only token for Guest
     const sessionSaved = sessionStorage.getItem(TOKEN_KEY);
     if (sessionSaved) {
       const payload = parseJwt(sessionSaved);
@@ -58,7 +70,7 @@ export function useAuth() {
   });
 
   const [user, setUser] = useState<User | null>(() => {
-    const activeToken = token || sessionStorage.getItem(TOKEN_KEY) || localStorage.getItem(TOKEN_KEY);
+    const activeToken = token || localStorage.getItem(TOKEN_KEY) || sessionStorage.getItem(TOKEN_KEY);
     if (!activeToken) return null;
     const payload = parseJwt(activeToken);
     const isExpired = payload && payload.exp && payload.exp * 1000 < Date.now();
@@ -80,8 +92,9 @@ export function useAuth() {
     const urlToken = searchParams.get("token");
     if (!urlToken) return;
 
-    // Real Google OAuth tokens go to localStorage (persistent)
+    // Real Google OAuth tokens go to localStorage (persistent) and must clear any Guest sessionStorage token
     localStorage.setItem(TOKEN_KEY, urlToken);
+    sessionStorage.removeItem(TOKEN_KEY);
     setToken(urlToken);
 
     // Clean up the URL token but keep everything else.

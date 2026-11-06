@@ -105,7 +105,7 @@ function AvatarImage({ src, name, className, title }: { src: string; name: strin
 
 export default function Dashboard() {
   const { user, login, logout } = useAuth();
-  const { lang, toggleLang, t } = useLanguage();
+  const { lang, setLang, t } = useLanguage();
   const handleWorkspaceLogout = () => {
     if (user?.email === "guest@kanban.demo" && !window.confirm(t("Log out of your guest session? You may lose access to your guest boards. Cancel to keep working or sign in to save them.", "ออกจากระบบโหมดทดลองใช้ (Guest) หรือไม่? บอร์ดที่ยังไม่ได้เข้าสู่ระบบเพื่อบันทึกอาจสูญหายได้"))) return;
     logout();
@@ -245,9 +245,9 @@ export default function Dashboard() {
             <div
               key={u.id || `guest-${i}`}
               className={`inline-flex ${imgSize} rounded-full ring-2 ring-white dark:ring-[#172033] bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-200 items-center justify-center shadow-xs font-bold`}
-              title="Guest Visitor (Online)"
+              title={t("Guest Visitor (Online)", "ผู้เยี่ยมชม (ออนไลน์)")}
             >
-              👤
+              G
             </div>
           ) : (
             <AvatarImage
@@ -508,13 +508,44 @@ export default function Dashboard() {
           </div>
 
           <div className="landing-top-actions">
-            <button
-              onClick={toggleLang}
-              className="landing-icon px-2.5 text-xs font-extrabold tracking-wide"
-              title={lang === "th" ? "Switch to English" : "เปลี่ยนเป็นภาษาไทย"}
+            <div
+              role="group"
+              aria-label="Language"
+              className={`inline-flex items-center rounded-xl p-0.5 border text-[11px] font-extrabold tracking-wider ${
+                theme === "dark"
+                  ? "bg-[#0f172a] border-[#334155]"
+                  : "bg-slate-100 border-slate-200"
+              }`}
             >
-              {lang === "th" ? "🇹🇭 TH" : "🇬🇧 EN"}
-            </button>
+              <button
+                type="button"
+                onClick={() => setLang("en")}
+                aria-pressed={lang === "en"}
+                className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                  lang === "en"
+                    ? "bg-[#4f63ef] text-white shadow-2xs"
+                    : theme === "dark"
+                      ? "text-slate-400 hover:text-slate-200"
+                      : "text-slate-500 hover:text-slate-800"
+                }`}
+              >
+                EN
+              </button>
+              <button
+                type="button"
+                onClick={() => setLang("th")}
+                aria-pressed={lang === "th"}
+                className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                  lang === "th"
+                    ? "bg-[#4f63ef] text-white shadow-2xs"
+                    : theme === "dark"
+                      ? "text-slate-400 hover:text-slate-200"
+                      : "text-slate-500 hover:text-slate-800"
+                }`}
+              >
+                TH
+              </button>
+            </div>
             <button
               onClick={toggleTheme}
               className="landing-icon"
@@ -641,17 +672,45 @@ export default function Dashboard() {
         }`}>
         <div className="board-brand flex items-center gap-3"><span className="mobile-workspace-symbol"><KanbanMark /></span><h1 className="board-title">{t("All boards", "บอร์ดทั้งหมด")}</h1></div>
         <div className="dashboard-top-actions flex items-center gap-3">
-          {/* Language Switcher Button */}
-          <button
-            onClick={toggleLang}
-            className={`px-3 py-2 rounded-xl border text-xs font-extrabold tracking-wide transition-colors cursor-pointer ${theme === "dark"
-              ? "bg-[#172033] text-[#a5b4fc] hover:bg-[#334155] border-[#334155]"
-              : "bg-slate-100 text-slate-700 hover:bg-slate-200 border-slate-200"
-              }`}
-            title={lang === "th" ? "Switch to English" : "เปลี่ยนเป็นภาษาไทย"}
+          {/* Language Switcher Pill (EN / TH) */}
+          <div
+            role="group"
+            aria-label="Language"
+            className={`inline-flex items-center rounded-xl p-0.5 border text-[11px] font-extrabold tracking-wider ${
+              theme === "dark"
+                ? "bg-[#172033] border-[#334155]"
+                : "bg-slate-100 border-slate-200"
+            }`}
           >
-            {lang === "th" ? "🇹🇭 TH" : "🇬🇧 EN"}
-          </button>
+            <button
+              type="button"
+              onClick={() => setLang("en")}
+              aria-pressed={lang === "en"}
+              className={`px-2.5 py-1.5 rounded-lg transition-all cursor-pointer ${
+                lang === "en"
+                  ? "bg-[#4f63ef] text-white shadow-2xs"
+                  : theme === "dark"
+                    ? "text-slate-400 hover:text-slate-200"
+                    : "text-slate-500 hover:text-slate-800"
+              }`}
+            >
+              EN
+            </button>
+            <button
+              type="button"
+              onClick={() => setLang("th")}
+              aria-pressed={lang === "th"}
+              className={`px-2.5 py-1.5 rounded-lg transition-all cursor-pointer ${
+                lang === "th"
+                  ? "bg-[#4f63ef] text-white shadow-2xs"
+                  : theme === "dark"
+                    ? "text-slate-400 hover:text-slate-200"
+                    : "text-slate-500 hover:text-slate-800"
+              }`}
+            >
+              TH
+            </button>
+          </div>
 
           {/* Theme Switcher Button */}
           <button

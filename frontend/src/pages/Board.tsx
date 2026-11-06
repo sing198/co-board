@@ -18,7 +18,7 @@ import {
   arrayMove
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Plus, Link as LinkIcon, Edit2, Trash2, LogOut, AlertCircle, Wifi, WifiOff, X, ChevronDown, ChevronRight, Sun, Moon, UserPlus, Globe, Bell, Check, Search, Tag, FileText, Image, Calendar, Clock, CheckSquare, LayoutDashboard, GanttChart, Network, Timer, MoreHorizontal } from "lucide-react";
+import { Plus, Link as LinkIcon, Edit2, Trash2, LogOut, AlertCircle, Wifi, WifiOff, X, ChevronDown, ChevronRight, Sun, Moon, UserPlus, Globe, Bell, Check, Search, Tag, FileText, Image, Calendar, Clock, CheckSquare, LayoutDashboard, GanttChart, Network, Timer, MoreHorizontal, Lock, Eye } from "lucide-react";
 
 import { toPng } from "html-to-image";
 
@@ -49,6 +49,16 @@ const VIEW_HINTS: Record<BoardView, string> = {
   timeline: "Each bar is a task from its start date to its due date.",
   mindmap: "Click an idea to open it, or add a branch from it.",
   scrum: "Choose tasks for this sprint, then start it when you are ready.",
+};
+
+const VIEW_HINTS_TH: Record<BoardView, string> = {
+  board: "ลากการ์ดย้ายระหว่างคอลัมน์ หรือคลิกที่การ์ดเพื่อเพิ่มรายละเอียด",
+  list: "คลิกที่งานเพื่อดูรายละเอียด หรือเปลี่ยนสถานะได้จากเมนูในตาราง",
+  due: "จัดกลุ่มงานตามกำหนดส่ง คลิกที่งานเพื่อเปลี่ยนวันที่ได้ทันที",
+  calendar: "แสดงงานตามวันครบกำหนด ลากงานไปวางในช่องวันที่เพื่อเลื่อนกำหนดส่ง",
+  timeline: "แต่ละแท่งแสดงช่วงเวลาของงานตั้งแต่วันเริ่มต้นถึงวันครบกำหนด",
+  mindmap: "คลิกที่ไอเดียเพื่อดูรายละเอียด หรือกด + เพื่อแตกกิ่งไอเดียย่อย",
+  scrum: "เลือกงานจาก Backlog เข้าสปรินต์ แล้วกดเริ่มสปรินต์เมื่อพร้อม",
 };
 
 function AvatarImage({ src, name, className, title }: { src: string; name: string; className: string; title?: string }) {
@@ -1007,7 +1017,7 @@ export default function Board() {
   const [searchParams] = useSearchParams();
   const { user, login, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
-  const { lang, toggleLang, t } = useLanguage();
+  const { lang, setLang, t } = useLanguage();
 
   const token = (localStorage.getItem("kanban_jwt") || sessionStorage.getItem("kanban_jwt"));
 
@@ -1591,7 +1601,7 @@ export default function Board() {
         {operations.map(op => <div key={op.id} className={`mutation-notice mutation-${op.state}`}><span role={op.state === "error" || op.state === "unknown" ? "alert" : "status"}>{op.label}: {op.state === "saving" ? t("Saving…", "กำลังบันทึก…") : op.state === "saved" ? t("Saved", "บันทึกแล้ว") : op.message}</span>{op.state === "error" && <button disabled={status !== "connected"} onClick={() => retryOperation(op.id)}>{t("Retry", "ลองใหม่")}</button>}{op.state === "unknown" && <button onClick={refreshBoard}>{t("Refresh board", "รีเฟรชบอร์ด")}</button>}{op.state !== "saving" && <button aria-label={`Dismiss ${op.label} status`} onClick={() => dismissOperation(op.id)}><X size={14} /></button>}</div>)}
       </div>
       <WorkspaceSidebar onLogout={handleWorkspaceLogout} user={user} activePage="board" cardCount={cards.length}
-        note={VIEW_HINTS[boardView]}
+        note={lang === "th" ? VIEW_HINTS_TH[boardView] : VIEW_HINTS[boardView]}
         role={isOwner ? t("Full access", "เจ้าของบอร์ด (สิทธิ์เต็ม)") : canEdit ? t("Can edit", "แก้ไขได้") : t("View only", "ดูได้อย่างเดียว")}
         onOverview={() => document.getElementById("board-overview")?.scrollIntoView({ block: "start" })}
         onAllBoards={() => navigate("/")}>
@@ -1680,16 +1690,44 @@ export default function Board() {
             <span className="presence-count">{onlineUsers.length} {t("online", "ออนไลน์")}</span>
           </div>}
 
-          <button
-            onClick={toggleLang}
-            className={`px-2.5 py-1.5 rounded-xl border text-xs font-extrabold tracking-wide transition-colors cursor-pointer ${theme === "dark"
-              ? "bg-[#172033] text-[#a5b4fc] hover:bg-[#334155] border-[#334155]"
-              : "bg-slate-100 text-slate-700 hover:bg-slate-200 border-slate-200"
-              }`}
-            title={lang === "th" ? "Switch to English" : "เปลี่ยนเป็นภาษาไทย"}
+          <div
+            role="group"
+            aria-label="Language"
+            className={`inline-flex items-center rounded-xl p-0.5 border text-[11px] font-extrabold tracking-wider ${
+              theme === "dark"
+                ? "bg-[#172033] border-[#334155]"
+                : "bg-slate-100 border-slate-200"
+            }`}
           >
-            {lang === "th" ? "🇹🇭 TH" : "🇬🇧 EN"}
-          </button>
+            <button
+              type="button"
+              onClick={() => setLang("en")}
+              aria-pressed={lang === "en"}
+              className={`px-2 py-1 rounded-lg transition-all cursor-pointer ${
+                lang === "en"
+                  ? "bg-[#4f63ef] text-white shadow-2xs"
+                  : theme === "dark"
+                    ? "text-slate-400 hover:text-slate-200"
+                    : "text-slate-500 hover:text-slate-800"
+              }`}
+            >
+              EN
+            </button>
+            <button
+              type="button"
+              onClick={() => setLang("th")}
+              aria-pressed={lang === "th"}
+              className={`px-2 py-1 rounded-lg transition-all cursor-pointer ${
+                lang === "th"
+                  ? "bg-[#4f63ef] text-white shadow-2xs"
+                  : theme === "dark"
+                    ? "text-slate-400 hover:text-slate-200"
+                    : "text-slate-500 hover:text-slate-800"
+              }`}
+            >
+              TH
+            </button>
+          </div>
 
           <button
             onClick={toggleTheme}
@@ -2064,7 +2102,7 @@ export default function Board() {
             }`}>
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 rounded-xl bg-[#e0e7ff] dark:bg-[#243052]/60 text-[#4f63ef] dark:text-[#a5b4fc] flex items-center justify-center font-bold text-sm">
-                🔐
+                <Lock size={15} />
               </div>
               <div>
                 <p className="text-xs font-bold">{t("Sign in to make changes", "เข้าสู่ระบบเพื่อแก้ไขบอร์ดนี้")}</p>
@@ -2085,7 +2123,7 @@ export default function Board() {
           <div className={`border rounded-2xl p-3.5 flex items-center justify-between shadow-xs ${theme === "dark" ? "bg-slate-900/60 border-slate-800 text-slate-300" : "bg-slate-50 border-slate-200 text-slate-600"
             }`}>
             <div className="flex items-center gap-2.5">
-              <span className="text-sm">👁️</span>
+              <Eye size={15} className="text-slate-400" />
               <p className="text-xs font-semibold">
                 {t("You can look at this board, but not change it.", "คุณกำลังอยู่ในโหมดดูอย่างเดียว (ไม่สามารถแก้ไขบอร์ดได้)")}
               </p>

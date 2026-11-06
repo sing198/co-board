@@ -26,6 +26,7 @@ import { useWebSocket } from "../useWebSocket";
 import type { Card, CardNote } from "../useWebSocket";
 import { useAuth } from "../useAuth";
 import { useTheme } from "../useTheme";
+import { useLanguage } from "../useLanguage";
 import { useNotifications } from "../useNotifications";
 import AssignmentNotices from "../components/AssignmentNotices";
 import { API_URL } from "../config";
@@ -651,6 +652,7 @@ export function CardDetailModal({
   const [notes, setNotes] = useState<CardNote[]>([]);
   const [showEarlier, setShowEarlier] = useState(false);
   const [draft, setDraft] = useState("");
+  const { t } = useLanguage();
 
   const cardId = card.ID.toString();
 
@@ -750,17 +752,17 @@ export function CardDetailModal({
               className={`text-lg font-bold bg-transparent border-none focus:outline-none focus:ring-2 focus:ring-[#4f63ef] rounded-lg px-1 py-0.5 w-full ${
                 theme === "dark" ? "text-slate-100" : "text-slate-900"
               }`}
-              aria-label="Task title" placeholder="Task title..."
+              aria-label="Task title" placeholder={t("Task title...", "ชื่องาน...")}
             />
             <div className="flex items-center flex-wrap gap-2 text-xs pt-0.5">
               <span className={`px-2.5 py-1 rounded-lg font-bold ${
                 theme === "dark" ? "bg-slate-800 text-slate-300" : "bg-slate-100 text-slate-600"
               }`}>
-                <label>Column: <select aria-label="Move task to column" disabled={!canEdit} value={card.List} onChange={event => onMove(cardId, event.target.value)} className="bg-transparent rounded px-1 font-bold">{columns.map(column => <option key={column} value={column}>{column}</option>)}</select></label>
+                <label>{t("Column:", "คอลัมน์:")} <select aria-label="Move task to column" disabled={!canEdit} value={card.List} onChange={event => onMove(cardId, event.target.value)} className="bg-transparent rounded px-1 font-bold">{columns.map(column => <option key={column} value={column}>{column}</option>)}</select></label>
               </span>
               {swimlanes.length > 0 ? (
                 <div className="flex items-center gap-1 px-2.5 py-1 rounded-lg font-bold bg-indigo-50 text-indigo-700 border border-indigo-100 dark:bg-indigo-950/30 dark:text-indigo-300 dark:border-indigo-800/50">
-                  <span className="opacity-75">Group:</span>
+                  <span className="opacity-75">{t("Group:", "กลุ่มงาน:")}</span>
                   <select
                     aria-label="Move task to group"
                     disabled={!canEdit}
@@ -798,12 +800,12 @@ export function CardDetailModal({
             {/* Description */}
             <div className="flex flex-col gap-2">
               <div className="flex items-center gap-2 text-xs font-bold text-slate-400 uppercase tracking-wider">
-                <FileText size={14} className="text-[#4f63ef] dark:text-[#a5b4fc]" /> Description
+                <FileText size={14} className="text-[#4f63ef] dark:text-[#a5b4fc]" /> {t("Description", "รายละเอียดงาน")}
               </div>
               <textarea
                 rows={3}
                 readOnly={!canEdit}
-                aria-label="Task description" placeholder="Add a more detailed description..."
+                aria-label="Task description" placeholder={t("Add a more detailed description...", "เพิ่มคำอธิบายหรือรายละเอียดของงานนี้...")}
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 onBlur={handleSaveDescription}
@@ -817,7 +819,7 @@ export function CardDetailModal({
             <div className="flex flex-col gap-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 text-xs font-bold text-slate-400 uppercase tracking-wider">
-                  <CheckSquare size={14} className="text-[#10b981]" /> Checklist
+                  <CheckSquare size={14} className="text-[#10b981]" /> {t("Checklist", "รายการย่อย (Checklist)")}
                 </div>
                 {checklist.length > 0 && (
                   <span className="text-xs font-bold text-[#10b981]">
@@ -872,7 +874,7 @@ export function CardDetailModal({
                   <div className="flex items-center gap-2 mt-1">
                     <input
                       type="text"
-                      aria-label="New checklist item" placeholder="Add a checklist item..."
+                      aria-label="New checklist item" placeholder={t("Add a checklist item...", "เพิ่มรายการย่อย...")}
                       value={newItemText}
                       onChange={(e) => setNewItemText(e.target.value)}
                       onKeyDown={(e) => {
@@ -899,7 +901,7 @@ export function CardDetailModal({
                       }}
                       className="px-3 py-1.5 bg-[#4f63ef] hover:bg-[#4051d6] text-white text-xs font-bold rounded-xl transition-all shadow-xs cursor-pointer"
                     >
-                      Add
+                      {t("Add", "เพิ่ม")}
                     </button>
                   </div>
                 )}
@@ -908,8 +910,8 @@ export function CardDetailModal({
 
             {/* Notes & Activity */}
             <section className="task-notes pt-2 border-t border-slate-100 dark:border-slate-800" aria-label="Notes">
-              <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">Notes</div>
-              {notes.length === 0 ? <p>Moves and short notes show up here.</p> : (
+              <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">{t("Notes", "บันทึกและประวัติ")}</div>
+              {notes.length === 0 ? <p>{t("Moves and short notes show up here.", "ประวัติการย้ายคอลัมน์และบันทึกสั้นๆ จะแสดงที่นี่")}</p> : (
                 <ul>
                   {(showEarlier ? notes : notes.slice(0, 8)).map((note) => {
                     const when = noteStamp(note.CreatedAt);
@@ -922,7 +924,7 @@ export function CardDetailModal({
                   })}
                 </ul>
               )}
-              {notes.length > 8 && !showEarlier ? <button type="button" onClick={() => setShowEarlier(true)}>Show earlier</button> : null}
+              {notes.length > 8 && !showEarlier ? <button type="button" onClick={() => setShowEarlier(true)}>{t("Show earlier", "ดูประวัติก่อนหน้า")}</button> : null}
               {canEdit ? (
                 <form onSubmit={(event) => {
                   event.preventDefault();
@@ -930,8 +932,8 @@ export function CardDetailModal({
                   if (!text || !onAddNote) return;
                   if (onAddNote(cardId, text)) setDraft("");
                 }}>
-                  <input aria-label="Short note" placeholder="Add a short note" maxLength={280} value={draft} onChange={(event) => setDraft(event.target.value)} />
-                  <button type="submit" disabled={!draft.trim()}>Add note</button>
+                  <input aria-label="Short note" placeholder={t("Add a short note", "พิมพ์บันทึกหรือคอมเมนต์สั้นๆ")} maxLength={280} value={draft} onChange={(event) => setDraft(event.target.value)} />
+                  <button type="submit" disabled={!draft.trim()}>{t("Add note", "บันทึก")}</button>
                 </form>
               ) : null}
             </section>
@@ -942,7 +944,7 @@ export function CardDetailModal({
             theme === "dark" ? "bg-slate-900/40 border-slate-800" : "bg-slate-50/70 border-slate-200/80"
           }`}>
             <div className="flex flex-col gap-2">
-              <label htmlFor={`assignee-${cardId}`} className="text-xs font-bold text-slate-400 uppercase tracking-wider">Assignee</label>
+              <label htmlFor={`assignee-${cardId}`} className="text-xs font-bold text-slate-400 uppercase tracking-wider">{t("Assignee", "ผู้รับผิดชอบ")}</label>
               <select
                 id={`assignee-${cardId}`}
                 aria-label="Assignee"
@@ -952,21 +954,21 @@ export function CardDetailModal({
                 onChange={(event) => saveDetail(cardId, { assigneeId: event.target.value })}
                 className={`w-full px-3 py-2 rounded-xl border text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#4f63ef] ${theme === "dark" ? "bg-slate-900/80 border-slate-700 text-slate-100" : "bg-white border-slate-200 text-slate-800"}`}
               >
-                <option value="0">Unassigned</option>
+                <option value="0">{t("Unassigned", "ยังไม่ได้มอบหมาย")}</option>
                 {assigneeChoices.map((member) => <option key={member.id} value={String(member.id)}>{member.name}</option>)}
               </select>
               {onlyYou && (
                 <p className="assignee-hint" id="assignee-hint">
                   <span>
                     {shareHint === "guest"
-                      ? "Sign in to share this board and assign someone else."
+                      ? t("Sign in to share this board and assign someone else.", "เข้าสู่ระบบเพื่อแชร์บอร์ดและมอบหมายงานให้สมาชิกคนอื่น")
                       : shareHint === "owner"
-                        ? "Share this board to assign someone else."
-                        : "Ask the owner to share this board before you can assign someone else."}
+                        ? t("Share this board to assign someone else.", "แชร์บอร์ดนี้ให้เพื่อนร่วมทีมเพื่อมอบหมายงานให้คนอื่น")
+                        : t("Ask the owner to share this board before you can assign someone else.", "ให้เจ้าของบอร์ดแชร์บอร์ดให้สมาชิกเพิ่มเพื่อมอบหมายงาน")}
                   </span>
                   {shareHint !== "member" && (
                     <button type="button" onClick={onShare}>
-                      {shareHint === "guest" ? "Sign in" : "Share"}
+                      {shareHint === "guest" ? t("Sign in", "เข้าสู่ระบบ") : t("Share", "แชร์บอร์ด")}
                     </button>
                   )}
                 </p>
@@ -984,7 +986,7 @@ export function CardDetailModal({
               onClick={() => onDeleteCard(cardId, card.Title)}
               className="px-3.5 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 text-xs font-bold rounded-xl border border-rose-500/20 transition-all cursor-pointer flex items-center gap-1.5"
             >
-              <Trash2 size={14} /> Delete Task
+              <Trash2 size={14} /> {t("Delete Task", "ลบงานนี้")}
             </button>
           )}
 
@@ -992,7 +994,7 @@ export function CardDetailModal({
             onClick={onClose}
             className="px-5 py-2 bg-[#4f63ef] hover:bg-[#4051d6] text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-[#4f63ef]/20 cursor-pointer ml-auto"
           >
-            Close
+            {t("Close", "ปิด")}
           </button>
         </div>
       </div>
@@ -1005,6 +1007,7 @@ export default function Board() {
   const [searchParams] = useSearchParams();
   const { user, login, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
+  const { lang, toggleLang, t } = useLanguage();
 
   const token = (localStorage.getItem("kanban_jwt") || sessionStorage.getItem("kanban_jwt"));
 
@@ -1566,14 +1569,14 @@ export default function Board() {
       setShowGuestExitModal(true);
       return;
     }
-    if (user?.email === "guest@kanban.demo" && !window.confirm("Log out of your guest session? You may lose access to your guest boards.")) return;
+    if (user?.email === "guest@kanban.demo" && !window.confirm(t("Log out of your guest session? You may lose access to your guest boards.", "ออกจากระบบโหมดทดลองใช้ (Guest) หรือไม่? บอร์ดที่ยังไม่ได้เข้าสู่ระบบเพื่อบันทึกอาจสูญหายได้"))) return;
     isLoggingInRef.current = true;
     logout();
   };
 
   if (!boardId) return null;
-  if (boardError) return <main className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950 p-6"><section className="max-w-md text-center space-y-4 dark:text-white"><h1 className="text-2xl font-bold">{boardError === "missing" ? "Board not found" : "You don’t have access to this board"}</h1><p>{boardError === "missing" ? "This board may have been deleted or the link is incorrect." : "Sign in with an account that has access, or ask the owner for an invitation."}</p><div className="flex justify-center gap-4"><button className="new-task-button" onClick={() => navigate("/")}>Back to dashboard</button><button onClick={retryBoard}>Try again</button>{boardError === "forbidden" && <button onClick={() => handleLogin(boardId)}>Sign in</button>}</div></section></main>;
-  if (!boardType) return <main className="app-loading"><section className="text-center space-y-4"><p role={errorToast ? "alert" : "status"}>{errorToast || "Loading your board…"}</p>{errorToast && <button className="new-task-button" onClick={retryBoard}>Try again</button>}<button onClick={() => navigate("/")}>Back to dashboard</button></section></main>;
+  if (boardError) return <main className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950 p-6"><section className="max-w-md text-center space-y-4 dark:text-white"><h1 className="text-2xl font-bold">{boardError === "missing" ? t("Board not found", "ไม่พบบอร์ดนี้") : t("You don’t have access to this board", "คุณไม่มีสิทธิ์เข้าถึงบอร์ดนี้")}</h1><p>{boardError === "missing" ? t("This board may have been deleted or the link is incorrect.", "บอร์ดนี้อาจถูกลบไปแล้ว หรือลิงก์ไม่ถูกต้อง") : t("Sign in with an account that has access, or ask the owner for an invitation.", "กรุณาเข้าสู่ระบบด้วยบัญชีที่มีสิทธิ์ หรือขอคำเชิญจากเจ้าของบอร์ด")}</p><div className="flex justify-center gap-4"><button className="new-task-button" onClick={() => navigate("/")}>{t("Back to dashboard", "กลับสู่หน้าแดชบอร์ด")}</button><button onClick={retryBoard}>{t("Try again", "ลองใหม่อีกครั้ง")}</button>{boardError === "forbidden" && <button onClick={() => handleLogin(boardId)}>{t("Sign in", "เข้าสู่ระบบ")}</button>}</div></section></main>;
+  if (!boardType) return <main className="app-loading"><section className="text-center space-y-4"><p role={errorToast ? "alert" : "status"}>{errorToast || t("Loading your board…", "กำลังโหลดบอร์ดของคุณ…")}</p>{errorToast && <button className="new-task-button" onClick={retryBoard}>{t("Try again", "ลองใหม่อีกครั้ง")}</button>}<button onClick={() => navigate("/")}>{t("Back to dashboard", "กลับสู่หน้าแดชบอร์ด")}</button></section></main>;
 
 
   const bgPresetClass = BOARD_BACKGROUND_PRESETS[boardBackground]?.class || "";
@@ -1584,16 +1587,16 @@ export default function Board() {
     }`}>
 
       <div className="mutation-feedback" aria-label="Task save status">
-        {pendingDeletes.map(id => <div key={id} className="mutation-notice"><span role="status">This task will be deleted in a few seconds.</span><button onClick={() => undoDelete(id)}>Undo</button></div>)}
-        {operations.map(op => <div key={op.id} className={`mutation-notice mutation-${op.state}`}><span role={op.state === "error" || op.state === "unknown" ? "alert" : "status"}>{op.label}: {op.state === "saving" ? "Saving…" : op.state === "saved" ? "Saved" : op.message}</span>{op.state === "error" && <button disabled={status !== "connected"} onClick={() => retryOperation(op.id)}>Retry</button>}{op.state === "unknown" && <button onClick={refreshBoard}>Refresh board</button>}{op.state !== "saving" && <button aria-label={`Dismiss ${op.label} status`} onClick={() => dismissOperation(op.id)}><X size={14} /></button>}</div>)}
+        {pendingDeletes.map(id => <div key={id} className="mutation-notice"><span role="status">{t("This task will be deleted in a few seconds.", "งานนี้จะถูกลบในอีกไม่กี่วินาที")}</span><button onClick={() => undoDelete(id)}>{t("Undo", "เลิกทำ")}</button></div>)}
+        {operations.map(op => <div key={op.id} className={`mutation-notice mutation-${op.state}`}><span role={op.state === "error" || op.state === "unknown" ? "alert" : "status"}>{op.label}: {op.state === "saving" ? t("Saving…", "กำลังบันทึก…") : op.state === "saved" ? t("Saved", "บันทึกแล้ว") : op.message}</span>{op.state === "error" && <button disabled={status !== "connected"} onClick={() => retryOperation(op.id)}>{t("Retry", "ลองใหม่")}</button>}{op.state === "unknown" && <button onClick={refreshBoard}>{t("Refresh board", "รีเฟรชบอร์ด")}</button>}{op.state !== "saving" && <button aria-label={`Dismiss ${op.label} status`} onClick={() => dismissOperation(op.id)}><X size={14} /></button>}</div>)}
       </div>
       <WorkspaceSidebar onLogout={handleWorkspaceLogout} user={user} activePage="board" cardCount={cards.length}
         note={VIEW_HINTS[boardView]}
-        role={isOwner ? "Full access" : canEdit ? "Can edit" : "View only"}
+        role={isOwner ? t("Full access", "เจ้าของบอร์ด (สิทธิ์เต็ม)") : canEdit ? t("Can edit", "แก้ไขได้") : t("View only", "ดูได้อย่างเดียว")}
         onOverview={() => document.getElementById("board-overview")?.scrollIntoView({ block: "start" })}
         onAllBoards={() => navigate("/")}>
         {swimlanes.length > 1 && <>
-          <div className="sidebar-section-label">GROUPS</div>
+          <div className="sidebar-section-label">{t("GROUPS", "กลุ่มงาน")}</div>
           {swimlanes.map((name, index) => (
             <button key={name} onClick={() => document.getElementById(`workstream-${index}`)?.scrollIntoView({ block: "start" })} className="sidebar-stream"><i style={{ background: ["#818cf8", "#7dd3fc", "#6ee7b7"][index % 3] }} />{name}</button>
           ))}
@@ -1601,8 +1604,8 @@ export default function Board() {
       </WorkspaceSidebar>
       {status !== "connected" && (
         <div role="status" className="bg-amber-100 text-amber-950 px-4 py-3 text-center text-sm">
-          {status === "connecting" ? "Connecting…" : "Connection lost. Reconnecting…"}
-          {" "}You can keep looking. Edits wait until the connection is back.
+          {status === "connecting" ? t("Connecting…", "กำลังเชื่อมต่อ…") : t("Connection lost. Reconnecting…", "การเชื่อมต่อขัดข้อง กำลังเชื่อมต่อใหม่…")}
+          {" "}{t("You can keep looking. Edits wait until the connection is back.", "คุณยังดูข้อมูลต่อได้ การแก้ไขจะทำงานต่อเมื่อเชื่อมต่อสำเร็จ")}
         </div>
       )}
       {/* Toast Alert Banner */}
@@ -1623,7 +1626,7 @@ export default function Board() {
             onClick={() => navigate("/")}
             className="flex items-center gap-2 group cursor-pointer select-none"
             aria-label="Go to dashboard"
-            title="Go to Dashboard"
+            title={t("Go to Dashboard", "กลับไปหน้าแดชบอร์ด")}
           >
             <span className="mobile-workspace-symbol"><KanbanMark /></span>
           </button>
@@ -1665,7 +1668,7 @@ export default function Board() {
                 } ${isOwner ? "hover:text-[#4f63ef] dark:hover:text-[#a5b4fc] cursor-pointer" : ""}`}
             >
               {boardName}
-              {isOwner && <span className="text-[10px] font-normal text-slate-400 opacity-0 group-hover:opacity-100">(click to edit)</span>}
+              {isOwner && <span className="text-[10px] font-normal text-slate-400 opacity-0 group-hover:opacity-100">{t("(click to edit)", "(คลิกเพื่อเปลี่ยนชื่อ)")}</span>}
             </h1>
           )}
         </div>
@@ -1674,8 +1677,19 @@ export default function Board() {
         <div className="board-top-actions flex items-center gap-3">
           {status === "connected" && onlineUsers.length > 0 && <div className="board-presence" aria-label={`${onlineUsers.length} users on this board`}>
             <div className="presence-avatars">{onlineUsers.slice(0, 4).map(person => <span key={person.id} tabIndex={0} aria-label={`${person.name || "Visitor"}${String(person.id) === String(user?.id) ? " (you)" : ""} — online`} title={`${person.name || "Visitor"}${String(person.id) === String(user?.id) ? " (you)" : ""}`}><AvatarImage src={person.avatarUrl} name={person.name || "Visitor"} className="presence-avatar" /><i aria-hidden="true" /></span>)}{onlineUsers.length > 4 && <span className="presence-overflow" title={onlineUsers.slice(4).map(p => p.name).join(", ")}>+{onlineUsers.length - 4}</span>}</div>
-            <span className="presence-count">{onlineUsers.length} online</span>
+            <span className="presence-count">{onlineUsers.length} {t("online", "ออนไลน์")}</span>
           </div>}
+
+          <button
+            onClick={toggleLang}
+            className={`px-2.5 py-1.5 rounded-xl border text-xs font-extrabold tracking-wide transition-colors cursor-pointer ${theme === "dark"
+              ? "bg-[#172033] text-[#a5b4fc] hover:bg-[#334155] border-[#334155]"
+              : "bg-slate-100 text-slate-700 hover:bg-slate-200 border-slate-200"
+              }`}
+            title={lang === "th" ? "Switch to English" : "เปลี่ยนเป็นภาษาไทย"}
+          >
+            {lang === "th" ? "🇹🇭 TH" : "🇬🇧 EN"}
+          </button>
 
           <button
             onClick={toggleTheme}
@@ -1683,7 +1697,7 @@ export default function Board() {
               ? "bg-[#172033] text-amber-400 hover:bg-[#334155] border-[#334155]"
               : "bg-slate-100 text-slate-700 hover:bg-slate-200 border-slate-200"
               }`}
-            title={theme === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode"}
+            title={theme === "dark" ? t("Switch to Light Mode", "เปลี่ยนเป็นโหมดสว่าง") : t("Switch to Dark Mode", "เปลี่ยนเป็นโหมดมืด")}
           >
             {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
           </button>
@@ -1695,7 +1709,7 @@ export default function Board() {
               : "bg-rose-50 border-rose-200 text-rose-700 animate-pulse"
             }`}>
             {status === "connected" ? <Wifi size={13} /> : <WifiOff size={13} />}
-            <span className="capitalize">{status}</span>
+            <span className="capitalize">{status === "connected" ? t("connected", "เชื่อมต่อแล้ว") : status === "connecting" ? t("connecting", "กำลังเชื่อมต่อ") : status}</span>
           </div>
 
           {/* Notifications Bell Dropdown (Miro Screenshot 3, 4 & 5) */}
@@ -1707,7 +1721,7 @@ export default function Board() {
                   ? "bg-[#172033] text-slate-200 hover:bg-[#334155] border-[#334155]"
                   : "bg-slate-100 text-slate-700 hover:bg-slate-200 border-slate-200"
                   }`}
-                aria-label="Notifications" title="Notifications"
+                aria-label="Notifications" title={t("Notifications", "การแจ้งเตือน")}
               >
                 <Bell size={16} />
                 {unreadCount > 0 && (
@@ -1723,10 +1737,10 @@ export default function Board() {
                   }`}>
                   <div className="flex items-center justify-between border-b pb-3 mb-3 border-slate-100 dark:border-[#334155]">
                     <h3 className="text-sm font-bold flex items-center gap-2">
-                      Notifications
+                      {t("Notifications", "การแจ้งเตือน")}
                       {unreadCount > 0 && (
                         <span className="bg-[#e0e7ff] text-[#4338ca] dark:bg-[#243052]/60 dark:text-[#a5b4fc] text-[10px] px-2 py-0.5 rounded-full font-bold">
-                          {unreadCount} unread
+                          {unreadCount} {t("unread", "ใหม่")}
                         </span>
                       )}
                     </h3>
@@ -1741,7 +1755,7 @@ export default function Board() {
                   <div className="max-h-80 overflow-y-auto space-y-3 pr-1">
                     {notifications.length === 0 && assignments.length === 0 ? (
                       <div className="text-center py-6 text-slate-400 text-xs">
-                        No notifications yet
+                        {t("No notifications yet", "ยังไม่มีการแจ้งเตือน")}
                       </div>
                     ) : (
                       <>
@@ -1762,7 +1776,7 @@ export default function Board() {
                             />
                             <div className="flex-1 min-w-0">
                               <p className="text-xs leading-snug">
-                                <span className="font-bold">{item.userName}</span> asked to edit <span className="font-semibold text-[#4f63ef] dark:text-[#a5b4fc]">{item.boardName}</span>
+                                <span className="font-bold">{item.userName}</span> {t("asked to edit", "ขอสิทธิ์แก้ไขบอร์ด")} <span className="font-semibold text-[#4f63ef] dark:text-[#a5b4fc]">{item.boardName}</span>
                               </p>
 
                               {/* Notification Actions */}
@@ -1773,22 +1787,22 @@ export default function Board() {
                                       onClick={() => respondToAccess(item.id, "approve")}
                                       className="px-3 py-1 bg-[#4f63ef] hover:bg-[#4051d6] text-white text-xs font-bold rounded-lg transition-all cursor-pointer shadow-xs"
                                     >
-                                      Allow editing
+                                      {t("Allow editing", "อนุญาตให้แก้ไข")}
                                     </button>
                                     <button
                                       onClick={() => respondToAccess(item.id, "dismiss")}
                                       className="px-3 py-1 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs font-semibold rounded-lg transition-all cursor-pointer"
                                     >
-                                      Dismiss
+                                      {t("Dismiss", "ปฏิเสธ")}
                                     </button>
                                   </>
                                 ) : item.status === "approved" ? (
                                   <span className="text-xs font-bold text-[#059669] dark:text-[#6ee7b7] flex items-center gap-1">
-                                    <Check size={14} /> Editing allowed
+                                    <Check size={14} /> {t("Editing allowed", "อนุญาตให้แก้ไขแล้ว")}
                                   </span>
                                 ) : (
                                   <span className="text-xs font-medium text-slate-400">
-                                    Request dismissed
+                                    {t("Request dismissed", "ปฏิเสธคำขอแล้ว")}
                                   </span>
                                 )}
                               </div>
@@ -1815,7 +1829,7 @@ export default function Board() {
             className={`workspace-share px-4 py-1.5 rounded-xl text-white text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${theme === "dark" ? "bg-[#4f63ef] hover:bg-[#4051d6] shadow-md shadow-[#4f63ef]/20" : "bg-[#4f63ef] hover:bg-[#4051d6] shadow-md shadow-[#4f63ef]/20"
               }`}
           >
-            <LinkIcon size={13} /> Share
+            <LinkIcon size={13} /> {t("Share", "แชร์")}
           </button>
 
           {user ? (
@@ -1830,7 +1844,7 @@ export default function Board() {
               <button
                 onClick={handleWorkspaceLogout}
                 className="text-slate-400 hover:text-rose-600 transition-colors ml-1 cursor-pointer"
-                aria-label="Logout" title="Logout"
+                aria-label="Logout" title={t("Logout", "ออกจากระบบ")}
               >
                 <LogOut size={13} />
               </button>
@@ -1840,29 +1854,29 @@ export default function Board() {
               onClick={() => handleLogin(boardId || "")}
               className="px-3.5 py-1.5 bg-[#4f63ef] hover:bg-[#4051d6] text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-[#4f63ef]/20"
             >
-              Sign In
+              {t("Sign In", "เข้าสู่ระบบ")}
             </button>
           )}
         </div>
       </header>
 
-      {user?.email === "guest@kanban.demo" && isOwner && <div className="guest-session-notice" role="note"><span><strong>Guest session</strong> · Logging out of this board deletes it. Sign in to keep it.</span><button onClick={() => handleLogin(boardId || "")}>Sign in to save</button></div>}
+      {user?.email === "guest@kanban.demo" && isOwner && <div className="guest-session-notice" role="note"><span><strong>{t("Guest session", "โหมดทดลองใช้ (Guest)")}</strong> · {t("Logging out of this board deletes it. Sign in to keep it.", "การออกจากระบบจะลบบอร์ดนี้ทิ้ง กดเข้าสู่ระบบเพื่อบันทึกบอร์ดเก็บไว้ในบัญชีของคุณ")}</span><button onClick={() => handleLogin(boardId || "")}>{t("Sign in to save", "เข้าสู่ระบบเพื่อบันทึกบอร์ด")}</button></div>}
       {showViewOnlyNote && (
         <div className="view-only-note" role="note">
           <p>
             {signedInViewer
               ? accessRequestStatus === "pending"
-                ? "You can look at this board. Your request is with the owner."
-                : "You can look at this board. Ask the owner if you need to change it."
-              : "You can look at this board. Sign in to ask the owner if you need to change it."}
+                ? t("You can look at this board. Your request is with the owner.", "คุณกำลังดูบอร์ดในโหมดอ่านอย่างเดียว ส่งคำขอแก้ไขไปหาเจ้าของบอร์ดแล้ว")
+                : t("You can look at this board. Ask the owner if you need to change it.", "คุณสามารถดูบอร์ดนี้ได้ หากต้องการแก้ไขสามารถกดส่งคำขอถึงเจ้าของบอร์ด")
+              : t("You can look at this board. Sign in to ask the owner if you need to change it.", "คุณกำลังดูบอร์ดในโหมดอ่านอย่างเดียว เข้าสู่ระบบเพื่อขอสิทธิ์แก้ไขจากเจ้าของบอร์ด")}
           </p>
           {signedInViewer && accessRequestStatus === "none" && (
             <button type="button" onClick={handleRequestAccess} disabled={isRequestingAccess}>
-              {isRequestingAccess ? "Sending request..." : "Request editor rights"}
+              {isRequestingAccess ? t("Sending request...", "กำลังส่งคำขอ...") : t("Request editor rights", "ขอสิทธิ์แก้ไขบอร์ด")}
             </button>
           )}
           {!signedInViewer && (
-            <button type="button" onClick={() => handleLogin(boardId || "")}>Sign in</button>
+            <button type="button" onClick={() => handleLogin(boardId || "")}>{t("Sign in", "เข้าสู่ระบบ")}</button>
           )}
         </div>
       )}
@@ -1870,17 +1884,17 @@ export default function Board() {
         <div className="overview-copy">
           <div className="overview-title-row">
             <h2>{boardName}</h2>
-            <div className="overview-meta">{(boardView === "board" || boardView === "scrum") && swimlanes.length > 1 && <span><UserPlus size={14} /> {swimlanes.length} groups</span>}<span className="overview-access">{isOwner ? "Full access" : canEdit ? "Can edit" : "View only"}</span><span><strong>{cards.length}</strong> {cards.length === 1 ? "task" : "tasks"}</span></div>
+            <div className="overview-meta">{(boardView === "board" || boardView === "scrum") && swimlanes.length > 1 && <span><UserPlus size={14} /> {swimlanes.length} {t("groups", "กลุ่มงาน")}</span>}<span className="overview-access">{isOwner ? t("Full access", "เจ้าของบอร์ด") : canEdit ? t("Can edit", "แก้ไขได้") : t("View only", "ดูอย่างเดียว")}</span><span><strong>{cards.length}</strong> {t(cards.length === 1 ? "task" : "tasks", "งาน")}</span></div>
           </div>
           <div className="board-view-switch" role="group" aria-label="Board view">
-            <button aria-pressed={boardView === "board"} title="Drag cards between columns" onClick={() => chooseBoardView("board")}><LayoutDashboard size={15} /> Board</button>
-            <button aria-pressed={boardView === "list"} title="Every task in a list" onClick={() => chooseBoardView("list")}><FileText size={15} /> List</button>
+            <button aria-pressed={boardView === "board"} title={t("Drag cards between columns", "ลากการ์ดย้ายระหว่างคอลัมน์")} onClick={() => chooseBoardView("board")}><LayoutDashboard size={15} /> {t("Board", "บอร์ด")}</button>
+            <button aria-pressed={boardView === "list"} title={t("Every task in a list", "ดูงานทั้งหมดในรูปแบบตารางรายการ")} onClick={() => chooseBoardView("list")}><FileText size={15} /> {t("List", "รายการ")}</button>
             <div className="board-view-extra">
-              <button aria-pressed={boardView === "calendar"} title="Tasks on their due dates" onClick={() => chooseBoardView("calendar")}><Calendar size={15} /> Calendar</button>
-              <button aria-pressed={boardView === "timeline"} title="Tasks across a date range" onClick={() => chooseBoardView("timeline")}><GanttChart size={15} /> Timeline</button>
-              <button aria-pressed={boardView === "mindmap"} title="Ideas connected as branches" onClick={() => chooseBoardView("mindmap")}><Network size={15} /> Mind map</button>
-              {boardType === "sprint" && <button aria-pressed={boardView === "scrum"} title="Backlog and the current sprint" onClick={() => chooseBoardView("scrum")}><Timer size={15} /> Sprint</button>}
-              <button aria-pressed={boardView === "due"} title="What is overdue, due today, or later" onClick={() => chooseBoardView("due")}><Clock size={15} /> Due</button>
+              <button aria-pressed={boardView === "calendar"} title={t("Tasks on their due dates", "ดูงานตามวันครบกำหนดบนปฏิทิน")} onClick={() => chooseBoardView("calendar")}><Calendar size={15} /> {t("Calendar", "ปฏิทิน")}</button>
+              <button aria-pressed={boardView === "timeline"} title={t("Tasks across a date range", "ดูช่วงเวลางานแบบไทม์ไลน์")} onClick={() => chooseBoardView("timeline")}><GanttChart size={15} /> {t("Timeline", "ไทม์ไลน์")}</button>
+              <button aria-pressed={boardView === "mindmap"} title={t("Ideas connected as branches", "ดูแผนผังความคิดเชื่อมโยงกัน")} onClick={() => chooseBoardView("mindmap")}><Network size={15} /> {t("Mind map", "แผนผังความคิด")}</button>
+              {boardType === "sprint" && <button aria-pressed={boardView === "scrum"} title={t("Backlog and the current sprint", "จัดการ Backlog และสปรินต์ปัจจุบัน")} onClick={() => chooseBoardView("scrum")}><Timer size={15} /> {t("Sprint", "สปรินต์")}</button>}
+              <button aria-pressed={boardView === "due"} title={t("What is overdue, due today, or later", "ดูงานที่เลยกำหนด ครบกำหนดวันนี้ หรือถัดไป")} onClick={() => chooseBoardView("due")}><Clock size={15} /> {t("Due", "กำหนดส่ง")}</button>
             </div>
             <div className="board-view-more-wrap" ref={viewsMenuRef}>
               <button
@@ -1891,22 +1905,22 @@ export default function Board() {
                 aria-pressed={boardView !== "board" && boardView !== "list"}
                 onClick={() => setViewsOpen((open) => !open)}
               >
-                {boardView === "calendar" ? "Calendar" : boardView === "timeline" ? "Timeline" : boardView === "mindmap" ? "Mind map" : boardView === "scrum" ? "Sprint" : boardView === "due" ? "Due" : "Views"}
+                {boardView === "calendar" ? t("Calendar", "ปฏิทิน") : boardView === "timeline" ? t("Timeline", "ไทม์ไลน์") : boardView === "mindmap" ? t("Mind map", "แผนผังความคิด") : boardView === "scrum" ? t("Sprint", "สปรินต์") : boardView === "due" ? t("Due", "กำหนดส่ง") : t("Views", "มุมมองอื่นๆ")}
               </button>
               {viewsOpen && (
                 <div className="board-view-menu" role="menu">
-                  <button type="button" role="menuitem" aria-pressed={boardView === "calendar"} onClick={() => { chooseBoardView("calendar"); setViewsOpen(false); }}><Calendar size={15} /> Calendar</button>
-                  <button type="button" role="menuitem" aria-pressed={boardView === "timeline"} onClick={() => { chooseBoardView("timeline"); setViewsOpen(false); }}><GanttChart size={15} /> Timeline</button>
-                  <button type="button" role="menuitem" aria-pressed={boardView === "mindmap"} onClick={() => { chooseBoardView("mindmap"); setViewsOpen(false); }}><Network size={15} /> Mind map</button>
-                  {boardType === "sprint" && <button type="button" role="menuitem" aria-pressed={boardView === "scrum"} onClick={() => { chooseBoardView("scrum"); setViewsOpen(false); }}><Timer size={15} /> Sprint</button>}
-                  <button type="button" role="menuitem" aria-pressed={boardView === "due"} onClick={() => { chooseBoardView("due"); setViewsOpen(false); }}><Clock size={15} /> Due</button>
+                  <button type="button" role="menuitem" aria-pressed={boardView === "calendar"} onClick={() => { chooseBoardView("calendar"); setViewsOpen(false); }}><Calendar size={15} /> {t("Calendar", "ปฏิทิน")}</button>
+                  <button type="button" role="menuitem" aria-pressed={boardView === "timeline"} onClick={() => { chooseBoardView("timeline"); setViewsOpen(false); }}><GanttChart size={15} /> {t("Timeline", "ไทม์ไลน์")}</button>
+                  <button type="button" role="menuitem" aria-pressed={boardView === "mindmap"} onClick={() => { chooseBoardView("mindmap"); setViewsOpen(false); }}><Network size={15} /> {t("Mind map", "แผนผังความคิด")}</button>
+                  {boardType === "sprint" && <button type="button" role="menuitem" aria-pressed={boardView === "scrum"} onClick={() => { chooseBoardView("scrum"); setViewsOpen(false); }}><Timer size={15} /> {t("Sprint", "สปรินต์")}</button>}
+                  <button type="button" role="menuitem" aria-pressed={boardView === "due"} onClick={() => { chooseBoardView("due"); setViewsOpen(false); }}><Clock size={15} /> {t("Due", "กำหนดส่ง")}</button>
                 </div>
               )}
             </div>
           </div>
         </div>
         <div className="overview-action">
-          {canEdit && columns.length > 0 && <button className="new-task-button" disabled={status !== "connected"} onClick={openQuickAdd}><Plus size={17} /> {boardView === "mindmap" ? "New idea" : "New task"}</button>}
+          {canEdit && columns.length > 0 && <button className="new-task-button" disabled={status !== "connected"} onClick={openQuickAdd}><Plus size={17} /> {boardView === "mindmap" ? t("New idea", "เพิ่มไอเดีย") : t("New task", "เพิ่มงานใหม่")}</button>}
         </div>
       </section>
       {/* Search stays in view. Background, export, and shortcuts live in More. */}
@@ -1923,7 +1937,7 @@ export default function Board() {
               ref={searchInputRef}
               type="text"
               aria-label="Search tasks"
-              placeholder="Find a task"
+              placeholder={t("Find a task", "ค้นหางานในบอร์ด... (กด /)")}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className={`w-full bg-transparent text-xs focus:outline-none placeholder:text-slate-400 ${
@@ -1938,14 +1952,14 @@ export default function Board() {
           </div>
 
           <select aria-label="Filter by due date" value={selectedDueFilter} onChange={event => setSelectedDueFilter(event.target.value)} className="board-due-filter">
-            <option value="all">Any time</option>
-            <option value="overdue">Overdue</option>
-            <option value="today">Today</option>
-            <option value="upcoming">Next 7 days</option>
-            <option value="later">Later</option>
-            <option value="none">No due date</option>
+            <option value="all">{t("Any time", "ทุกกำหนดส่ง")}</option>
+            <option value="overdue">{t("Overdue", "เลยกำหนด")}</option>
+            <option value="today">{t("Today", "ส่งวันนี้")}</option>
+            <option value="upcoming">{t("Next 7 days", "ใน 7 วันข้างหน้า")}</option>
+            <option value="later">{t("Later", "หลังจากนั้น")}</option>
+            <option value="none">{t("No due date", "ไม่ระบุวันส่ง")}</option>
           </select>
-          {user && <button type="button" className="board-mine-filter" aria-pressed={mineOnly} title={mineOnly ? "Showing only tasks assigned to me" : "Show only tasks assigned to me"} onClick={() => setMineOnly((current) => !current)}>{mineOnly ? "✓ Mine" : "Mine"}</button>}
+          {user && <button type="button" className="board-mine-filter" aria-pressed={mineOnly} title={mineOnly ? t("Showing only tasks assigned to me", "กำลังแสดงเฉพาะงานของฉัน") : t("Show only tasks assigned to me", "แสดงเฉพาะงานที่มอบหมายให้ฉัน")} onClick={() => setMineOnly((current) => !current)}>{mineOnly ? t("✓ Mine", "✓ งานของฉัน") : t("Mine", "งานของฉัน")}</button>}
 
           <div className="board-filter-chips flex items-center gap-1.5 overflow-x-auto py-0.5 max-w-full">
             <button
@@ -1957,7 +1971,7 @@ export default function Board() {
                   : theme === "dark" ? "bg-[#172033] text-slate-300 border-[#334155] hover:bg-slate-800" : "bg-white text-slate-600 border-slate-200 hover:bg-slate-100"
               }`}
             >
-              All tasks
+              {t("All tasks", "ทุกแท็ก")}
             </button>
             {allBoardTags.map((tagName) => {
               const colorObj = getTagColor(tagName);
@@ -1991,11 +2005,11 @@ export default function Board() {
             }`}
           >
             <MoreHorizontal size={16} />
-            <span>More</span>
+            <span>{t("More", "เพิ่มเติม")}</span>
           </button>
           {moreOpen && (
             <div role="menu" className={`board-more-menu absolute right-0 mt-2 w-72 rounded-2xl border shadow-xl p-3 z-50 ${theme === "dark" ? "bg-[#172033] border-[#334155] text-slate-100" : "bg-white border-slate-200 text-slate-800"}`}>
-              <p className="board-more-label">Background</p>
+              <p className="board-more-label">{t("Background", "พื้นหลังบอร์ด")}</p>
               <div className="flex flex-col gap-1 mb-3">
                 {Object.entries(BOARD_BACKGROUND_PRESETS).map(([bgKey, bgItem]) => (
                   <button
@@ -2015,16 +2029,16 @@ export default function Board() {
                   </button>
                 ))}
               </div>
-              <p className="board-more-label">Save a copy</p>
-              <button type="button" role="menuitem" disabled={isExporting} onClick={() => { setMoreOpen(false); handleExportPNG(); }} className="board-more-action"><Image size={15} /> {isExporting ? "Saving…" : "Save as image"}</button>
-              <button type="button" role="menuitem" onClick={() => { setMoreOpen(false); handleExportPDF(); }} className="board-more-action"><FileText size={15} /> Print this board</button>
-              <p className="board-more-label">Handy keys</p>
+              <p className="board-more-label">{t("Save a copy", "ส่งออกบอร์ด")}</p>
+              <button type="button" role="menuitem" disabled={isExporting} onClick={() => { setMoreOpen(false); handleExportPNG(); }} className="board-more-action"><Image size={15} /> {isExporting ? t("Saving…", "กำลังบันทึกภาพ…") : t("Save as image", "บันทึกเป็นรูปภาพ (PNG)")}</button>
+              <button type="button" role="menuitem" onClick={() => { setMoreOpen(false); handleExportPDF(); }} className="board-more-action"><FileText size={15} /> {t("Print this board", "พิมพ์หรือบันทึกเป็น PDF")}</button>
+              <p className="board-more-label">{t("Handy keys", "คีย์ลัดแป้นพิมพ์")}</p>
               <div className="board-more-keys">
-                <span>New task <kbd>N</kbd></span>
-                <span>Find a task <kbd>/</kbd></span>
-                <span>My tasks filter <kbd>M</kbd></span>
-                <span>Switch views <kbd>1–6</kbd></span>
-                <span>Close or cancel <kbd>Esc</kbd></span>
+                <span>{t("New task", "สร้างงานใหม่")} <kbd>N</kbd></span>
+                <span>{t("Find a task", "ค้นหางาน")} <kbd>/</kbd></span>
+                <span>{t("My tasks filter", "กรองเฉพาะงานของฉัน")} <kbd>M</kbd></span>
+                <span>{t("Switch views", "สลับมุมมองบอร์ด")} <kbd>1–6</kbd></span>
+                <span>{t("Close or cancel", "ปิดหน้าต่าง / ยกเลิก")} <kbd>Esc</kbd></span>
               </div>
             </div>
           )}
@@ -2034,12 +2048,12 @@ export default function Board() {
       {/* MIRO KANBAN CANVAS */}
       {(searchQuery || selectedTagFilter !== "All" || selectedDueFilter !== "all" || mineOnly) && (
         <div className="board-results" aria-live="polite">
-          <span>Showing {filteredCards.length} of {cards.length}</span>
-          <button onClick={() => { setSearchQuery(""); setSelectedTagFilter("All"); setSelectedDueFilter("all"); setMineOnly(false); }}>Show all tasks</button>
+          <span>{t(`Showing ${filteredCards.length} of ${cards.length}`, `กำลังแสดง ${filteredCards.length} จาก ${cards.length} งาน`)}</span>
+          <button onClick={() => { setSearchQuery(""); setSelectedTagFilter("All"); setSelectedDueFilter("all"); setMineOnly(false); }}>{t("Show all tasks", "แสดงงานทั้งหมด")}</button>
         </div>
       )}
       {boardView === "board" && filteredCards.length === 0 && cards.length > 0 && (
-        <div className="board-no-results" role="status">Nothing matches. Choose Show all tasks to see everything again.</div>
+        <div className="board-no-results" role="status">{t("Nothing matches. Choose Show all tasks to see everything again.", "ไม่พบงานที่ตรงกับตัวกรอง กด แสดงงานทั้งหมด เพื่อดูการ์ดทั้งหมดอีกครั้ง")}</div>
       )}
       {boardView === "board" ? <div className="board-scroll" role="region" aria-label="Task board, scroll horizontally to see more columns" tabIndex={0}>
       <main id="board-content" ref={boardContainerRef} className="board-canvas p-6 md:p-8 w-full max-w-[1920px] mx-auto relative z-10 flex flex-col gap-6" style={{ minWidth: Math.max(columns.length * 290 + 64, 354) }}>
@@ -2053,15 +2067,15 @@ export default function Board() {
                 🔐
               </div>
               <div>
-                <p className="text-xs font-bold">Sign in to make changes</p>
-                <p className="text-[13px] opacity-75">You can look around now. Sign in when you want to add or move tasks.</p>
+                <p className="text-xs font-bold">{t("Sign in to make changes", "เข้าสู่ระบบเพื่อแก้ไขบอร์ดนี้")}</p>
+                <p className="text-[13px] opacity-75">{t("You can look around now. Sign in when you want to add or move tasks.", "คุณสามารถเปิดดูงานได้ และกดเข้าสู่ระบบเมื่อต้องการเพิ่มหรือย้ายการ์ดงาน")}</p>
               </div>
             </div>
             <button
               onClick={() => handleLogin(boardId || "")}
               className="px-4 py-2 bg-[#4f63ef] hover:bg-[#4051d6] text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-[#4f63ef]/20 flex-shrink-0 cursor-pointer"
             >
-              Sign in
+              {t("Sign in", "เข้าสู่ระบบ")}
             </button>
           </div>
         )}
@@ -2073,7 +2087,7 @@ export default function Board() {
             <div className="flex items-center gap-2.5">
               <span className="text-sm">👁️</span>
               <p className="text-xs font-semibold">
-                You can look at this board, but not change it.
+                {t("You can look at this board, but not change it.", "คุณกำลังอยู่ในโหมดดูอย่างเดียว (ไม่สามารถแก้ไขบอร์ดได้)")}
               </p>
             </div>
           </div>
@@ -2136,10 +2150,10 @@ export default function Board() {
                   addColumn(name);
                 }}
                 disabled={status !== "connected"}
-                title="Add a column, such as Review"
+                title={t("Add a column, such as Review", "เพิ่มคอลัมน์ใหม่")}
                 className="board-add-column-trailing"
               >
-                <Plus size={14} /> Add column
+                <Plus size={14} /> {t("Add column", "เพิ่มคอลัมน์")}
               </button>
             )}
           </div>
@@ -2167,17 +2181,17 @@ export default function Board() {
                       <button
                         className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors p-0.5 cursor-pointer"
                         onClick={() => toggleSwimlane(swim)}
-                        title={isCollapsed ? "Expand group" : "Collapse group"}
+                        title={isCollapsed ? t("Expand group", "ขยายกลุ่มงาน") : t("Collapse group", "ย่อกลุ่มงาน")}
                       >
                         {isCollapsed ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
                       </button>
 
                       <span
                         onClick={() => {
-                          if (canEdit) openRenameModal("Rename group", swim, (newName) => renameSwimlane(swim, newName));
+                          if (canEdit) openRenameModal(t("Rename group", "เปลี่ยนชื่อกลุ่มงาน"), swim, (newName) => renameSwimlane(swim, newName));
                         }}
                         className={`px-3 py-1 rounded-xl text-xs font-bold shadow-xs cursor-pointer hover:scale-105 transition-all ${tagColor}`}
-                        title="Click to rename this group"
+                        title={t("Click to rename this group", "คลิกเพื่อเปลี่ยนชื่อกลุ่มงานนี้")}
                       >
                         {swim}
                       </span>
@@ -2189,16 +2203,16 @@ export default function Board() {
                       {canEdit && (
                         <div className="flex items-center gap-1 opacity-0 group-hover/swim:opacity-100 transition-opacity ml-1">
                           <button
-                            onClick={() => openRenameModal("Rename group", swim, (newName) => renameSwimlane(swim, newName))}
+                            onClick={() => openRenameModal(t("Rename group", "เปลี่ยนชื่อกลุ่มงาน"), swim, (newName) => renameSwimlane(swim, newName))}
                             className={`p-1 text-slate-400 hover:text-[#4f63ef] dark:hover:text-[#a5b4fc] rounded transition-colors cursor-pointer ${theme === "dark" ? "hover:bg-slate-800" : "hover:bg-slate-100"}`}
-                            aria-label="Rename group" title="Rename group"
+                            aria-label="Rename group" title={t("Rename group", "เปลี่ยนชื่อกลุ่มงาน")}
                           >
                             <Edit2 size={13} />
                           </button>
                           <button
-                            onClick={() => openConfirmModal("Delete this group?", `Delete the group "${swim}"? Tasks in it stay on the board.`, () => deleteSwimlane(swim))}
+                            onClick={() => openConfirmModal(t("Delete this group?", "ลบกลุ่มงานนี้?"), t(`Delete the group "${swim}"? Tasks in it stay on the board.`, `ต้องการลบกลุ่มงาน "${swim}" หรือไม่? (งานที่อยู่ในกลุ่มนี้จะยังคงอยู่บนบอร์ด)`), () => deleteSwimlane(swim))}
                             className="p-1 text-slate-400 hover:text-rose-600 rounded hover:bg-rose-500/10 transition-colors cursor-pointer"
-                            aria-label="Delete group" title="Delete group"
+                            aria-label="Delete group" title={t("Delete group", "ลบกลุ่มงาน")}
                           >
                             <Trash2 size={13} />
                           </button>
@@ -2243,10 +2257,10 @@ export default function Board() {
                                       swimlaneIndex={swimIdx}
                                       onEdit={(id, title, expectedTitle) => editCard(id, title, undefined, expectedTitle)}
                                       onUpdateTags={updateCardTags}
-                                      onDelete={(cardId) => openConfirmModal("Delete Task?", `Are you sure you want to delete task "${c.Title}"?`, () => deleteCard(cardId))}
+                                      onDelete={(cardId) => openConfirmModal(t("Delete Task?", "ลบงานนี้?"), t(`Are you sure you want to delete task "${c.Title}"?`, `คุณแน่ใจหรือไม่ว่าต้องการลบงาน "${c.Title}"?`), () => deleteCard(cardId))}
                                       onOpenDetail={handleOpenCardDetail}
                                       canEdit={canEdit}
-                                      assignee={Number(c.AssigneeID) ? (memberById.get(Number(c.AssigneeID)) || { name: "Assigned", avatarUrl: "" }) : null}
+                                      assignee={Number(c.AssigneeID) ? (memberById.get(Number(c.AssigneeID)) || { name: t("Assigned", "มอบหมายแล้ว"), avatarUrl: "" }) : null}
                                     />
                                   ))}
                                 </SwimlaneDropZone>
@@ -2267,7 +2281,7 @@ export default function Board() {
                                     : "bg-slate-100 hover:bg-slate-200/80 text-slate-700 border border-slate-200/80 shadow-2xs"
                                 }`}
                               >
-                                <Plus size={14} /> Add task
+                                <Plus size={14} /> {t("Add task", "เพิ่มงาน")}
                               </button>
                             )}
 
@@ -2280,7 +2294,7 @@ export default function Board() {
                                   ref={(el) => adjustHeight(el)}
                                   autoFocus
                                   rows={2}
-                                  placeholder="Task name, then Enter"
+                                  placeholder={t("Task name, then Enter", "พิมพ์ชื่องาน แล้วกด Enter")}
                                   value={newTaskTitle}
                                   onChange={(e) => {
                                     setNewTaskTitle(e.target.value);
@@ -2303,9 +2317,9 @@ export default function Board() {
                                 />
 
                                 <div className="quick-add-actions">
-                                  <span>Enter adds it. Esc cancels.</span>
-                                  <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => { quickAddSubmittedRef.current = true; setAddingToKey(null); setNewTaskTitle(""); }}>Cancel</button>
-                                  <button type="button" className="quick-add-save" onMouseDown={(event) => event.preventDefault()} onClick={() => submitQuickTask(newTaskTitle, col, (swimCards[swimCards.length - 1]?.Position ?? 0) + 1000, swim || "Untitled")}>Add</button>
+                                  <span>{t("Enter adds it. Esc cancels.", "กด Enter เพื่อเพิ่ม หรือ Esc เพื่อยกเลิก")}</span>
+                                  <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => { quickAddSubmittedRef.current = true; setAddingToKey(null); setNewTaskTitle(""); }}>{t("Cancel", "ยกเลิก")}</button>
+                                  <button type="button" className="quick-add-save" onMouseDown={(event) => event.preventDefault()} onClick={() => submitQuickTask(newTaskTitle, col, (swimCards[swimCards.length - 1]?.Position ?? 0) + 1000, swim || "Untitled")}>{t("Add", "เพิ่ม")}</button>
                                 </div>
                                 {swimlanes.length > 1 && (
                                   <div className="flex items-center justify-between pt-1">
@@ -2370,14 +2384,14 @@ export default function Board() {
             className={`p-2 rounded-xl transition-all flex items-center gap-2 font-semibold text-xs group cursor-pointer ${theme === "dark" ? "hover:bg-[#172033] text-slate-300 hover:text-white" : "hover:bg-slate-100 text-slate-600 hover:text-slate-900"
               }`}
             disabled={status !== "connected"}
-            title="Add a row to group tasks, for example by team"
+            title={t("Add a row to group tasks, for example by team", "เพิ่มแถวเพื่อจัดกลุ่มงาน เช่น แบ่งตามทีม")}
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="group-hover:scale-110 transition-transform">
               <line x1="4" y1="6" x2="20" y2="6" />
               <line x1="12" y1="12" x2="12" y2="20" />
               <line x1="8" y1="16" x2="16" y2="16" />
             </svg>
-            <span>Add group</span>
+            <span>{t("Add group", "เพิ่มกลุ่มงาน")}</span>
           </button>
 
           <div className={`h-5 w-[1px] ${theme === "dark" ? "bg-[#172033]" : "bg-slate-200"}`} />
@@ -2394,14 +2408,14 @@ export default function Board() {
             className={`p-2 rounded-xl transition-all flex items-center gap-2 font-semibold text-xs group cursor-pointer ${theme === "dark" ? "hover:bg-[#172033] text-slate-300 hover:text-white" : "hover:bg-slate-100 text-slate-600 hover:text-slate-900"
               }`}
             disabled={status !== "connected"}
-            title="Add a column, such as Review"
+            title={t("Add a column, such as Review", "เพิ่มคอลัมน์ใหม่")}
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="group-hover:scale-110 transition-transform">
               <line x1="6" y1="4" x2="6" y2="20" />
               <line x1="12" y1="12" x2="20" y2="12" />
               <line x1="16" y1="8" x2="16" y2="16" />
             </svg>
-            <span>Add column</span>
+            <span>{t("Add column", "เพิ่มคอลัมน์")}</span>
           </button>
         </div>
       )}
@@ -2437,7 +2451,7 @@ export default function Board() {
               </p>
             ) : (
               <div className="flex flex-col gap-1.5">
-                <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Name</label>
+                <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">{t("Name", "ชื่อ")}</label>
                 <input
                   aria-label="Name" autoFocus
                   type="text"
@@ -2461,7 +2475,7 @@ export default function Board() {
                 data-cancel onClick={closeModal}
                 className="px-3.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold transition-colors"
               >
-                Cancel
+                {t("Cancel", "ยกเลิก")}
               </button>
 
               <button
@@ -2477,7 +2491,7 @@ export default function Board() {
                   : "bg-[#4f63ef] hover:bg-[#4051d6] text-white shadow-[#4f63ef]/20"
                   }`}
               >
-                {modalConfig.type === "confirm" ? "Delete" : "Save"}
+                {modalConfig.type === "confirm" ? t("Delete", "ลบ") : t("Save", "บันทึก")}
               </button>
             </div>
           </div>
@@ -2505,9 +2519,9 @@ export default function Board() {
               <X size={18} />
             </button>
             <div>
-              <h2 id="share-title" className="text-lg font-extrabold tracking-tight pr-8">Share this board</h2>
+              <h2 id="share-title" className="text-lg font-extrabold tracking-tight pr-8">{t("Share this board", "แชร์บอร์ดนี้")}</h2>
               <p className={`mt-1 text-[13px] leading-relaxed ${theme === "dark" ? "text-slate-400" : "text-slate-500"}`}>
-                {isOwner ? "Pick what this link allows, then copy it." : "Only the owner can create a share link."}
+                {isOwner ? t("Pick what this link allows, then copy it.", "เลือกระดับสิทธิ์ของลิงก์ แล้วกดคัดลอกลิงก์เพื่อส่งให้ทีมได้เลย") : t("Only the owner can create a share link.", "เฉพาะเจ้าของบอร์ดเท่านั้นที่สามารถสร้างลิงก์แชร์ได้")}
               </p>
             </div>
 
@@ -2523,8 +2537,8 @@ export default function Board() {
                       ? "border-[#4f63ef] bg-[#eef2ff] text-[#312e81] dark:bg-[#172033] dark:text-[#e0e7ff]"
                       : theme === "dark" ? "border-[#334155] text-slate-300" : "border-slate-200 text-slate-700"}`}
                   >
-                    <strong className="block text-[13px]">Can edit</strong>
-                    <span className="mt-1 block text-[12px] leading-snug opacity-80">They can add and move tasks.</span>
+                    <strong className="block text-[13px]">{t("Can edit", "แก้ไขได้")}</strong>
+                    <span className="mt-1 block text-[12px] leading-snug opacity-80">{t("They can add and move tasks.", "ผู้ที่มีลิงก์สามารถเพิ่มและย้ายการ์ดงานได้")}</span>
                   </button>
                   <button
                     type="button"
@@ -2535,17 +2549,17 @@ export default function Board() {
                       ? "border-[#4f63ef] bg-[#eef2ff] text-[#312e81] dark:bg-[#172033] dark:text-[#e0e7ff]"
                       : theme === "dark" ? "border-[#334155] text-slate-300" : "border-slate-200 text-slate-700"}`}
                   >
-                    <strong className="block text-[13px]">View only</strong>
-                    <span className="mt-1 block text-[12px] leading-snug opacity-80">They can look, but not change the board.</span>
+                    <strong className="block text-[13px]">{t("View only", "ดูอย่างเดียว")}</strong>
+                    <span className="mt-1 block text-[12px] leading-snug opacity-80">{t("They can look, but not change the board.", "ผู้ที่มีลิงก์สามารถเปิดดูได้ แต่แก้ไขไม่ได้")}</span>
                   </button>
                 </div>
                 <label className="flex flex-col gap-1.5 text-[12px] font-bold text-slate-400 uppercase tracking-wider">
-                  Share link
+                  {t("Share link", "ลิงก์สำหรับแชร์")}
                   <input
                     id="share-link"
                     readOnly
                     value={shareUrl}
-                    placeholder="Preparing the link…"
+                    placeholder={t("Preparing the link…", "กำลังเตรียมลิงก์…")}
                     onFocus={(event) => event.currentTarget.select()}
                     className={`w-full rounded-xl border px-3 py-2 text-[13px] font-medium normal-case tracking-normal ${theme === "dark" ? "bg-[#172033] border-[#334155] text-slate-200" : "bg-slate-50 border-slate-200 text-slate-700"}`}
                   />
@@ -2557,10 +2571,10 @@ export default function Board() {
                   onClick={() => void copyShareLink()}
                   className="w-full py-2.5 bg-[#4f63ef] hover:bg-[#4051d6] disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-[#4f63ef]/20 cursor-pointer"
                 >
-                  {copySuccessToast ? "Copied" : "Copy link"}
+                  {copySuccessToast ? t("Copied", "คัดลอกลิงก์แล้ว!") : t("Copy link", "คัดลอกลิงก์")}
                 </button>
                 <div className="flex flex-col gap-1.5">
-                  <label htmlFor="board-address-access" className="text-[12px] font-bold text-slate-400 uppercase tracking-wider">Board address</label>
+                  <label htmlFor="board-address-access" className="text-[12px] font-bold text-slate-400 uppercase tracking-wider">{t("Board address", "การเข้าถึงผ่านลิงก์บอร์ดทั่วไป")}</label>
                   <select
                     id="board-address-access"
                     aria-label="Board address access"
@@ -2569,17 +2583,17 @@ export default function Board() {
                     onChange={(event) => updateBoardAccess(event.target.value as "edit" | "view" | "private")}
                     className={`w-full rounded-xl border px-3 py-2 text-[13px] font-semibold focus:outline-none cursor-pointer ${theme === "dark" ? "bg-[#172033] border-[#334155] text-slate-200" : "bg-white border-slate-200 text-slate-800"}`}
                   >
-                    <option value="edit">Can edit</option>
-                    <option value="view">View only</option>
-                    <option value="private">No access</option>
+                    <option value="edit">{t("Can edit", "ทุกคนที่มีลิงก์แก้ไขได้")}</option>
+                    <option value="view">{t("View only", "ทุกคนที่มีลิงก์ดูได้อย่างเดียว")}</option>
+                    <option value="private">{t("No access", "ส่วนตัว (เฉพาะผู้ได้รับเชิญ)")}</option>
                   </select>
                   <p id="board-address-help" className={`text-[12px] font-medium normal-case tracking-normal leading-relaxed ${theme === "dark" ? "text-slate-400" : "text-slate-500"}`}>
-                    People who open the board address, without an invite, get this access.
+                    {t("People who open the board address, without an invite, get this access.", "กำหนดสิทธิ์สำหรับคนที่เปิด URL ของบอร์ดนี้โดยตรงโดยไม่ได้ผ่านลิงก์เชิญ")}
                   </p>
                 </div>
                 {boardMembers.some((member) => !member.isOwner) && (
                   <div className={`flex flex-col gap-3 border-t pt-4 ${theme === "dark" ? "border-[#334155]" : "border-slate-200"}`}>
-                    <h3 className="text-[13px] font-bold">People on this board</h3>
+                    <h3 className="text-[13px] font-bold">{t("People on this board", "สมาชิกในบอร์ดนี้")}</h3>
                     <div className="max-h-52 overflow-y-auto space-y-3">
                       {boardMembers.filter((member) => !member.isOwner).map((member) => (
                         <div key={member.id} className="flex items-center justify-between gap-3">
@@ -2608,8 +2622,8 @@ export default function Board() {
                             }}
                             className={`border text-xs font-bold rounded-xl px-3 py-1.5 focus:outline-none cursor-pointer ${theme === "dark" ? "bg-[#172033] border-[#334155] text-slate-200" : "bg-white border-slate-200 text-slate-800"}`}
                           >
-                            <option value="Editor">Can edit</option>
-                            <option value="Viewer">View only</option>
+                            <option value="Editor">{t("Can edit", "แก้ไขได้")}</option>
+                            <option value="Viewer">{t("View only", "ดูอย่างเดียว")}</option>
                           </select>
                         </div>
                       ))}
@@ -2646,7 +2660,7 @@ export default function Board() {
           onClose={() => setSelectedCardDetail(null)}
           onEditDetail={editCardDetail}
           onDeleteCard={(cardId, title) => {
-            openConfirmModal("Delete Task?", `Are you sure you want to delete task "${title}"?`, () => {
+            openConfirmModal(t("Delete Task?", "ลบงานนี้?"), t(`Are you sure you want to delete task "${title}"?`, `คุณแน่ใจหรือไม่ว่าต้องการลบงาน "${title}"?`), () => {
               deleteCard(cardId);
               setSelectedCardDetail(null);
             });
@@ -2679,10 +2693,10 @@ export default function Board() {
             </div>
 
             <h3 className="text-lg font-extrabold tracking-tight mb-2">
-              Sign in to Share Board
+              {t("Sign in to Share Board", "เข้าสู่ระบบเพื่อแชร์บอร์ด")}
             </h3>
             <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed mb-6">
-              You are currently exploring in <strong className="text-[#4f63ef] dark:text-[#a5b4fc] font-semibold">Guest Mode</strong>. Sign in with your Google account to invite collaborators, manage editor rights, and generate real-time share links.
+              {t("You are currently exploring in Guest Mode. Sign in with your Google account to invite collaborators, manage editor rights, and generate real-time share links.", "ขณะนี้คุณกำลังใช้งานในโหมดทดลองใช้ (Guest) กรุณาเข้าสู่ระบบด้วยบัญชี Google เพื่อบันทึกบอร์ด เชิญเพื่อนร่วมทีม และสร้างลิงก์แชร์แบบเรียลไทม์")}
             </p>
 
             <div className="flex flex-col gap-2.5">
@@ -2690,13 +2704,13 @@ export default function Board() {
                 onClick={() => handleLogin(boardId || "")}
                 className="w-full py-2.5 bg-[#4f63ef] hover:bg-[#4051d6] text-white font-bold text-xs rounded-xl shadow-sm transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
-                <Globe size={15} /> Continue with Google
+                <Globe size={15} /> {t("Continue with Google", "เข้าสู่ระบบด้วย Google")}
               </button>
               <button
                 onClick={() => setShowGuestShareModal(false)}
                 className="w-full py-2 bg-transparent hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400 text-xs font-semibold rounded-xl transition-all cursor-pointer"
               >
-                {isOwner || userRole === "editor" ? "Keep Editing as Guest" : "Keep Viewing as Guest"}
+                {isOwner || userRole === "editor" ? t("Keep Editing as Guest", "แก้ไขต่อในโหมดทดลองใช้") : t("Keep Viewing as Guest", "ดูต่อในโหมดทดลองใช้")}
               </button>
             </div>
           </div>
@@ -2725,10 +2739,10 @@ export default function Board() {
             </div>
 
             <h3 className="text-lg font-extrabold tracking-tight mb-2">
-              Keep this board before leaving?
+              {t("Keep this board before leaving?", "ต้องการบันทึกบอร์ดนี้ไว้ก่อนออกไหม?")}
             </h3>
             <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed mb-6">
-              This board belongs to your <strong>Guest session</strong>. Sign in to keep it. Choosing “Delete board & leave” permanently deletes this board and all its tasks.
+              {t("This board belongs to your Guest session. Sign in to keep it. Choosing “Delete board & leave” permanently deletes this board and all its tasks.", "บอร์ดนี้ถูกสร้างในโหมดทดลองใช้ (Guest) กดเข้าสู่ระบบเพื่อบันทึกบอร์ดเก็บไว้ในบัญชีของคุณ หากเลือก “ลบบอร์ดและออก” บอร์ดและการ์ดทั้งหมดจะถูกลบถาวร")}
             </p>
 
             {guestExitError && <p role="alert" className="text-sm text-rose-500 mb-3">{guestExitError}</p>}
@@ -2738,7 +2752,7 @@ export default function Board() {
                 onClick={() => handleLogin(boardId || "")}
                 className="w-full py-2.5 bg-[#4f63ef] hover:bg-[#4051d6] text-white font-bold text-xs rounded-xl shadow-sm transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
-                <Check size={15} /> Sign In to Save Board
+                <Check size={15} /> {t("Sign In to Save Board", "เข้าสู่ระบบเพื่อบันทึกบอร์ด")}
               </button>
               <button
                 disabled={isDiscardingGuestBoard}
@@ -2758,19 +2772,19 @@ export default function Board() {
                       logout();
                     } else navigate("/", { replace: true });
                   } catch {
-                    setGuestExitError("Could not delete the board. You are still signed in. Please try again.");
+                    setGuestExitError(t("Could not delete the board. You are still signed in. Please try again.", "ไม่สามารถลบบอร์ดได้ กรุณาลองใหม่อีกครั้ง"));
                   } finally { setIsDiscardingGuestBoard(false); }
                 }}
                 className="w-full py-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 text-xs font-semibold rounded-xl border border-rose-500/30 transition-all cursor-pointer flex items-center justify-center gap-1.5"
               >
-                <Trash2 size={13} /> {isDiscardingGuestBoard ? "Deleting…" : "Delete board & leave"}
+                <Trash2 size={13} /> {isDiscardingGuestBoard ? t("Deleting…", "กำลังลบ…") : t("Delete board & leave", "ลบบอร์ดและออก")}
               </button>
               <button
                 disabled={isDiscardingGuestBoard}
                 onClick={() => { setShowGuestExitModal(false); setGuestLogoutRequested(false); }}
                 className="w-full py-1.5 bg-transparent hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 text-xs font-medium rounded-xl transition-all cursor-pointer"
               >
-                Stay on Board
+                {t("Stay on Board", "อยู่ต่อในบอร์ดนี้")}
               </button>
             </div>
           </div>

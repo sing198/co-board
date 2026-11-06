@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo } from "react";
 import { useAuth } from "../useAuth";
 import { useTheme } from "../useTheme";
+import { useLanguage } from "../useLanguage";
 import { Link, useNavigate } from "react-router-dom";
 import {
   LogOut,
@@ -54,18 +55,21 @@ type Board = {
 };
 
 export const BOARD_TYPES = [
-  { id: "kanban", label: "Kanban", hint: "Move work through visual stages", category: "Agile & Flow", defaultName: "Team Kanban Flow", icon: LayoutDashboard },
-  { id: "sprint", label: "Scrum", hint: "Plan a backlog and track a sprint", category: "Agile & Flow", defaultName: "Sprint 1", icon: Timer },
-  { id: "timeline", label: "Timeline", hint: "Plan work across date ranges & dependencies", category: "Roadmap & Planning", defaultName: "Product Roadmap", icon: GanttChart },
-  { id: "calendar", label: "Calendar", hint: "See work on its due date", category: "Roadmap & Planning", defaultName: "Project Milestones", icon: Calendar },
-  { id: "content", label: "Content", hint: "Plan an editorial calendar", category: "Roadmap & Planning", defaultName: "Editorial Calendar", icon: Calendar },
-  { id: "mindmap", label: "Mind Map", hint: "Explore connected ideas & branches", category: "Ideation & Notes", defaultName: "Product Brainstorm", icon: Network },
-  { id: "table", label: "Table", hint: "Scan and sort task details in rows", category: "Structured Lists", defaultName: "Task Inventory", icon: FileText },
-  { id: "todo", label: "To-do", hint: "A focused list for everyday tasks", category: "Structured Lists", defaultName: "Daily To-do List", icon: CheckCircle2 },
+  { id: "kanban", label: "Kanban", labelTh: "บอร์ดแคนบาน", hint: "Move work through visual stages", hintTh: "ย้ายการ์ดงานตามขั้นตอนอย่างชัดเจน", category: "Agile & Flow", categoryTh: "งานทีม & ขั้นตอน", defaultName: "Team Kanban Flow", icon: LayoutDashboard },
+  { id: "sprint", label: "Scrum", labelTh: "สปรินต์ (Scrum)", hint: "Plan a backlog and track a sprint", hintTh: "วางแผน Backlog และติดตามงานในแต่ละรอบสปรินต์", category: "Agile & Flow", categoryTh: "งานทีม & ขั้นตอน", defaultName: "Sprint 1", icon: Timer },
+  { id: "timeline", label: "Timeline", labelTh: "ไทม์ไลน์ (Gantt)", hint: "Plan work across date ranges & dependencies", hintTh: "วางแผนช่วงเวลาของงานและความเชื่อมโยง", category: "Roadmap & Planning", categoryTh: "แผนงาน & ปฏิทิน", defaultName: "Product Roadmap", icon: GanttChart },
+  { id: "calendar", label: "Calendar", labelTh: "ปฏิทิน", hint: "See work on its due date", hintTh: "ดูตารางงานตามวันครบกำหนดส่ง", category: "Roadmap & Planning", categoryTh: "แผนงาน & ปฏิทิน", defaultName: "Project Milestones", icon: Calendar },
+  { id: "content", label: "Content", labelTh: "ตารางคอนเทนต์", hint: "Plan an editorial calendar", hintTh: "วางแผนตารางโพสต์และผลิตคอนเทนต์", category: "Roadmap & Planning", categoryTh: "แผนงาน & ปฏิทิน", defaultName: "Editorial Calendar", icon: Calendar },
+  { id: "mindmap", label: "Mind Map", labelTh: "แผนผังความคิด", hint: "Explore connected ideas & branches", hintTh: "ระดมสมองและเชื่อมโยงไอเดียเป็นกิ่งก้าน", category: "Ideation & Notes", categoryTh: "ระดมสมอง & โน้ต", defaultName: "Product Brainstorm", icon: Network },
+  { id: "table", label: "Table", labelTh: "ตารางข้อมูล", hint: "Scan and sort task details in rows", hintTh: "ดูและจัดเรียงรายละเอียดงานทั้งหมดในรูปแบบตาราง", category: "Structured Lists", categoryTh: "รายการ & ตาราง", defaultName: "Task Inventory", icon: FileText },
+  { id: "todo", label: "To-do", labelTh: "รายการสิ่งที่ต้องทำ", hint: "A focused list for everyday tasks", hintTh: "เช็กลิสต์เรียบง่ายสำหรับงานประจำวัน", category: "Structured Lists", categoryTh: "รายการ & ตาราง", defaultName: "Daily To-do List", icon: CheckCircle2 },
 ];
 
-const boardTypeLabel = (type?: string) =>
-  BOARD_TYPES.find((t) => t.id === (type || "kanban"))?.label ?? "Kanban";
+const boardTypeLabel = (type?: string, lang: "th" | "en" = "en") => {
+  const found = BOARD_TYPES.find((t) => t.id === (type || "kanban"));
+  if (!found) return "Kanban";
+  return lang === "th" ? found.labelTh : found.label;
+};
 
 const getBoardTypeIcon = (type?: string) => {
   const match = BOARD_TYPES.find(b => b.id === (type || "kanban"));
@@ -101,8 +105,9 @@ function AvatarImage({ src, name, className, title }: { src: string; name: strin
 
 export default function Dashboard() {
   const { user, login, logout } = useAuth();
+  const { lang, toggleLang, t } = useLanguage();
   const handleWorkspaceLogout = () => {
-    if (user?.email === "guest@kanban.demo" && !window.confirm("Log out of your guest session? You may lose access to your guest boards. Cancel to keep working or sign in to save them.")) return;
+    if (user?.email === "guest@kanban.demo" && !window.confirm(t("Log out of your guest session? You may lose access to your guest boards. Cancel to keep working or sign in to save them.", "ออกจากระบบโหมดทดลองใช้ (Guest) หรือไม่? บอร์ดที่ยังไม่ได้เข้าสู่ระบบเพื่อบันทึกอาจสูญหายได้"))) return;
     logout();
   };
 
@@ -504,15 +509,22 @@ export default function Dashboard() {
 
           <div className="landing-top-actions">
             <button
+              onClick={toggleLang}
+              className="landing-icon px-2.5 text-xs font-extrabold tracking-wide"
+              title={lang === "th" ? "Switch to English" : "เปลี่ยนเป็นภาษาไทย"}
+            >
+              {lang === "th" ? "🇹🇭 TH" : "🇬🇧 EN"}
+            </button>
+            <button
               onClick={toggleTheme}
               className="landing-icon"
-              title={theme === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode"}
+              title={theme === "dark" ? t("Switch to Light Mode", "เปลี่ยนเป็นโหมดสว่าง") : t("Switch to Dark Mode", "เปลี่ยนเป็นโหมดมืด")}
             >
               {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
             </button>
-            <button onClick={() => login("default")} className="landing-signin">Sign in</button>
+            <button onClick={() => login("default")} className="landing-signin">{t("Sign in", "เข้าสู่ระบบ")}</button>
             <button className="landing-primary landing-demo" onClick={startDemo} disabled={isStartingDemo}>
-              <Sparkles size={14} /> {isStartingDemo ? "Preparing…" : "Try a demo"}
+              <Sparkles size={14} /> {isStartingDemo ? t("Preparing…", "กำลังเตรียมบอร์ด…") : t("Try a demo", "ทดลองใช้ฟรี")}
             </button>
           </div>
         </header>
@@ -520,50 +532,50 @@ export default function Dashboard() {
         <main className="landing">
           <section className="landing-hero">
             <div>
-              <p className="landing-kicker"><Sparkles size={14} /> No account needed</p>
-              <h1>A board you can use in the next minute.</h1>
-              <p className="landing-lead">Move tasks across columns, open a card to add details, and see the same change in another window. Start with sample tasks, then make your own board.</p>
+              <p className="landing-kicker"><Sparkles size={14} /> {t("No account needed", "ไม่ต้องสมัครสมาชิกก็ลองใช้ได้ทันที")}</p>
+              <h1>{t("A board you can use in the next minute.", "จัดการงานและโปรเจกต์ร่วมกันได้ทันทีในที่เดียว")}</h1>
+              <p className="landing-lead">{t("Move tasks across columns, open a card to add details, and see the same change in another window. Start with sample tasks, then make your own board.", "ลากย้ายการ์ดงานข้ามคอลัมน์ คลิกการ์ดเพื่อเพิ่มรายละเอียด เช็กลิสต์ หรือสลับมุมมองเป็นตาราง ปฏิทิน และไทม์ไลน์ อัปเดตแบบเรียลไทม์พร้อมกันทั้งทีม")}</p>
               {demoError && <p role="alert" className="landing-error">{demoError}</p>}
               <div className="landing-actions">
                 <button className="landing-primary" onClick={startDemo} disabled={isStartingDemo}>
                   <Sparkles size={16} />
-                  {isStartingDemo ? "Preparing your board…" : "Try a demo — no sign-up"}
+                  {isStartingDemo ? t("Preparing your board…", "กำลังสร้างบอร์ดตัวอย่าง…") : t("Try a demo — no sign-up", "ทดลองใช้งานทันที — ไม่ต้องล็อกอิน")}
                 </button>
                 <button className="landing-secondary" onClick={() => login("default")}>
                   <svg className="w-4 h-4" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" /><path fill="currentColor" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" /><path fill="currentColor" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" /><path fill="currentColor" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" /></svg>
-                  Continue with Google
+                  {t("Continue with Google", "เข้าสู่ระบบด้วย Google")}
                 </button>
               </div>
-              <p className="landing-note">The demo opens a real board with sample tasks. Sign in only if you want to keep it.</p>
+              <p className="landing-note">{t("The demo opens a real board with sample tasks. Sign in only if you want to keep it.", "โหมดทดลองใช้จะเปิดบอร์ดจริงพร้อมงานตัวอย่างให้ลองเล่นได้เต็มที่ ค่อยกดเข้าสู่ระบบเมื่อต้องการบันทึกบอร์ดเก็บไว้")}</p>
               <ol className="landing-steps">
-                <li><b>1</b> Open the sample board</li>
-                <li><b>2</b> Drag a card to another column</li>
-                <li><b>3</b> Click the card to edit it</li>
+                <li><b>1</b> {t("Open the sample board", "เปิดบอร์ดตัวอย่าง")}</li>
+                <li><b>2</b> {t("Drag a card to another column", "ลากการ์ดย้ายไปคอลัมน์อื่น")}</li>
+                <li><b>3</b> {t("Click the card to edit it", "คลิกที่การ์ดเพื่อแก้ไขรายละเอียด")}</li>
               </ol>
             </div>
             <div className="landing-board">
-              <div className="landing-board-top"><i /> Product launch <span className="ml-auto text-[11px] text-[#4f63ef] dark:text-[#a5b4fc] font-semibold">Interactive · Click a card to move</span></div>
+              <div className="landing-board-top"><i /> {t("Product launch", "เปิดตัวสินค้าใหม่")} <span className="ml-auto text-[11px] text-[#4f63ef] dark:text-[#a5b4fc] font-semibold">{t("Interactive · Click a card to move", "ลองคลิกที่การ์ดเพื่อย้ายช่องได้เลย")}</span></div>
               <div className="landing-board-cols">
                 <section>
-                  <header><i /> To do <span>{heroDemoCols.todo.length}</span></header>
+                  <header><i /> {t("To do", "รอดำเนินการ")} <span>{heroDemoCols.todo.length}</span></header>
                   {heroDemoCols.todo.map(c => (
-                    <article key={c.id} onClick={() => cycleHeroCard("todo", c.id)} className={`cursor-pointer transition-all hover:border-[#a5b4fc] hover:-translate-y-0.5 ${c.lift ? "is-lift" : ""}`} title="Click to move to Doing">
+                    <article key={c.id} onClick={() => cycleHeroCard("todo", c.id)} className={`cursor-pointer transition-all hover:border-[#a5b4fc] hover:-translate-y-0.5 ${c.lift ? "is-lift" : ""}`} title={t("Click to move to Doing", "คลิกเพื่อย้ายไป กำลังทำ")}>
                       <small>{c.tag}</small><strong>{c.title}</strong>
                     </article>
                   ))}
                 </section>
                 <section>
-                  <header><i className="is-doing" /> Doing <span>{heroDemoCols.doing.length}</span></header>
+                  <header><i className="is-doing" /> {t("Doing", "กำลังทำ")} <span>{heroDemoCols.doing.length}</span></header>
                   {heroDemoCols.doing.map(c => (
-                    <article key={c.id} onClick={() => cycleHeroCard("doing", c.id)} className={`cursor-pointer transition-all hover:border-[#a5b4fc] hover:-translate-y-0.5 ${c.lift ? "is-lift" : ""}`} title="Click to move to Done">
+                    <article key={c.id} onClick={() => cycleHeroCard("doing", c.id)} className={`cursor-pointer transition-all hover:border-[#a5b4fc] hover:-translate-y-0.5 ${c.lift ? "is-lift" : ""}`} title={t("Click to move to Done", "คลิกเพื่อย้ายไป เสร็จสิ้น")}>
                       <small>{c.tag}</small><strong>{c.title}</strong>
                     </article>
                   ))}
                 </section>
                 <section>
-                  <header><i className="is-done" /> Done <span>{heroDemoCols.done.length}</span></header>
+                  <header><i className="is-done" /> {t("Done", "เสร็จสิ้น")} <span>{heroDemoCols.done.length}</span></header>
                   {heroDemoCols.done.map(c => (
-                    <article key={c.id} onClick={() => cycleHeroCard("done", c.id)} className={`cursor-pointer transition-all hover:border-[#a5b4fc] hover:-translate-y-0.5 ${c.lift ? "is-lift" : ""}`} title="Click to move back to To do">
+                    <article key={c.id} onClick={() => cycleHeroCard("done", c.id)} className={`cursor-pointer transition-all hover:border-[#a5b4fc] hover:-translate-y-0.5 ${c.lift ? "is-lift" : ""}`} title={t("Click to move back to To do", "คลิกเพื่อย้ายกลับไป รอดำเนินการ")}>
                       <small>{c.tag}</small><strong>{c.title}</strong>
                     </article>
                   ))}
@@ -574,23 +586,23 @@ export default function Dashboard() {
           <section className="landing-features" aria-label="What you can do">
             <article>
               <LayoutGrid size={18} />
-              <h2>Move work visually</h2>
-              <p>Start with columns. Switch to a table, calendar, timeline, or mind map when you need another way to look at the same tasks.</p>
+              <h2>{t("Move work visually", "สลับมุมมองได้หลากหลาย")}</h2>
+              <p>{t("Start with columns. Switch to a table, calendar, timeline, or mind map when you need another way to look at the same tasks.", "เริ่มต้นด้วยบอร์ด Kanban แล้วสลับดูข้อมูลเดียวกันในรูปแบบตาราง ปฏิทิน ไทม์ไลน์ หรือแผนผังความคิดได้ทันที")}</p>
             </article>
             <article>
               <Zap size={18} />
-              <h2>See the same board together</h2>
-              <p>Open the link in another window. A move on one side shows up on the other without refreshing.</p>
+              <h2>{t("See the same board together", "ทำงานร่วมกันแบบเรียลไทม์")}</h2>
+              <p>{t("Open the link in another window. A move on one side shows up on the other without refreshing.", "แชร์ลิงก์ให้ทีมเข้ามาทำงานพร้อมกัน เมื่อมีคนย้ายการ์ดหรือแก้ไขงาน หน้าจอของทุกคนจะอัปเดตทันทีโดยไม่ต้องรีเฟรช")}</p>
             </article>
             <article>
               <Timer size={18} />
-              <h2>Plan a sprint</h2>
-              <p>Keep a backlog, choose what belongs in this sprint, and mark the sprint done when the work is finished.</p>
+              <h2>{t("Plan a sprint", "วางแผนสปรินต์อย่างเป็นระบบ")}</h2>
+              <p>{t("Keep a backlog, choose what belongs in this sprint, and mark the sprint done when the work is finished.", "จัดการ Backlog เลือกงานเข้าสปรินต์ กำหนดแต้มงาน (Story Points) และปิดสปรินต์เมื่องานเสร็จสมบูรณ์")}</p>
             </article>
             <article>
               <Sparkles size={18} />
-              <h2>Try it before you sign in</h2>
-              <p>One click opens sample tasks. You can sign in later if you want to save the board or invite someone.</p>
+              <h2>{t("Try it before you sign in", "ทดลองใช้ก่อนตัดสินใจล็อกอิน")}</h2>
+              <p>{t("One click opens sample tasks. You can sign in later if you want to save the board or invite someone.", "คลิกเดียวเปิดบอร์ดพร้อมใช้งานทันที และสามารถกดเข้าสู่ระบบภายหลังเพื่อบันทึกบอร์ดเก็บไว้ในบัญชีของคุณได้")}</p>
             </article>
           </section>
         </main>
@@ -602,33 +614,45 @@ export default function Dashboard() {
     <div className={`board-workspace dashboard-workspace min-h-screen font-sans flex flex-col transition-colors duration-200 selection:bg-[#4f63ef]/20 ${theme === "dark" ? "bg-[#0f172a] text-[#f8fafc]" : "bg-[#f8fafc] text-slate-900"
       }`}>
 
-      <WorkspaceSidebar onLogout={handleWorkspaceLogout} user={user} activePage="dashboard" boardCount={boards.length} role="Personal workspace"
+      <WorkspaceSidebar onLogout={handleWorkspaceLogout} user={user} activePage="dashboard" boardCount={boards.length} role={t("Personal workspace", "พื้นที่ทำงานส่วนตัว")}
         boardFilter={activeTab}
-        note="Star a board to pin it under Starred."
+        note={t("Star a board to pin it under Starred.", "กดรูปดาวที่การ์ดบอร์ดเพื่อปักหมุดไว้ในหมวดหมู่ ติดดาว")}
         onOverview={() => window.scrollTo({ top: 0 })} onAllBoards={() => { setActiveTab("all"); setSearchQuery(""); }}>
-        <div className="sidebar-section-label">QUICK ACCESS</div>
-        <button className={`sidebar-stream ${activeTab === "my" ? "active" : ""}`} aria-pressed={activeTab === "my"} onClick={() => setActiveTab("my")}><FolderKanban size={15} /> My boards</button>
-        <button className={`sidebar-stream ${activeTab === "shared" ? "active" : ""}`} aria-pressed={activeTab === "shared"} onClick={() => setActiveTab("shared")}><Layers3 size={15} /> Shared with me</button>
-        <button className={`sidebar-stream ${activeTab === "starred" ? "active" : ""}`} aria-pressed={activeTab === "starred"} onClick={() => setActiveTab("starred")}><Star size={15} /> Starred</button>
+        <div className="sidebar-section-label">{t("QUICK ACCESS", "ทางลัดเข้าถึงด่วน")}</div>
+        <button className={`sidebar-stream ${activeTab === "my" ? "active" : ""}`} aria-pressed={activeTab === "my"} onClick={() => setActiveTab("my")}><FolderKanban size={15} /> {t("My boards", "บอร์ดของฉัน")}</button>
+        <button className={`sidebar-stream ${activeTab === "shared" ? "active" : ""}`} aria-pressed={activeTab === "shared"} onClick={() => setActiveTab("shared")}><Layers3 size={15} /> {t("Shared with me", "แชร์กับฉัน")}</button>
+        <button className={`sidebar-stream ${activeTab === "starred" ? "active" : ""}`} aria-pressed={activeTab === "starred"} onClick={() => setActiveTab("starred")}><Star size={15} /> {t("Starred", "ติดดาว")}</button>
         {boards.some(b => starredIds.includes(b.ID)) && (
           <>
-            <div className="sidebar-section-label">STARRED BOARDS</div>
+            <div className="sidebar-section-label">{t("STARRED BOARDS", "บอร์ดที่ปักหมุดดาว")}</div>
             {boards.filter(b => starredIds.includes(b.ID)).slice(0, 6).map(b => (
               <Link key={b.ID} to={`/b/${b.ID}`} className="sidebar-stream">
                 <Star size={13} className="text-amber-500 fill-amber-500 flex-shrink-0" />
-                <span className="truncate">{b.Name || "Untitled board"}</span>
+                <span className="truncate">{b.Name || t("Untitled board", "บอร์ดไม่มีชื่อ")}</span>
               </Link>
             ))}
           </>
         )}
       </WorkspaceSidebar>
-      {demoError && <div role="alert" className="bg-rose-100 text-rose-900 p-4">{demoError} <button onClick={startDemo} disabled={isStartingDemo} className="underline">Retry demo</button></div>}
-      {isStartingDemo && <div role="status" className="bg-[#eef2ff] text-[#172033] p-4">Preparing your demo board…</div>}
+      {demoError && <div role="alert" className="bg-rose-100 text-rose-900 p-4">{demoError} <button onClick={startDemo} disabled={isStartingDemo} className="underline">{t("Retry demo", "ลองใหม่อีกครั้ง")}</button></div>}
+      {isStartingDemo && <div role="status" className="bg-[#eef2ff] text-[#172033] p-4">{t("Preparing your demo board…", "กำลังเตรียมบอร์ดตัวอย่างของคุณ…")}</div>}
       {/* HEADER */}
       <header className={`board-topbar dashboard-topbar px-8 py-4 border-b flex items-center justify-between backdrop-blur-md sticky top-0 z-20 transition-colors ${theme === "dark" ? "bg-[#0f172a]/95 border-[#334155]" : "bg-white border-slate-200 shadow-xs"
         }`}>
-        <div className="board-brand flex items-center gap-3"><span className="mobile-workspace-symbol"><KanbanMark /></span><h1 className="board-title">All boards</h1></div>
+        <div className="board-brand flex items-center gap-3"><span className="mobile-workspace-symbol"><KanbanMark /></span><h1 className="board-title">{t("All boards", "บอร์ดทั้งหมด")}</h1></div>
         <div className="dashboard-top-actions flex items-center gap-3">
+          {/* Language Switcher Button */}
+          <button
+            onClick={toggleLang}
+            className={`px-3 py-2 rounded-xl border text-xs font-extrabold tracking-wide transition-colors cursor-pointer ${theme === "dark"
+              ? "bg-[#172033] text-[#a5b4fc] hover:bg-[#334155] border-[#334155]"
+              : "bg-slate-100 text-slate-700 hover:bg-slate-200 border-slate-200"
+              }`}
+            title={lang === "th" ? "Switch to English" : "เปลี่ยนเป็นภาษาไทย"}
+          >
+            {lang === "th" ? "🇹🇭 TH" : "🇬🇧 EN"}
+          </button>
+
           {/* Theme Switcher Button */}
           <button
             onClick={toggleTheme}
@@ -636,7 +660,7 @@ export default function Dashboard() {
               ? "bg-[#172033] text-[#a5b4fc] hover:bg-[#334155] border-[#334155]"
               : "bg-slate-100 text-slate-700 hover:bg-slate-200 border-slate-200"
               }`}
-            title={theme === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode"}
+            title={theme === "dark" ? t("Switch to Light Mode", "เปลี่ยนเป็นโหมดสว่าง") : t("Switch to Dark Mode", "เปลี่ยนเป็นโหมดมืด")}
           >
             {theme === "dark" ? <Sun size={17} /> : <Moon size={17} />}
           </button>
@@ -661,7 +685,7 @@ export default function Dashboard() {
                 ? "bg-[#172033] text-slate-200 hover:bg-[#334155] border-[#334155]"
                 : "bg-slate-100 text-slate-700 hover:bg-slate-200 border-slate-200"
                 }`}
-              title="Notifications"
+              title={t("Notifications", "การแจ้งเตือน")}
               aria-label="Notifications"
             >
               <Bell size={17} />
@@ -678,10 +702,10 @@ export default function Dashboard() {
                 }`}>
                 <div className="flex items-center justify-between border-b pb-3 mb-3 border-slate-100 dark:border-[#334155]">
                   <h3 className="text-sm font-bold flex items-center gap-2">
-                    Notifications
+                    {t("Notifications", "การแจ้งเตือน")}
                     {unreadCount > 0 && (
                       <span className="bg-[#eef2ff] text-[#4051d6] dark:bg-[#172033]/60 dark:text-[#a5b4fc] text-[10px] px-2 py-0.5 rounded-full font-bold">
-                        {unreadCount} unread
+                        {unreadCount} {t("unread", "ใหม่")}
                       </span>
                     )}
                   </h3>
@@ -696,7 +720,7 @@ export default function Dashboard() {
                 <div className="max-h-80 overflow-y-auto space-y-3 pr-1">
                   {notifications.length === 0 && assignments.length === 0 ? (
                     <div className="text-center py-6 text-slate-400 text-xs">
-                      No notifications yet
+                      {t("No notifications yet", "ยังไม่มีการแจ้งเตือน")}
                     </div>
                   ) : (
                     <>
@@ -717,7 +741,7 @@ export default function Dashboard() {
                           />
                           <div className="flex-1 min-w-0">
                             <p className="text-xs leading-snug">
-                              <span className="font-bold">{item.userName}</span> asked to edit <span className="font-semibold text-[#4f63ef] dark:text-[#a5b4fc]">{item.boardName}</span>
+                              <span className="font-bold">{item.userName}</span> {t("asked to edit", "ขอสิทธิ์แก้ไขบอร์ด")} <span className="font-semibold text-[#4f63ef] dark:text-[#a5b4fc]">{item.boardName}</span>
                             </p>
 
                             {/* Notification Actions */}
@@ -728,22 +752,22 @@ export default function Dashboard() {
                                     onClick={() => respondToAccess(item.id, "approve")}
                                     className="px-3 py-1 bg-[#4f63ef] hover:bg-[#4051d6] text-white text-xs font-bold rounded-lg transition-all cursor-pointer shadow-xs"
                                   >
-                                    Allow editing
+                                    {t("Allow editing", "อนุญาตให้แก้ไข")}
                                   </button>
                                   <button
                                     onClick={() => respondToAccess(item.id, "dismiss")}
                                     className="px-3 py-1 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs font-semibold rounded-lg transition-all cursor-pointer"
                                   >
-                                    Dismiss
+                                    {t("Dismiss", "ปฏิเสธ")}
                                   </button>
                                 </>
                               ) : item.status === "approved" ? (
                                 <span className="text-xs font-bold text-[#16a34a] dark:text-[#22c55e] flex items-center gap-1">
-                                  <Check size={14} /> Editing allowed
+                                  <Check size={14} /> {t("Editing allowed", "อนุญาตให้แก้ไขแล้ว")}
                                 </span>
                               ) : (
                                 <span className="text-xs font-medium text-slate-400">
-                                  Request dismissed
+                                  {t("Request dismissed", "ปฏิเสธคำขอแล้ว")}
                                 </span>
                               )}
                             </div>
@@ -766,7 +790,7 @@ export default function Dashboard() {
               ? "bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border-transparent"
               : "bg-slate-100 hover:bg-rose-50 text-slate-500 hover:text-rose-600 border-slate-200"
               }`}
-            title="Logout"
+            title={t("Logout", "ออกจากระบบ")}
           >
             <LogOut size={16} />
           </button>
@@ -775,21 +799,21 @@ export default function Dashboard() {
 
       <section className="board-overview" aria-label="Workspace overview">
         <div className="overview-copy">
-          {boards.length === 0 && <div className="board-eyebrow"><span /> START HERE</div>}
-          <h2>My workspace</h2>
-          <p>{boards.length === 0 ? "Open a board to move tasks, or create one from a template. Kanban is the easiest place to begin." : "Open a board to move tasks, or create one from a template."}</p>
+          {boards.length === 0 && <div className="board-eyebrow"><span /> {t("START HERE", "เริ่มต้นใช้งาน")}</div>}
+          <h2>{t("My workspace", "พื้นที่ทำงานของฉัน")}</h2>
+          <p>{boards.length === 0 ? t("Open a board to move tasks, or create one from a template. Kanban is the easiest place to begin.", "เปิดบอร์ดเพื่อจัดการงาน หรือสร้างบอร์ดใหม่จากเทมเพลต แนะนำให้เริ่มจากบอร์ดแคนบาน (Kanban) จะใช้งานง่ายที่สุด") : t("Open a board to move tasks, or create one from a template.", "เลือกบอร์ดเพื่อเข้าจัดการงาน หรือกดสร้างบอร์ดใหม่จากเทมเพลตด้านล่าง")}</p>
           <div className="overview-meta">
-            <span><Layers3 size={14} /> {boards.length} {boards.length === 1 ? "board" : "boards"}</span>
-            <span><Star size={14} /> {boards.filter(b => starredIds.includes(b.ID)).length} starred</span>
-            <span>{boards.reduce((n, b) => n + (b.Cards?.length || 0), 0)} {boards.reduce((n, b) => n + (b.Cards?.length || 0), 0) === 1 ? "task" : "tasks"} across your boards</span>
+            <span><Layers3 size={14} /> {boards.length} {t(boards.length === 1 ? "board" : "boards", "บอร์ด")}</span>
+            <span><Star size={14} /> {boards.filter(b => starredIds.includes(b.ID)).length} {t("starred", "ติดดาว")}</span>
+            <span>{boards.reduce((n, b) => n + (b.Cards?.length || 0), 0)} {t(boards.reduce((n, b) => n + (b.Cards?.length || 0), 0) === 1 ? "task across your boards" : "tasks across your boards", "งานในทุกบอร์ดรวมกัน")}</span>
             {user?.email === "guest@kanban.demo" && (
-              <span className="overview-access font-bold">Guest session</span>
+              <span className="overview-access font-bold">{t("Guest session", "โหมดทดลองใช้ (Guest)")}</span>
             )}
           </div>
         </div>
         <div className="overview-action">
           <button className="new-task-button" onClick={() => { setNewBoardName(""); setShowCreateModal(true); }}>
-            <Plus size={17} /> New board
+            <Plus size={17} /> {t("New board", "สร้างบอร์ดใหม่")}
           </button>
         </div>
       </section>
@@ -797,14 +821,14 @@ export default function Dashboard() {
       {attention.length > 0 && (
         <section className="due-soon" aria-label="Tasks that need attention">
           <div className="due-soon-counts">
-            <strong>{attention.filter((item) => item.bucket === "overdue").length} overdue</strong>
-            <strong>{attention.filter((item) => item.bucket === "today").length} due today</strong>
+            <strong>{attention.filter((item) => item.bucket === "overdue").length} {t("overdue", "เลยกำหนด")}</strong>
+            <strong>{attention.filter((item) => item.bucket === "today").length} {t("due today", "ครบกำหนดวันนี้")}</strong>
           </div>
           <ul>
             {attention.slice(0, 4).map((item) => (
               <li key={item.key}>
                 <Link to={`/b/${item.boardId}?due=${item.bucket}&task=${item.cardId}`}>
-                  <span className={`due-soon-${item.bucket}`}>{item.bucket === "overdue" ? "Overdue" : "Today"}</span>
+                  <span className={`due-soon-${item.bucket}`}>{item.bucket === "overdue" ? t("Overdue", "เลยกำหนด") : t("Today", "วันนี้")}</span>
                   <b>{item.title}</b>
                   <small>{item.boardName}</small>
                 </Link>
@@ -816,7 +840,7 @@ export default function Dashboard() {
 
       {assignedToYou.length > 0 && (
         <section className="assigned-you" aria-label="Assigned to you">
-          <h3>Assigned to you <span>{assignedToYou.length}</span></h3>
+          <h3>{t("Assigned to you", "งานที่มอบหมายให้คุณ")} <span>{assignedToYou.length}</span></h3>
           <ul>
             {assignedToYou.slice(0, 6).map((item) => (
               <li key={item.key}>
@@ -848,7 +872,7 @@ export default function Dashboard() {
                 : theme === "dark" ? "bg-[#172033] border border-[#334155] text-slate-300 hover:bg-[#334155]" : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900"
                 }`}
             >
-              All boards ({boards.length})
+              {t("All boards", "บอร์ดทั้งหมด")} ({boards.length})
             </button>
             <button
               aria-pressed={activeTab === "my"}
@@ -858,7 +882,7 @@ export default function Dashboard() {
                 : theme === "dark" ? "bg-[#172033] border border-[#334155] text-slate-300 hover:bg-[#334155]" : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900"
                 }`}
             >
-              My boards ({boards.filter(b => b.IsOwner).length})
+              {t("My boards", "บอร์ดของฉัน")} ({boards.filter(b => b.IsOwner).length})
             </button>
             <button
               aria-pressed={activeTab === "shared"}
@@ -868,7 +892,7 @@ export default function Dashboard() {
                 : theme === "dark" ? "bg-[#172033] border border-[#334155] text-slate-300 hover:bg-[#334155]" : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900"
                 }`}
             >
-              Shared with me ({boards.filter(b => !b.IsOwner).length})
+              {t("Shared with me", "แชร์กับฉัน")} ({boards.filter(b => !b.IsOwner).length})
             </button>
             <button
               aria-pressed={activeTab === "starred"}
@@ -879,7 +903,7 @@ export default function Dashboard() {
                 }`}
             >
               <Star size={14} className={activeTab === "starred" ? "fill-current" : ""} />
-              Starred ({starredIds.length})
+              {t("Starred", "ติดดาว")} ({starredIds.length})
             </button>
           </div>
 
@@ -892,7 +916,7 @@ export default function Dashboard() {
               <input
                 type="text"
                 aria-label="Search boards"
-                placeholder="Search boards…"
+                placeholder={t("Search boards…", "ค้นหาชื่อบอร์ด…")}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className={`w-full rounded-xl pl-10 pr-8 py-2 text-xs focus:outline-none transition-colors ${theme === "dark"
@@ -923,7 +947,7 @@ export default function Dashboard() {
                   ? theme === "dark" ? "bg-[#172033] text-[#a5b4fc] font-bold" : "bg-slate-100 text-[#4f63ef] dark:text-[#a5b4fc] font-bold"
                   : ""
                   }`}
-                title="Grid View"
+                title={t("Grid View", "มุมมองตารางการ์ด")}
               >
                 <LayoutGrid size={16} />
               </button>
@@ -934,7 +958,7 @@ export default function Dashboard() {
                   ? theme === "dark" ? "bg-[#172033] text-[#a5b4fc] font-bold" : "bg-slate-100 text-[#4f63ef] dark:text-[#a5b4fc] font-bold"
                   : ""
                   }`}
-                title="List View"
+                title={t("List View", "มุมมองรายการ")}
               >
                 <ListIcon size={16} />
               </button>
@@ -945,8 +969,8 @@ export default function Dashboard() {
         {/* BOARD LISTING */}
         {boardLoadError && (
           <div role="alert" className={`flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-3 text-xs ${theme === "dark" ? "border-rose-800 bg-rose-950/30 text-rose-200" : "border-rose-200 bg-rose-50 text-rose-800"}`}>
-            <span>{boardLoadError}{boards.length > 0 ? " Showing the last loaded boards." : ""}</span>
-            <button type="button" onClick={() => fetchBoards(true)} disabled={isLoadingBoards} className="rounded-lg border border-current px-3 py-1.5 font-bold disabled:opacity-50">{isLoadingBoards ? "Retrying…" : "Retry"}</button>
+            <span>{boardLoadError}{boards.length > 0 ? t(" Showing the last loaded boards.", " แสดงข้อมูลบอร์ดล่าสุดที่โหลดไว้") : ""}</span>
+            <button type="button" onClick={() => fetchBoards(true)} disabled={isLoadingBoards} className="rounded-lg border border-current px-3 py-1.5 font-bold disabled:opacity-50">{isLoadingBoards ? t("Retrying…", "กำลังลองใหม่…") : t("Retry", "ลองใหม่")}</button>
           </div>
         )}
         {isLoadingBoards ? (
@@ -966,16 +990,22 @@ export default function Dashboard() {
           <div className={`dashboard-empty text-center py-20 border-2 border-dashed rounded-3xl ${theme === "dark" ? "border-[#334155] bg-[#0f172a]/50" : "border-slate-200 bg-white/60"
             }`}>
             <FolderKanban className={`mx-auto mb-3 ${theme === "dark" ? "text-slate-500" : "text-slate-400"}`} size={48} />
-            <h3 className={`text-lg font-bold mb-1 ${theme === "dark" ? "text-slate-200" : "text-slate-800"}`}>Nothing in this list yet</h3>
+            <h3 className={`text-lg font-bold mb-1 ${theme === "dark" ? "text-slate-200" : "text-slate-800"}`}>{t("Nothing in this list yet", "ยังไม่มีบอร์ดในหมวดหมู่นี้")}</h3>
             <p className={`text-sm max-w-sm mx-auto mb-6 leading-relaxed ${theme === "dark" ? "text-slate-400" : "text-slate-500"}`}>
-              {searchQuery ? "No boards match that name. Clear the search to see everything." : activeTab === "starred" ? "Star a board from its card, and it will show up here." : activeTab === "shared" ? "When someone shares a board with you, it will show up here." : "Create a board to begin. Kanban uses columns such as To do, Doing, and Done."}
+              {searchQuery
+                ? t("No boards match that name. Clear the search to see everything.", "ไม่พบบอร์ดที่ตรงกับชื่อที่ค้นหา ลองล้างคำค้นหาเพื่อดูบอร์ดทั้งหมด")
+                : activeTab === "starred"
+                  ? t("Star a board from its card, and it will show up here.", "กดรูปดาวที่การ์ดบอร์ดเพื่อปักหมุดบอร์ดที่ใช้บ่อยไว้ที่นี่")
+                  : activeTab === "shared"
+                    ? t("When someone shares a board with you, it will show up here.", "เมื่อเพื่อนร่วมทีมแชร์บอร์ดให้คุณ บอร์ดเหล่านั้นจะแสดงในหน้านี้")
+                    : t("Create a board to begin. Kanban uses columns such as To do, Doing, and Done.", "เริ่มต้นด้วยการสร้างบอร์ดใหม่ แนะนำรูปแบบ Kanban ที่แบ่งงานเป็นคอลัมน์เข้าใจง่าย")}
             </p>
             <button
               onClick={searchQuery || activeTab !== "all" ? () => { setSearchQuery(""); setActiveTab("all"); } : () => setShowCreateModal(true)}
               className={`px-5 py-2.5 rounded-xl text-white text-xs font-bold transition-all hover:scale-105 active:scale-95 ${theme === "dark" ? "bg-[#4051d6] hover:bg-[#4051d6] shadow-md shadow-[#4f63ef]/20" : "bg-[#4f63ef] hover:bg-[#4051d6] shadow-md shadow-[#4f63ef]/20"
                 }`}
             >
-              {searchQuery || activeTab !== "all" ? "View all boards" : "+ Create New Board"}
+              {searchQuery || activeTab !== "all" ? t("View all boards", "ดูบอร์ดทั้งหมด") : t("+ Create New Board", "+ สร้างบอร์ดใหม่")}
             </button>
           </div>
         ) : viewMode === "grid" ? (
@@ -1006,7 +1036,7 @@ export default function Dashboard() {
                           onClick={(e) => toggleStar(e, board.ID)}
                           className={`p-1.5 rounded-lg transition-colors border shadow-xs ${theme === "dark" ? "bg-[#0f172a]/90 border-[#334155]" : "bg-white/90 border-slate-200"
                             } ${isStarred ? "text-amber-500 dark:text-amber-400" : "text-slate-400 hover:text-[#4f63ef] dark:hover:text-[#a5b4fc]"}`}
-                          title="Star Board"
+                          title={t("Star Board", "ติดดาวบอร์ด")}
                         >
                           <Star size={13} fill={isStarred ? "currentColor" : "none"} />
                         </button>
@@ -1016,7 +1046,7 @@ export default function Dashboard() {
                               onClick={(e) => openRenameModal(e, board.ID, board.Name)}
                               className={`p-1.5 rounded-lg transition-colors border shadow-xs ${theme === "dark" ? "bg-[#0f172a]/90 border-[#334155] text-slate-400 hover:text-[#a5b4fc]" : "bg-white/90 border-slate-200 text-slate-500 hover:text-[#4051d6]"
                                 }`}
-                              title="Rename"
+                              title={t("Rename", "เปลี่ยนชื่อบอร์ด")}
                             >
                               <Edit2 size={13} />
                             </button>
@@ -1024,7 +1054,7 @@ export default function Dashboard() {
                               onClick={(e) => openDeleteModal(e, board.ID, board.Name)}
                               className={`p-1.5 rounded-lg transition-colors border shadow-xs ${theme === "dark" ? "bg-[#0f172a]/90 border-[#334155] text-slate-400 hover:text-rose-400" : "bg-white/90 border-slate-200 text-slate-500 hover:text-rose-600"
                                 }`}
-                              title="Delete"
+                              title={t("Delete", "ลบบอร์ด")}
                             >
                               <Trash2 size={13} />
                             </button>
@@ -1038,19 +1068,19 @@ export default function Dashboard() {
                       <div className="dashboard-card-details flex flex-col items-start gap-2 mb-2">
                         <h3 className={`text-sm font-bold transition-colors ${theme === "dark" ? "text-slate-100 group-hover:text-[#a5b4fc]" : "text-slate-900 group-hover:text-[#4f63ef]"
                           }`}>
-                          {board.Name || "Untitled Board"}
+                          {board.Name || t("Untitled Board", "บอร์ดไม่มีชื่อ")}
                         </h3>
                         <div className="flex items-center gap-1.5 flex-shrink-0">
                           <span className={`px-2 py-0.5 rounded-md text-[10px] font-semibold flex items-center gap-1 ${theme === "dark" ? "bg-[#243052] text-[#c7d2fe]" : "bg-[#eef2ff] text-[#4051d6]"
                             }`}>
                             {getBoardTypeIcon(board.Type)}
-                            {boardTypeLabel(board.Type)}
+                            {boardTypeLabel(board.Type, lang)}
                           </span>
                           <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold flex-shrink-0 ${board.IsOwner
                             ? theme === "dark" ? "bg-[#4f63ef]/20 text-[#a5b4fc] border border-[#4f63ef]/30" : "bg-[#f8fafc] text-[#4051d6] border border-[#c7d2fe]"
                             : theme === "dark" ? "bg-violet-500/15 text-violet-300 border border-violet-500/30" : "bg-violet-50 text-violet-700 border border-violet-200"
                             }`}>
-                            {board.IsOwner ? "Yours" : "Shared"}
+                            {board.IsOwner ? t("Yours", "ของคุณ") : t("Shared", "แชร์ร่วมกัน")}
                           </span>
                         </div>
                       </div>
@@ -1059,11 +1089,11 @@ export default function Dashboard() {
                     <div className={`flex items-center justify-between text-xs pt-2 border-t ${theme === "dark" ? "border-[#334155] text-slate-400" : "border-slate-100 text-slate-500"
                       }`}>
                       <span className="text-[13px] font-semibold">
-                        {board.Cards?.length || 0} {(board.Cards?.length || 0) === 1 ? "task" : "tasks"}
+                        {board.Cards?.length || 0} {t((board.Cards?.length || 0) === 1 ? "task" : "tasks", "งาน")}
                       </span>
                       <span className="flex items-center gap-3">
                         {renderOnlineAvatars(board.OnlineUsers, "sm")}
-                        <span className="dashboard-open-cue">Open</span>
+                        <span className="dashboard-open-cue">{t("Open", "เปิดบอร์ด")}</span>
                       </span>
                     </div>
                   </div>
@@ -1078,10 +1108,10 @@ export default function Dashboard() {
             {/* Table Header */}
             <div className={`dashboard-list-heading grid grid-cols-12 px-6 py-3 border-b text-xs font-bold ${theme === "dark" ? "bg-[#0f172a]/60 border-[#334155] text-slate-400" : "bg-slate-50 border-slate-100 text-slate-500"
               }`}>
-              <div className="col-span-5">Name</div>
-              <div className="col-span-3 text-center">Online users</div>
-              <div className="col-span-2 text-center">Access</div>
-              <div className="col-span-2 text-right">Actions</div>
+              <div className="col-span-5">{t("Name", "ชื่อบอร์ด")}</div>
+              <div className="col-span-3 text-center">{t("Online users", "ผู้ใช้ออนไลน์")}</div>
+              <div className="col-span-2 text-center">{t("Access", "สิทธิ์การเข้าถึง")}</div>
+              <div className="col-span-2 text-right">{t("Actions", "จัดการ")}</div>
             </div>
 
             <div className={`divide-y ${theme === "dark" ? "divide-[#334155]" : "divide-slate-100"}`}>
@@ -1099,9 +1129,9 @@ export default function Dashboard() {
                       <div className="min-w-0">
                         <h4 className={`text-sm font-bold truncate transition-colors ${theme === "dark" ? "text-slate-100 group-hover:text-[#a5b4fc]" : "text-slate-900 group-hover:text-[#4f63ef]"
                           }`}>
-                          {board.Name || "Untitled Board"}
+                          {board.Name || t("Untitled Board", "บอร์ดไม่มีชื่อ")}
                         </h4>
-                        <p className={`text-[11px] ${theme === "dark" ? "text-slate-400" : "text-slate-500"}`}>{(board.Cards?.length || 0)} {(board.Cards?.length || 0) === 1 ? "task" : "tasks"} · {boardTypeLabel(board.Type)}</p>
+                        <p className={`text-[11px] ${theme === "dark" ? "text-slate-400" : "text-slate-500"}`}>{(board.Cards?.length || 0)} {t((board.Cards?.length || 0) === 1 ? "task" : "tasks", "งาน")} · {boardTypeLabel(board.Type, lang)}</p>
                       </div>
                     </div>
 
@@ -1116,7 +1146,7 @@ export default function Dashboard() {
                         ? theme === "dark" ? "bg-[#4f63ef]/20 text-[#a5b4fc] border border-[#4f63ef]/30" : "bg-[#f8fafc] text-[#4051d6] border border-[#c7d2fe]"
                         : theme === "dark" ? "bg-violet-500/15 text-violet-300 border border-violet-500/30" : "bg-violet-50 text-violet-700 border border-violet-200"
                         }`}>
-                        {board.IsOwner ? "Yours" : "Shared"}
+                        {board.IsOwner ? t("Yours", "ของคุณ") : t("Shared", "แชร์ร่วมกัน")}
                       </span>
                     </div>
 
@@ -1126,7 +1156,7 @@ export default function Dashboard() {
                         onClick={(e) => toggleStar(e, board.ID)}
                         className={`p-1.5 rounded-lg transition-colors border ${theme === "dark" ? "border-[#334155]" : "border-slate-200"
                           } ${isStarred ? "text-[#4f63ef] dark:text-[#a5b4fc]" : "text-slate-400 hover:text-[#4f63ef] dark:hover:text-[#a5b4fc]"}`}
-                        title="Star Board"
+                        title={t("Star Board", "ติดดาวบอร์ด")}
                       >
                         <Star size={14} fill={isStarred ? "currentColor" : "none"} />
                       </button>
@@ -1135,14 +1165,14 @@ export default function Dashboard() {
                           <button
                             onClick={(e) => openRenameModal(e, board.ID, board.Name)}
                             className={`p-1.5 transition-colors ${theme === "dark" ? "text-slate-400 hover:text-[#a5b4fc]" : "text-slate-400 hover:text-[#4051d6]"}`}
-                            title="Rename"
+                            title={t("Rename", "เปลี่ยนชื่อบอร์ด")}
                           >
                             <Edit2 size={14} />
                           </button>
                           <button
                             onClick={(e) => openDeleteModal(e, board.ID, board.Name)}
                             className="p-1.5 text-slate-400 hover:text-rose-600 transition-colors"
-                            title="Delete"
+                            title={t("Delete", "ลบบอร์ด")}
                           >
                             <Trash2 size={14} />
                           </button>
@@ -1160,9 +1190,9 @@ export default function Dashboard() {
       <section className="start-templates" aria-label="Quick templates">
         <div className="flex items-center justify-between mb-3">
           <span className="text-[13px] font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
-            <Sparkles size={14} className="text-[#4f63ef] dark:text-[#a5b4fc]" /> Start from a template
+            <Sparkles size={14} className="text-[#4f63ef] dark:text-[#a5b4fc]" /> {t("Start from a template", "เริ่มต้นด่วนจากเทมเพลต")}
           </span>
-          <span className="text-[12px] text-slate-500 hidden sm:inline">You can rename it and switch views later</span>
+          <span className="text-[12px] text-slate-500 hidden sm:inline">{t("You can rename it and switch views later", "สามารถเปลี่ยนชื่อและสลับมุมมองได้ตลอดเวลา")}</span>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
           {BOARD_TYPES.slice(0, 6).map((item) => (
@@ -1182,16 +1212,16 @@ export default function Dashboard() {
               <div className="flex items-center justify-between gap-2">
                 <span className="text-[13px] font-bold text-slate-800 dark:text-slate-100 group-hover:text-[#4f63ef] dark:group-hover:text-[#a5b4fc] transition-colors flex items-center gap-1.5 flex-wrap">
                   <item.icon size={14} className="text-[#4f63ef] dark:text-[#a5b4fc]" />
-                  {item.label}
+                  {lang === "th" ? item.labelTh : item.label}
                 </span>
                 <Plus size={14} className="text-slate-400 group-hover:text-[#4f63ef] dark:group-hover:text-[#a5b4fc] transition-colors flex-shrink-0" />
               </div>
-              <span className="start-badge-row">{item.id === "kanban" && <span className="start-badge">Easiest start</span>}</span>
+              <span className="start-badge-row">{item.id === "kanban" && <span className="start-badge">{t("Easiest start", "เริ่มต้นง่ายที่สุด")}</span>}</span>
               <p className="text-[12px] text-slate-500 dark:text-slate-400 leading-snug line-clamp-2">
-                {item.hint}
+                {lang === "th" ? item.hintTh : item.hint}
               </p>
               <span className="text-[12px] font-bold text-[#4f63ef] dark:text-[#a5b4fc] flex items-center gap-0.5">
-                Use this <ArrowRight size={12} />
+                {t("Use this", "ใช้เทมเพลตนี้")} <ArrowRight size={12} />
               </span>
             </button>
           ))}
@@ -1218,8 +1248,8 @@ export default function Dashboard() {
                   <Plus size={18} />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold">New board</h3>
-                  <p className="text-sm text-slate-500 dark:text-slate-400">Name it, then pick a layout. Not sure? Choose Kanban. You can switch views later.</p>
+                  <h3 className="text-base font-bold">{t("New board", "สร้างบอร์ดใหม่")}</h3>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">{t("Name it, then pick a layout. Not sure? Choose Kanban. You can switch views later.", "ตั้งชื่อบอร์ดแล้วเลือกรูปแบบที่ต้องการ (สามารถสลับมุมมองภายหลังได้ตลอดเวลา)")}</p>
                 </div>
               </div>
               <button
@@ -1233,8 +1263,8 @@ export default function Dashboard() {
             <div className="create-board-scroll">
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
-                <label htmlFor="new-board-name" className="text-[13px] font-semibold text-slate-500">Board name</label>
-                <span className="text-xs text-slate-400">Press Enter to create</span>
+                <label htmlFor="new-board-name" className="text-[13px] font-semibold text-slate-500">{t("Board name", "ชื่อบอร์ด")}</label>
+                <span className="text-xs text-slate-400">{t("Press Enter to create", "กด Enter เพื่อสร้างทันที")}</span>
               </div>
               <input
                 id="new-board-name"
@@ -1248,12 +1278,15 @@ export default function Dashboard() {
                 }}
                 className={`w-full px-4 py-3 rounded-xl border text-sm focus:outline-none focus:ring-2 focus:ring-[#4f63ef] font-semibold transition-all ${theme === "dark" ? "bg-[#0f172a] border-[#334155] text-slate-100 placeholder:text-slate-600" : "bg-slate-50 border-slate-200 text-slate-900 placeholder:text-slate-400"
                   }`}
-                placeholder="For example, Product launch"
+                placeholder={t("For example, Product launch", "เช่น เปิดตัวสินค้าใหม่, แผนงานประจำสัปดาห์")}
               />
               {/* Quick suggestions chips */}
               <div className="flex items-center gap-1.5 flex-wrap pt-1">
-                <span className="text-xs text-slate-400 font-medium">Suggestions:</span>
-                {["Sprint 1", "Product Roadmap", "Team Kanban", "Weekly Milestones", "Brainstorm Ideas"].map((sug) => (
+                <span className="text-xs text-slate-400 font-medium">{t("Suggestions:", "ชื่อแนะนำ:")}</span>
+                {(lang === "th"
+                  ? ["สปรินต์ที่ 1", "แผนพัฒนาสินค้า", "งานทีม Kanban", "เป้าหมายประจำสัปดาห์", "ระดมสมองไอเดีย"]
+                  : ["Sprint 1", "Product Roadmap", "Team Kanban", "Weekly Milestones", "Brainstorm Ideas"]
+                ).map((sug) => (
                   <button
                     key={sug}
                     type="button"
@@ -1268,18 +1301,18 @@ export default function Dashboard() {
 
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-[13px] font-semibold text-slate-500">Choose a layout</span>
-                <span className="text-xs text-slate-400">You can switch views anytime</span>
+                <span className="text-[13px] font-semibold text-slate-500">{t("Choose a layout", "เลือกรูปแบบบอร์ด")}</span>
+                <span className="text-xs text-slate-400">{t("You can switch views anytime", "สลับมุมมองได้ทุกเมื่อ")}</span>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                {BOARD_TYPES.map((t) => {
-                  const selected = newBoardType === t.id;
+                {BOARD_TYPES.map((bt) => {
+                  const selected = newBoardType === bt.id;
                   return (
                     <button
-                      key={t.id}
+                      key={bt.id}
                       onClick={() => {
-                        setNewBoardType(t.id);
-                        if (!newBoardName.trim()) setNewBoardName(t.defaultName || "");
+                        setNewBoardType(bt.id);
+                        if (!newBoardName.trim()) setNewBoardName(bt.defaultName || "");
                       }}
                       aria-pressed={selected}
                       className={`text-left p-3 rounded-xl border transition-all cursor-pointer ${selected
@@ -1289,17 +1322,17 @@ export default function Dashboard() {
                     >
                       <div className="flex items-center justify-between">
                         <span className="text-sm font-bold flex items-center gap-1.5 flex-wrap">
-                          {t.label}
-                          {t.id === "kanban" && <span className="start-badge">Easiest start</span>}
+                          {lang === "th" ? bt.labelTh : bt.label}
+                          {bt.id === "kanban" && <span className="start-badge">{t("Easiest start", "เริ่มต้นง่ายที่สุด")}</span>}
                           <span className="text-[11px] font-medium text-slate-400 px-1.5 py-0.5 rounded bg-slate-200/50 dark:bg-slate-800">
-                            {t.category}
+                            {lang === "th" ? bt.categoryTh : bt.category}
                           </span>
                         </span>
                         {selected && <Check size={14} className="text-[#4f63ef] dark:text-[#a5b4fc]" />}
                       </div>
-                      <p className={`text-[13px] mt-1 leading-snug ${theme === "dark" ? "text-slate-400" : "text-slate-500"}`}>{t.hint}</p>
+                      <p className={`text-[13px] mt-1 leading-snug ${theme === "dark" ? "text-slate-400" : "text-slate-500"}`}>{lang === "th" ? bt.hintTh : bt.hint}</p>
                       <div className="h-16 mt-2 overflow-hidden rounded-lg border border-[#e2e8f0] dark:border-[#334155] bg-white dark:bg-[#0f172a] pointer-events-none">
-                        <BoardFormatPreview format={t.id} />
+                        <BoardFormatPreview format={bt.id} />
                       </div>
                     </button>
                   );
@@ -1316,14 +1349,14 @@ export default function Dashboard() {
                 className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${theme === "dark" ? "bg-slate-800 hover:bg-slate-700 text-slate-300" : "bg-slate-100 hover:bg-slate-200 text-slate-700"
                   }`}
               >
-                Cancel
+                {t("Cancel", "ยกเลิก")}
               </button>
               <button
                 onClick={createNewBoard}
                 disabled={isCreatingBoard}
                 className="px-5 py-2.5 bg-[#4f63ef] hover:bg-[#4051d6] text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-[#4f63ef]/20 cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
               >
-                {isCreatingBoard ? "Creating..." : "Create board"}
+                {isCreatingBoard ? t("Creating...", "กำลังสร้าง...") : t("Create board", "สร้างบอร์ด")}
               </button>
             </div>
           </div>
@@ -1347,8 +1380,8 @@ export default function Dashboard() {
                   <Edit2 size={18} />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold">Rename Board</h3>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">Enter a new name for your board</p>
+                  <h3 className="text-base font-bold">{t("Rename Board", "เปลี่ยนชื่อบอร์ด")}</h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">{t("Enter a new name for your board", "ระบุชื่อใหม่สำหรับบอร์ดของคุณ")}</p>
                 </div>
               </div>
               <button
@@ -1360,7 +1393,7 @@ export default function Dashboard() {
             </div>
 
             <div className="space-y-1.5 pt-1">
-              <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Board Name</label>
+              <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400">{t("Board Name", "ชื่อบอร์ด")}</label>
               <input
                 type="text"
                 autoFocus
@@ -1372,7 +1405,7 @@ export default function Dashboard() {
                 }}
                 className={`w-full px-4 py-3 rounded-xl border text-sm focus:outline-none focus:ring-2 focus:ring-[#4f63ef] font-semibold transition-all ${theme === "dark" ? "bg-[#0f172a] border-[#334155] text-slate-100 placeholder:text-slate-600" : "bg-slate-50 border-slate-200 text-slate-900 placeholder:text-slate-400"
                   }`}
-                placeholder="Board name..."
+                placeholder={t("Board name...", "ชื่อบอร์ด...")}
               />
             </div>
 
@@ -1384,14 +1417,14 @@ export default function Dashboard() {
                 className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${theme === "dark" ? "bg-slate-800 hover:bg-slate-700 text-slate-300" : "bg-slate-100 hover:bg-slate-200 text-slate-700"
                   }`}
               >
-                Cancel
+                {t("Cancel", "ยกเลิก")}
               </button>
               <button
                 onClick={handleSaveRename}
                 disabled={!renameInputValue.trim() || isSavingRename}
                 className="px-5 py-2.5 bg-[#4f63ef] hover:bg-[#4051d6] text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-[#4f63ef]/20 cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
               >
-                {isSavingRename ? "Saving..." : "Save Changes"}
+                {isSavingRename ? t("Saving...", "กำลังบันทึก...") : t("Save Changes", "บันทึกการเปลี่ยนแปลง")}
               </button>
             </div>
           </div>
@@ -1415,8 +1448,8 @@ export default function Dashboard() {
                   <Trash2 size={18} />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-rose-500">Delete Board?</h3>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">This action cannot be undone</p>
+                  <h3 className="text-base font-bold text-rose-500">{t("Delete Board?", "ยืนยันการลบบอร์ด?")}</h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">{t("This action cannot be undone", "การดำเนินการนี้ไม่สามารถย้อนกลับได้")}</p>
                 </div>
               </div>
               <button
@@ -1428,7 +1461,7 @@ export default function Dashboard() {
             </div>
 
             <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed bg-rose-500/5 p-3.5 rounded-xl border border-rose-500/10">
-              Are you sure you want to delete <strong className="text-slate-800 dark:text-slate-100 font-bold">"{deleteModalData.name}"</strong>? All columns, tasks, and data inside this board will be permanently removed.
+              {t("Are you sure you want to delete", "คุณแน่ใจหรือไม่ว่าต้องการลบบอร์ด")} <strong className="text-slate-800 dark:text-slate-100 font-bold">"{deleteModalData.name}"</strong>? {t("All columns, tasks, and data inside this board will be permanently removed.", "คอลัมน์ การ์ดงาน และข้อมูลทั้งหมดในบอร์ดนี้จะถูกลบอย่างถาวร")}
             </p>
 
             {deleteError && <p role="alert" className="text-xs text-rose-500">{deleteError}</p>}
@@ -1439,14 +1472,14 @@ export default function Dashboard() {
                 className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${theme === "dark" ? "bg-slate-800 hover:bg-slate-700 text-slate-300" : "bg-slate-100 hover:bg-slate-200 text-slate-700"
                   }`}
               >
-                Cancel
+                {t("Cancel", "ยกเลิก")}
               </button>
               <button
                 onClick={handleConfirmDelete}
                 disabled={isDeletingBoard}
                 className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-rose-500/20 cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
               >
-                {isDeletingBoard ? "Deleting..." : "Delete Board"}
+                {isDeletingBoard ? t("Deleting...", "กำลังลบ...") : t("Delete Board", "ลบบอร์ด")}
               </button>
             </div>
           </div>

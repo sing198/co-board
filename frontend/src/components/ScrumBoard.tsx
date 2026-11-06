@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Card } from "../useWebSocket";
+import { useLanguage } from "../useLanguage";
 import "./scrumBoard.css";
 
 type ScrumCard = Card & {
@@ -46,6 +47,7 @@ function pointCount(cards: ScrumCard[]) {
 }
 
 export default function ScrumBoard({ cards, allCards = cards, columns, sprint, canEdit, connected, saving = false, onOpen, onMove, onEdit, onUpdateSprint, onCreate }: Props) {
+  const { t } = useLanguage();
   const [draftName, setDraftName] = useState(sprint.name || "Sprint 1");
   const [draftStart, setDraftStart] = useState(sprint.start || "");
   const [draftEnd, setDraftEnd] = useState(sprint.end || "");
@@ -79,7 +81,7 @@ export default function ScrumBoard({ cards, allCards = cards, columns, sprint, c
   const taskRow = (card: ScrumCard, inSprint: boolean) => (
     <li key={card.ID} className="scrum-task">
       <button type="button" className="scrum-task-title" onClick={() => onOpen(card)}>
-        {card.Title || "Untitled task"}
+        {card.Title || t("Untitled task", "งานไม่มีชื่อ")}
       </button>
       <div className="scrum-task-actions">
         {inSprint && (
@@ -99,7 +101,7 @@ export default function ScrumBoard({ cards, allCards = cards, columns, sprint, c
           onChange={event => onEdit(card, { storyPoints: Number(event.target.value) })}
         >
           {[...new Set([...pointOptions, card.StoryPoints || 0])].sort((a, b) => a - b).map(points => (
-            <option key={points} value={points}>{points === 0 ? "No points" : `${points} ${points === 1 ? "point" : "points"}`}</option>
+            <option key={points} value={points}>{points === 0 ? t("No points", "ไม่ระบุแต้ม") : `${points} ${t(points === 1 ? "point" : "points", "แต้ม")}`}</option>
           ))}
         </select>
         <button
@@ -108,7 +110,7 @@ export default function ScrumBoard({ cards, allCards = cards, columns, sprint, c
           disabled={!mayChangeTasks}
           onClick={() => onEdit(card, { inSprint: !inSprint })}
         >
-          {inSprint ? "Remove from sprint" : "Add to sprint"}
+          {inSprint ? t("Remove from sprint", "นำออกจากสปรินต์") : t("Add to sprint", "นำเข้าสปรินต์")}
         </button>
       </div>
     </li>
@@ -118,58 +120,58 @@ export default function ScrumBoard({ cards, allCards = cards, columns, sprint, c
     <section className="scrum-board" aria-label="Scrum sprint workspace">
       <header className="scrum-heading">
         <div>
-          <div className="scrum-eyebrow">SCRUM WORKSPACE</div>
+          <div className="scrum-eyebrow">{t("SCRUM WORKSPACE", "พื้นที่จัดการสปรินต์ (SCRUM)")}</div>
           <h2>{sprint.name || "Sprint 1"}</h2>
-          <p>Plan a focused sprint, estimate the work, and move tasks through your workflow.</p>
+          <p>{t("Plan a focused sprint, estimate the work, and move tasks through your workflow.", "วางแผนสปรินต์ ประเมินแต้มงาน (Story Points) และติดตามความคืบหน้าของทีม")}</p>
         </div>
-        <span className={`scrum-status scrum-status-${status}`}>{status === "active" ? "Active sprint" : status === "completed" ? "Completed sprint" : "Planning"}</span>
+        <span className={`scrum-status scrum-status-${status}`}>{status === "active" ? t("Active sprint", "กำลังดำเนินการ") : status === "completed" ? t("Completed sprint", "จบสปรินต์แล้ว") : t("Planning", "กำลังวางแผน")}</span>
       </header>
 
       <div className="scrum-summary" aria-label="Sprint progress">
-        <div><strong>{allSprintCards.length}</strong><span>tasks in sprint</span></div>
-        <div><strong>{completedCards.length}</strong><span>tasks completed</span></div>
-        <div><strong>{completedPoints} / {sprintPoints}</strong><span>points completed</span></div>
+        <div><strong>{allSprintCards.length}</strong><span>{t("tasks in sprint", "งานในสปรินต์")}</span></div>
+        <div><strong>{completedCards.length}</strong><span>{t("tasks completed", "งานที่เสร็จแล้ว")}</span></div>
+        <div><strong>{completedPoints} / {sprintPoints}</strong><span>{t("points completed", "แต้มงานที่ทำสำเร็จ")}</span></div>
         <div className="scrum-progress-wrap">
-          <label htmlFor="scrum-progress">Progress · {allSprintCards.length ? Math.round(completedCards.length / allSprintCards.length * 100) : 0}%</label>
+          <label htmlFor="scrum-progress">{t("Progress", "ความคืบหน้า")} · {allSprintCards.length ? Math.round(completedCards.length / allSprintCards.length * 100) : 0}%</label>
           <progress id="scrum-progress" max={Math.max(1, allSprintCards.length)} value={completedCards.length} />
         </div>
       </div>
 
       <section className="scrum-panel scrum-setup" aria-label="Sprint setup">
         <div className="scrum-panel-heading">
-          <div><h3>Sprint setup</h3><p>Save the name and dates before starting the sprint.</p></div>
-          {status === "completed" && <span className="scrum-finished-note">This sprint is complete.</span>}
+          <div><h3>{t("Sprint setup", "ตั้งค่าสปรินต์")}</h3><p>{t("Save the name and dates before starting the sprint.", "บันทึกชื่อและช่วงเวลาของสปรินต์ก่อนกดเริ่มสปรินต์")}</p></div>
+          {status === "completed" && <span className="scrum-finished-note">{t("This sprint is complete.", "สปรินต์นี้เสร็จสมบูรณ์แล้ว")}</span>}
         </div>
         <div className="scrum-fields">
-          <label>Sprint name
+          <label>{t("Sprint name", "ชื่อสปรินต์")}
             <input aria-label="Sprint name" value={draftName} disabled={!mayConfigure} onChange={event => setDraftName(event.target.value)} maxLength={100} />
           </label>
-          <label>Start date
+          <label>{t("Start date", "วันเริ่มสปรินต์")}
             <input aria-label="Sprint start date" type="date" value={draftStart} disabled={!mayConfigure} onInput={event => setDraftStart(event.currentTarget.value)} onChange={event => setDraftStart(event.target.value)} />
           </label>
-          <label>End date
+          <label>{t("End date", "วันสิ้นสุดสปรินต์")}
             <input aria-label="Sprint end date" type="date" value={draftEnd} disabled={!mayConfigure} onInput={event => setDraftEnd(event.currentTarget.value)} onChange={event => setDraftEnd(event.target.value)} />
           </label>
         </div>
-        {draftDatesConflict && <p role="alert" className="scrum-field-error">End date must be on or after the start date.</p>}
+        {draftDatesConflict && <p role="alert" className="scrum-field-error">{t("End date must be on or after the start date.", "วันสิ้นสุดต้องไม่ก่อนวันเริ่มต้น")}</p>}
         {status === "planning" && (
           <div className="scrum-setup-actions">
-            <button type="button" className="scrum-button scrum-button-secondary" disabled={!canSaveSetup} onClick={() => onUpdateSprint({ name: draftName.trim(), start: draftStart, end: draftEnd })}>Save setup</button>
-            <button type="button" className="scrum-button scrum-button-primary" disabled={!canStart} onClick={() => onUpdateSprint({ status: "active" })}>Start sprint</button>
-            {!isValidDateRange(sprint.start || "", sprint.end || "") && <span className="scrum-help">Save a valid date range to start.</span>}
-            {isDirty && isValidDateRange(sprint.start || "", sprint.end || "") && <span className="scrum-help">Save changes before starting.</span>}
+            <button type="button" className="scrum-button scrum-button-secondary" disabled={!canSaveSetup} onClick={() => onUpdateSprint({ name: draftName.trim(), start: draftStart, end: draftEnd })}>{t("Save setup", "บันทึกตั้งค่า")}</button>
+            <button type="button" className="scrum-button scrum-button-primary" disabled={!canStart} onClick={() => onUpdateSprint({ status: "active" })}>{t("Start sprint", "เริ่มสปรินต์")}</button>
+            {!isValidDateRange(sprint.start || "", sprint.end || "") && <span className="scrum-help">{t("Save a valid date range to start.", "กรุณาระบุและบันทึกช่วงวันที่ก่อนเริ่มสปรินต์")}</span>}
+            {isDirty && isValidDateRange(sprint.start || "", sprint.end || "") && <span className="scrum-help">{t("Save changes before starting.", "กดบันทึกตั้งค่าก่อนเริ่มสปรินต์")}</span>}
           </div>
         )}
         {status === "active" && (
           <div className="scrum-setup-actions">
             {confirmFinish ? (
               <div className="scrum-finish-confirm" role="group" aria-label="Confirm sprint completion">
-                <span>Finish this sprint?</span>
-                <button type="button" className="scrum-button scrum-button-primary" disabled={!mayEdit} onClick={() => { onUpdateSprint({ status: "completed" }); setConfirmFinish(false); }}>Confirm finish</button>
-                <button type="button" className="scrum-button scrum-button-secondary" onClick={() => setConfirmFinish(false)}>Cancel</button>
+                <span>{t("Finish this sprint?", "ยืนยันการปิดสปรินต์นี้?")}</span>
+                <button type="button" className="scrum-button scrum-button-primary" disabled={!mayEdit} onClick={() => { onUpdateSprint({ status: "completed" }); setConfirmFinish(false); }}>{t("Confirm finish", "ยืนยันปิดสปรินต์")}</button>
+                <button type="button" className="scrum-button scrum-button-secondary" onClick={() => setConfirmFinish(false)}>{t("Cancel", "ยกเลิก")}</button>
               </div>
             ) : (
-              <button type="button" className="scrum-button scrum-button-secondary" disabled={!mayEdit} onClick={() => setConfirmFinish(true)}>Complete sprint</button>
+              <button type="button" className="scrum-button scrum-button-secondary" disabled={!mayEdit} onClick={() => setConfirmFinish(true)}>{t("Complete sprint", "ปิดสปรินต์")}</button>
             )}
           </div>
         )}
@@ -178,21 +180,21 @@ export default function ScrumBoard({ cards, allCards = cards, columns, sprint, c
       <div className="scrum-columns">
         <section className="scrum-panel" aria-label="Product backlog">
           <div className="scrum-panel-heading">
-            <div><h3>Product backlog <span className="scrum-count">{backlog.length}</span></h3><p>Tasks waiting outside the current sprint.</p></div>
-            <button type="button" className="scrum-button scrum-button-secondary" disabled={!mayEdit} onClick={onCreate}>New task</button>
+            <div><h3>{t("Product backlog", "รายการงานรอทำ (Backlog)")} <span className="scrum-count">{backlog.length}</span></h3><p>{t("Tasks waiting outside the current sprint.", "งานทั้งหมดที่ยังไม่ได้นำเข้าสปรินต์ปัจจุบัน")}</p></div>
+            <button type="button" className="scrum-button scrum-button-secondary" disabled={!mayEdit} onClick={onCreate}>{t("New task", "เพิ่มงานใหม่")}</button>
           </div>
-          {backlog.length ? <ul className="scrum-task-list">{backlog.map(card => taskRow(card, false))}</ul> : <p className="scrum-empty">No tasks in the backlog.</p>}
+          {backlog.length ? <ul className="scrum-task-list">{backlog.map(card => taskRow(card, false))}</ul> : <p className="scrum-empty">{t("No tasks in the backlog.", "ไม่มีงานค้างใน Backlog")}</p>}
         </section>
 
         <section className="scrum-panel scrum-sprint-panel" aria-label="Sprint tasks">
-          <div className="scrum-panel-heading"><div><h3>Sprint scope <span className="scrum-count">{sprintCards.length}</span></h3><p>{status === "active" ? "Move work across the sprint columns." : status === "completed" ? "Final state of this sprint." : "Choose tasks from the backlog to plan this sprint."}</p></div></div>
-          {sprintCards.length === 0 ? <p className="scrum-empty">Add tasks from the backlog to build this sprint.</p> : status === "active" ? (
+          <div className="scrum-panel-heading"><div><h3>{t("Sprint scope", "งานในสปรินต์นี้")} <span className="scrum-count">{sprintCards.length}</span></h3><p>{status === "active" ? t("Move work across the sprint columns.", "อัปเดตสถานะงานระหว่างดำเนินการในสปรินต์") : status === "completed" ? t("Final state of this sprint.", "สรุปผลของสปรินต์นี้") : t("Choose tasks from the backlog to plan this sprint.", "เลือกงานจากฝั่ง Backlog เพื่อนำเข้าสปรินต์นี้")}</p></div></div>
+          {sprintCards.length === 0 ? <p className="scrum-empty">{t("Add tasks from the backlog to build this sprint.", "กดปุ่ม “นำเข้าสปรินต์” จากรายการใน Backlog เพื่อวางแผนสปรินต์นี้")}</p> : status === "active" ? (
             <div className="scrum-status-grid">
               {statusColumns.map(column => {
                 const columnCards = sprintCards.filter(card => card.List === column);
                 return <section key={column} className="scrum-status-column" aria-label={`${column} tasks`}>
                   <h4>{column} <span>{columnCards.length}</span></h4>
-                  {columnCards.length ? <ul className="scrum-task-list">{columnCards.map(card => taskRow(card, true))}</ul> : <p className="scrum-column-empty">No tasks</p>}
+                  {columnCards.length ? <ul className="scrum-task-list">{columnCards.map(card => taskRow(card, true))}</ul> : <p className="scrum-column-empty">{t("No tasks", "ไม่มีงาน")}</p>}
                 </section>;
               })}
             </div>

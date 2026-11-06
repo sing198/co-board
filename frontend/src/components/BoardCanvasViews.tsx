@@ -18,21 +18,25 @@ type Props = {
   connected: boolean;
   onOpen: (card: Card) => void;
   onCreate: (details?: CreateTaskDetails) => void;
+  onReschedule?: (card: Card, dueDate: string) => void;
 };
 const monthLabel = (date: Date) => date.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
 const fullDate = (date: Date) => date.toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' });
 const taskId = (card: Card) => `TSK-${String(card.ID).padStart(3, '0')}`;
 const stateClass = (card: Card) => /done|published|complete/i.test(card.List) ? 'is-done' : /doing|progress|review/i.test(card.List) ? 'is-active' : '';
 
-function TaskButton({ card, onOpen }: { card: Card; onOpen: Props['onOpen'] }) {
-  return <button type="button" className={`format-task ${stateClass(card)}`} aria-label={`Open task: ${card.Title}`} onClick={() => onOpen(card)}><small>{taskId(card)}</small><span>{card.Title}</span></button>;
+function TaskButton({ card, onOpen, draggable }: { card: Card; onOpen: Props['onOpen']; draggable?: boolean }) {
+  return <button type="button" draggable={draggable} onDragStart={event => { event.dataTransfer.setData('text/plain', String(card.ID)); event.dataTransfer.effectAllowed = 'move'; }} className={`format-task ${stateClass(card)}`} aria-label={`Open task: ${card.Title}`} onClick={() => onOpen(card)}><small>{taskId(card)}</small><span>{card.Title}</span></button>;
 }
-function Unscheduled({ cards, onOpen, emptyLabel = 'Every task has a date.' }: { cards: Card[]; onOpen: Props['onOpen']; emptyLabel?: string }) {
-  return <aside className="format-unscheduled" aria-label="Unscheduled tasks"><h3><ListTodo size={16} /> Unscheduled <span>{cards.length}</span></h3><p>Add dates in task details to place these tasks on the board.</p>{cards.length ? <div>{cards.map(card => <TaskButton key={card.ID} card={card} onOpen={onOpen} />)}</div> : <small>{emptyLabel}</small>}</aside>;
+function Unscheduled({ cards, onOpen, canDrag, onDropUnschedule, emptyLabel = 'Every task has a date.' }: { cards: Card[]; onOpen: Props['onOpen']; canDrag?: boolean; onDropUnschedule?: (cardId: string) => void; emptyLabel?: string }) {
+  return <aside className="format-unscheduled" aria-label="Unscheduled tasks" onDragOver={canDrag && onDropUnschedule ? event => { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; } : undefined} onDrop={canDrag && onDropUnschedule ? event => { event.preventDefault(); const id = event.dataTransfer.getData('text/plain'); if (id) onDropUnschedule(id); } : undefined}><h3><ListTodo size={16} /> Unscheduled <span>{cards.length}</span></h3><p>{canDrag ? 'Drag a task onto a date to schedule it, or open it to edit details.' : 'Add dates in task details to place these tasks on the board.'}</p>{cards.length ? <div>{cards.map(card => <TaskButton key={card.ID} card={card} onOpen={onOpen} draggable={canDrag} />)}</div> : <small>{emptyLabel}</small>}</aside>;
 }
 
-function CalendarView({ cards, canEdit, connected, onOpen, onCreate }: Props) {
+function CalendarView({ cards, canEdit, connected, onOpen, onCreate, onReschedule }: Props) {
   const [month, setMonth] = useState(() => new Date());
+  const [dragOverDate, setDragOverDate] = useState<string | null>(null);
+  const canDrag = canEdit && connected && !!onReschedule;
+  const byId = useMemo(() => new Map(cards.map(card => [String(card.ID), card])), [cards]);
   const today = dateKey(new Date());
   const days = calendarDays(month);
   const byDate = useMemo(() => {
@@ -48,8 +52,8 @@ function CalendarView({ cards, canEdit, connected, onOpen, onCreate }: Props) {
     <div className="format-toolbar"><div><CalendarDays size={18} /><h2>{monthLabel(month)}</h2></div><nav aria-label="Calendar navigation"><button type="button" aria-label="Previous month" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))}><ChevronLeft size={17} /></button><button type="button" onClick={() => setMonth(new Date())}>Today</button><button type="button" aria-label="Next month" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))}><ChevronRight size={17} /></button></nav></div>
     <div className="format-calendar-layout"><div className="format-calendar-scroll"><div className="format-calendar" role="table" aria-label={`Calendar for ${monthLabel(month)}`}><div className="format-calendar-weekdays" role="row">{['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => <div role="columnheader" key={day}>{day}</div>)}</div><div className="format-calendar-days" role="rowgroup">{Array.from({ length: 6 }, (_, week) => <div role="row" className="format-calendar-week" key={week}>{days.slice(week * 7, week * 7 + 7).map(day => {
       const key = dateKey(day);
-      return <div role="cell" key={key} className={`format-calendar-day ${day.getMonth() !== month.getMonth() ? 'is-outside' : ''} ${key === today ? 'is-today' : ''}`} aria-label={`${fullDate(day)}: ${byDate.get(key)?.length || 0} tasks`}><div className="format-day-heading"><time dateTime={key}>{day.getDate()}</time><button type="button" aria-label={`Add task due ${fullDate(day)}`} title={!connected ? 'Reconnect to add tasks' : !canEdit ? 'View-only board' : 'Add task on this date'} disabled={!canEdit || !connected} onClick={() => onCreate({ dueDate: key })}><Plus size={13} /></button></div><div className="format-day-tasks">{(byDate.get(key) || []).map(card => <TaskButton key={card.ID} card={card} onOpen={onOpen} />)}</div></div>;
-    })}</div>)}</div></div></div><Unscheduled cards={unscheduled} onOpen={onOpen} /></div>
+      return <div role="cell" key={key} onDragOver={canDrag ? event => { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; if (dragOverDate !== key) setDragOverDate(key); } : undefined} onDragLeave={canDrag ? () => { if (dragOverDate === key) setDragOverDate(null); } : undefined} onDrop={canDrag ? event => { event.preventDefault(); setDragOverDate(null); const id = event.dataTransfer.getData('text/plain'); const target = byId.get(id); if (target && target.DueDate !== key) onReschedule?.(target, key); } : undefined} className={`format-calendar-day ${day.getMonth() !== month.getMonth() ? 'is-outside' : ''} ${key === today ? 'is-today' : ''} ${dragOverDate === key ? 'is-drop-target' : ''}`} aria-label={`${fullDate(day)}: ${byDate.get(key)?.length || 0} tasks`}><div className="format-day-heading"><time dateTime={key}>{day.getDate()}</time><button type="button" aria-label={`Add task due ${fullDate(day)}`} title={!connected ? 'Reconnect to add tasks' : !canEdit ? 'View-only board' : 'Add task on this date'} disabled={!canEdit || !connected} onClick={() => onCreate({ dueDate: key })}><Plus size={13} /></button></div><div className="format-day-tasks">{(byDate.get(key) || []).map(card => <TaskButton key={card.ID} card={card} onOpen={onOpen} draggable={canDrag} />)}</div></div>;
+    })}</div>)}</div></div></div><Unscheduled cards={unscheduled} onOpen={onOpen} canDrag={canDrag} onDropUnschedule={id => { const target = byId.get(id); if (target && target.DueDate) onReschedule?.(target, ''); }} /></div>
   </>;
 }
 

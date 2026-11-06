@@ -115,7 +115,50 @@ export default function Dashboard() {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState<"all" | "my" | "shared" | "starred">("all");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
-  const [starredIds, setStarredIds] = useState<string[]>([]);
+  const starredStorageKey = useMemo(() => `co_board_starred_${user?.id || user?.email || "guest"}`, [user?.id, user?.email]);
+  const [starredIds, setStarredIds] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem(`co_board_starred_${user?.id || user?.email || "guest"}`);
+      const parsed = saved ? JSON.parse(saved) : [];
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  });
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(starredStorageKey);
+      const parsed = saved ? JSON.parse(saved) : [];
+      setStarredIds(Array.isArray(parsed) ? parsed : []);
+    } catch {
+      setStarredIds([]);
+    }
+  }, [starredStorageKey]);
+  const [heroDemoCols, setHeroDemoCols] = useState<Record<"todo" | "doing" | "done", Array<{ id: string; tag: string; title: string; lift?: boolean }>>>({
+    todo: [
+      { id: "d1", tag: "Design", title: "Sketch the homepage" },
+      { id: "d2", tag: "Write", title: "Draft the announcement" },
+    ],
+    doing: [
+      { id: "d3", tag: "Build", title: "Click a card to move it →", lift: true },
+    ],
+    done: [
+      { id: "d4", tag: "Plan", title: "Pick a board format" },
+    ],
+  });
+  const cycleHeroCard = (from: "todo" | "doing" | "done", cardId: string) => {
+    const nextCol: Record<"todo" | "doing" | "done", "todo" | "doing" | "done"> = { todo: "doing", doing: "done", done: "todo" };
+    const to = nextCol[from];
+    setHeroDemoCols(prev => {
+      const moving = prev[from].find(c => c.id === cardId);
+      if (!moving) return prev;
+      return {
+        ...prev,
+        [from]: prev[from].filter(c => c.id !== cardId),
+        [to]: [...prev[to], { ...moving, lift: to === "doing" }],
+      };
+    });
+  };
   const [renameModalData, setRenameModalData] = useState<{ boardId: string; name: string } | null>(null);
   const [renameInputValue, setRenameInputValue] = useState("");
   const [isSavingRename, setIsSavingRename] = useState(false);
@@ -383,9 +426,11 @@ export default function Dashboard() {
   const toggleStar = (e: React.MouseEvent, id: string) => {
     e.preventDefault();
     e.stopPropagation();
-    setStarredIds(prev =>
-      prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
-    );
+    setStarredIds(prev => {
+      const next = prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id];
+      try { localStorage.setItem(starredStorageKey, JSON.stringify(next)); } catch { /* ignore */ }
+      return next;
+    });
   };
 
   const attention = useMemo(() => {
@@ -496,21 +541,32 @@ export default function Dashboard() {
                 <li><b>3</b> Click the card to edit it</li>
               </ol>
             </div>
-            <div className="landing-board" aria-hidden="true">
-              <div className="landing-board-top"><i /> Product launch</div>
+            <div className="landing-board">
+              <div className="landing-board-top"><i /> Product launch <span className="ml-auto text-[11px] text-[#4f63ef] dark:text-[#a5b4fc] font-semibold">Interactive · Click a card to move</span></div>
               <div className="landing-board-cols">
                 <section>
-                  <header><i /> To do <span>2</span></header>
-                  <article><small>Design</small><strong>Sketch the homepage</strong></article>
-                  <article><small>Write</small><strong>Draft the announcement</strong></article>
+                  <header><i /> To do <span>{heroDemoCols.todo.length}</span></header>
+                  {heroDemoCols.todo.map(c => (
+                    <article key={c.id} onClick={() => cycleHeroCard("todo", c.id)} className={`cursor-pointer transition-all hover:border-[#a5b4fc] hover:-translate-y-0.5 ${c.lift ? "is-lift" : ""}`} title="Click to move to Doing">
+                      <small>{c.tag}</small><strong>{c.title}</strong>
+                    </article>
+                  ))}
                 </section>
                 <section>
-                  <header><i className="is-doing" /> Doing <span>1</span></header>
-                  <article className="is-lift"><small>Build</small><strong>Drag this card to Done</strong></article>
+                  <header><i className="is-doing" /> Doing <span>{heroDemoCols.doing.length}</span></header>
+                  {heroDemoCols.doing.map(c => (
+                    <article key={c.id} onClick={() => cycleHeroCard("doing", c.id)} className={`cursor-pointer transition-all hover:border-[#a5b4fc] hover:-translate-y-0.5 ${c.lift ? "is-lift" : ""}`} title="Click to move to Done">
+                      <small>{c.tag}</small><strong>{c.title}</strong>
+                    </article>
+                  ))}
                 </section>
                 <section>
-                  <header><i className="is-done" /> Done <span>1</span></header>
-                  <article><small>Plan</small><strong>Pick a board format</strong></article>
+                  <header><i className="is-done" /> Done <span>{heroDemoCols.done.length}</span></header>
+                  {heroDemoCols.done.map(c => (
+                    <article key={c.id} onClick={() => cycleHeroCard("done", c.id)} className={`cursor-pointer transition-all hover:border-[#a5b4fc] hover:-translate-y-0.5 ${c.lift ? "is-lift" : ""}`} title="Click to move back to To do">
+                      <small>{c.tag}</small><strong>{c.title}</strong>
+                    </article>
+                  ))}
                 </section>
               </div>
             </div>
@@ -554,6 +610,17 @@ export default function Dashboard() {
         <button className={`sidebar-stream ${activeTab === "my" ? "active" : ""}`} aria-pressed={activeTab === "my"} onClick={() => setActiveTab("my")}><FolderKanban size={15} /> My boards</button>
         <button className={`sidebar-stream ${activeTab === "shared" ? "active" : ""}`} aria-pressed={activeTab === "shared"} onClick={() => setActiveTab("shared")}><Layers3 size={15} /> Shared with me</button>
         <button className={`sidebar-stream ${activeTab === "starred" ? "active" : ""}`} aria-pressed={activeTab === "starred"} onClick={() => setActiveTab("starred")}><Star size={15} /> Starred</button>
+        {boards.some(b => starredIds.includes(b.ID)) && (
+          <>
+            <div className="sidebar-section-label">STARRED BOARDS</div>
+            {boards.filter(b => starredIds.includes(b.ID)).slice(0, 6).map(b => (
+              <Link key={b.ID} to={`/b/${b.ID}`} className="sidebar-stream">
+                <Star size={13} className="text-amber-500 fill-amber-500 flex-shrink-0" />
+                <span className="truncate">{b.Name || "Untitled board"}</span>
+              </Link>
+            ))}
+          </>
+        )}
       </WorkspaceSidebar>
       {demoError && <div role="alert" className="bg-rose-100 text-rose-900 p-4">{demoError} <button onClick={startDemo} disabled={isStartingDemo} className="underline">Retry demo</button></div>}
       {isStartingDemo && <div role="status" className="bg-[#eef2ff] text-[#172033] p-4">Preparing your demo board…</div>}

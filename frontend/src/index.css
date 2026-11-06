@@ -469,8 +469,12 @@ html.dark ::-webkit-scrollbar-thumb:hover {
 .task-view-title small { color:var(--board-muted); font-size:9px; letter-spacing:.5px; white-space:nowrap; }
 .task-view-title span { overflow-wrap:anywhere; }
 .task-view-tags { display:block; margin-top:4px; color:var(--board-muted); font-size:10px; }
-.task-view-table select { max-width:170px; padding:7px 8px; border:1px solid var(--board-line); border-radius:7px; background:var(--board-panel); color:var(--board-ink); font-size:11px; }
-.task-view-table select:disabled { border-color:transparent; opacity:.75; }
+.task-view-table select { max-width:170px; padding:6px 10px; border:1px solid var(--board-line); border-radius:999px; background:var(--board-panel); color:var(--board-ink); font-size:11.5px; font-weight:700; cursor:pointer; }
+.task-view-table select.task-view-status-active { background:#eef2ff; border-color:#c7d2fe; color:#4051d6; }
+.task-view-table select.task-view-status-done { background:#ecfdf5; border-color:#a7f3d0; color:#047857; }
+.dark .task-view-table select.task-view-status-active { background:#243052; border-color:#4b5a85; color:#c7d2fe; }
+.dark .task-view-table select.task-view-status-done { background:#12352f; border-color:#1a6652; color:#6ee7b7; }
+.task-view-table select:disabled { border-color:transparent; opacity:.75; cursor:default; }
 .task-view-due { white-space:nowrap; }
 .task-view-due-overdue { color:#c2410c; font-weight:700; }
 .task-view-due-today { color:#a16207; font-weight:700; }

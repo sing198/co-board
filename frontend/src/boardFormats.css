@@ -31,6 +31,8 @@
 .format-calendar-day.is-outside .format-day-heading time { opacity:.45; }
 .format-calendar-day.is-today { background:#4f63ef08; }
 .dark .format-calendar-day.is-today { background:#4f63ef15; }
+.format-calendar-day.is-drop-target { background:#eef2ff; outline:2px dashed #4f63ef; outline-offset:-2px; }
+.dark .format-calendar-day.is-drop-target { background:#24305288; outline:2px dashed #818cf8; outline-offset:-2px; }
 .format-day-heading { display:flex; align-items:center; justify-content:space-between; gap:5px; margin-bottom:6px; }
 .format-day-heading time { font-weight:700; color:var(--board-muted, #64748b); width:26px; height:26px; display:flex; align-items:center; justify-content:center; font-size:12px; border-radius:50%; }
 .format-calendar-day.is-today time { background:#4f63ef; color:white; }

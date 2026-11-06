@@ -732,7 +732,7 @@ export function CardDetailModal({
             else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
           }
         }}
-        className={`w-full max-w-2xl rounded-3xl border shadow-2xl p-6 flex flex-col gap-5 my-8 max-h-[90vh] overflow-y-auto ${
+        className={`w-full max-w-3xl rounded-3xl border shadow-2xl p-6 flex flex-col gap-5 my-8 max-h-[90vh] overflow-y-auto ${
           theme === "dark" ? "bg-[#172033] border-[#334155] text-slate-100" : "bg-white border-slate-200 text-slate-800"
         }`}
         onClick={(e) => e.stopPropagation()}
@@ -740,6 +740,7 @@ export function CardDetailModal({
         {/* Header */}
         <div className="flex items-start justify-between gap-4 border-b pb-4 border-slate-100 dark:border-slate-800">
           <div className="flex flex-col gap-1.5 flex-1 min-w-0">
+            <span className="text-[11px] font-bold tracking-wider uppercase text-[#4f63ef] dark:text-[#a5b4fc]">TSK-{String(card.ID).padStart(3, "0")}</span>
             <input
               type="text"
               value={title}
@@ -751,14 +752,14 @@ export function CardDetailModal({
               }`}
               aria-label="Task title" placeholder="Task title..."
             />
-            <div className="flex items-center gap-2 text-xs">
-              <span className={`px-2.5 py-0.5 rounded-lg font-bold ${
+            <div className="flex items-center flex-wrap gap-2 text-xs pt-0.5">
+              <span className={`px-2.5 py-1 rounded-lg font-bold ${
                 theme === "dark" ? "bg-slate-800 text-slate-300" : "bg-slate-100 text-slate-600"
               }`}>
-                <label>Column: <select aria-label="Move task to column" disabled={!canEdit} value={card.List} onChange={event => onMove(cardId, event.target.value)} className="bg-transparent rounded px-1">{columns.map(column => <option key={column} value={column}>{column}</option>)}</select></label>
+                <label>Column: <select aria-label="Move task to column" disabled={!canEdit} value={card.List} onChange={event => onMove(cardId, event.target.value)} className="bg-transparent rounded px-1 font-bold">{columns.map(column => <option key={column} value={column}>{column}</option>)}</select></label>
               </span>
               {swimlanes.length > 0 ? (
-                <div className="flex items-center gap-1 px-2.5 py-0.5 rounded-lg font-bold bg-indigo-50 text-indigo-700 border border-indigo-100 dark:bg-indigo-950/30 dark:text-indigo-300 dark:border-indigo-800/50">
+                <div className="flex items-center gap-1 px-2.5 py-1 rounded-lg font-bold bg-indigo-50 text-indigo-700 border border-indigo-100 dark:bg-indigo-950/30 dark:text-indigo-300 dark:border-indigo-800/50">
                   <span className="opacity-75">Group:</span>
                   <select
                     aria-label="Move task to group"
@@ -790,177 +791,189 @@ export function CardDetailModal({
           </button>
         </div>
 
-        <div className="flex flex-col gap-2">
-          <label htmlFor={`assignee-${cardId}`} className="text-xs font-bold text-slate-400 uppercase tracking-wider">Assignee</label>
-          <select
-            id={`assignee-${cardId}`}
-            aria-label="Assignee"
-            aria-describedby={onlyYou ? "assignee-hint" : undefined}
-            disabled={!canEdit}
-            value={String(assigneeID)}
-            onChange={(event) => saveDetail(cardId, { assigneeId: event.target.value })}
-            className={`w-full px-3 py-2 rounded-xl border text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#4f63ef] ${theme === "dark" ? "bg-slate-900/60 border-slate-700 text-slate-100" : "bg-slate-50 border-slate-200 text-slate-800"}`}
-          >
-            <option value="0">Unassigned</option>
-            {assigneeChoices.map((member) => <option key={member.id} value={String(member.id)}>{member.name}</option>)}
-          </select>
-          {onlyYou && (
-            <p className="assignee-hint" id="assignee-hint">
-              <span>
-                {shareHint === "guest"
-                  ? "Sign in to share this board and assign someone else."
-                  : shareHint === "owner"
-                    ? "Share this board to assign someone else."
-                    : "Ask the owner to share this board before you can assign someone else."}
-              </span>
-              {shareHint !== "member" && (
-                <button type="button" onClick={onShare}>
-                  {shareHint === "guest" ? "Sign in" : "Share"}
-                </button>
-              )}
-            </p>
-          )}
-        </div>
-
-        <section className="task-notes" aria-label="Notes">
-          <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">Notes</div>
-          {notes.length === 0 ? <p>Moves and short notes show up here.</p> : (
-            <ul>
-              {(showEarlier ? notes : notes.slice(0, 8)).map((note) => {
-                const when = noteStamp(note.CreatedAt);
-                return (
-                  <li key={note.ID} className={note.Kind === "comment" ? "is-comment" : undefined}>
-                    <span>{note.Text}</span>
-                    {when ? <time dateTime={note.CreatedAt}>{when}</time> : null}
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-          {notes.length > 8 && !showEarlier ? <button type="button" onClick={() => setShowEarlier(true)}>Show earlier</button> : null}
-          {canEdit ? (
-            <form onSubmit={(event) => {
-              event.preventDefault();
-              const text = draft.trim();
-              if (!text || !onAddNote) return;
-              if (onAddNote(cardId, text)) setDraft("");
-            }}>
-              <input aria-label="Short note" placeholder="Add a short note" maxLength={280} value={draft} onChange={(event) => setDraft(event.target.value)} />
-              <button type="submit" disabled={!draft.trim()}>Add note</button>
-            </form>
-          ) : null}
-        </section>
-
-        <TaskPlanningFields card={card} cards={cards} boardType={boardType} canEdit={canEdit} onSave={changes => saveDetail(cardId, changes)} />
-
-        {/* Description */}
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center gap-2 text-xs font-bold text-slate-400 uppercase tracking-wider">
-            <FileText size={14} className="text-[#4f63ef] dark:text-[#a5b4fc]" /> Description
-          </div>
-          <textarea
-            rows={3}
-            readOnly={!canEdit}
-            aria-label="Task description" placeholder="Add a more detailed description..."
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            onBlur={handleSaveDescription}
-            className={`w-full p-3 rounded-2xl border text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#4f63ef] leading-relaxed resize-y ${
-              theme === "dark" ? "bg-slate-900/60 border-slate-700 text-slate-100 placeholder:text-slate-500" : "bg-slate-50 border-slate-200 text-slate-800 placeholder:text-slate-400"
-            }`}
-          />
-        </div>
-
-        {/* Checklist */}
-        <div className="flex flex-col gap-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-xs font-bold text-slate-400 uppercase tracking-wider">
-              <CheckSquare size={14} className="text-[#10b981]" /> Checklist
-            </div>
-            {checklist.length > 0 && (
-              <span className="text-xs font-bold text-[#10b981]">
-                {Math.round((checklist.filter((i) => i.done).length / checklist.length) * 100)}%
-              </span>
-            )}
-          </div>
-
-          {checklist.length > 0 && (
-            <div className="w-full h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-[#10b981] transition-all duration-300 rounded-full"
-                style={{ width: `${(checklist.filter((i) => i.done).length / checklist.length) * 100}%` }}
+        {/* 2-Column Responsive Body: Main Details (Left) & Planning/Metadata Sidebar (Right) */}
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
+          {/* Left Main Column */}
+          <div className="md:col-span-7 flex flex-col gap-5 min-w-0">
+            {/* Description */}
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center gap-2 text-xs font-bold text-slate-400 uppercase tracking-wider">
+                <FileText size={14} className="text-[#4f63ef] dark:text-[#a5b4fc]" /> Description
+              </div>
+              <textarea
+                rows={3}
+                readOnly={!canEdit}
+                aria-label="Task description" placeholder="Add a more detailed description..."
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                onBlur={handleSaveDescription}
+                className={`w-full p-3 rounded-2xl border text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#4f63ef] leading-relaxed resize-y ${
+                  theme === "dark" ? "bg-slate-900/60 border-slate-700 text-slate-100 placeholder:text-slate-500" : "bg-slate-50 border-slate-200 text-slate-800 placeholder:text-slate-400"
+                }`}
               />
             </div>
-          )}
 
-          <div className="flex flex-col gap-2">
-            {checklist.map((item, idx) => (
-              <div key={item.id || idx} className="flex items-center gap-2.5 group">
-                <input
-                  aria-label={`Complete ${item.text}`} type="checkbox"
-                  disabled={!canEdit}
-                  checked={item.done}
-                  onChange={(e) => {
-                    const updated = checklist.map((i, iIdx) => (iIdx === idx ? { ...i, done: e.target.checked } : i));
-                    setChecklist(updated);
-                    saveDetail(cardId, { checklist: JSON.stringify(updated) });
-                  }}
-                  className="w-4 h-4 rounded text-[#4051d6] accent-[#4051d6] cursor-pointer"
-                />
-                <span className={`text-xs font-medium flex-1 ${item.done ? "line-through text-slate-400 dark:text-slate-500" : "text-slate-800 dark:text-slate-200"}`}>
-                  {item.text}
-                </span>
-                {canEdit && (
-                  <button
-                    aria-label={`Remove checklist item: ${item.text}`}
-                    onClick={() => {
-                      const updated = checklist.filter((_, iIdx) => iIdx !== idx);
-                      setChecklist(updated);
-                      saveDetail(cardId, { checklist: JSON.stringify(updated) });
-                    }}
-                    className="text-slate-400 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity p-0.5 cursor-pointer"
-                  >
-                    <X size={13} />
-                  </button>
+            {/* Checklist */}
+            <div className="flex flex-col gap-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-xs font-bold text-slate-400 uppercase tracking-wider">
+                  <CheckSquare size={14} className="text-[#10b981]" /> Checklist
+                </div>
+                {checklist.length > 0 && (
+                  <span className="text-xs font-bold text-[#10b981]">
+                    {Math.round((checklist.filter((i) => i.done).length / checklist.length) * 100)}%
+                  </span>
                 )}
               </div>
-            ))}
 
-            {canEdit && (
-              <div className="flex items-center gap-2 mt-1">
-                <input
-                  type="text"
-                  aria-label="New checklist item" placeholder="Add a checklist item..."
-                  value={newItemText}
-                  onChange={(e) => setNewItemText(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && newItemText.trim()) {
-                      e.preventDefault();
-                      const updated = [...checklist, { id: Date.now().toString(), text: newItemText.trim(), done: false }];
-                      setChecklist(updated);
-                      setNewItemText("");
-                      saveDetail(cardId, { checklist: JSON.stringify(updated) });
-                    }
-                  }}
-                  className={`flex-1 px-3 py-1.5 rounded-xl border text-xs focus:outline-none ${
-                    theme === "dark" ? "bg-slate-900/60 border-slate-700 text-slate-100" : "bg-slate-50 border-slate-200 text-slate-800"
-                  }`}
-                />
-                <button
-                  onClick={() => {
-                    if (newItemText.trim()) {
-                      const updated = [...checklist, { id: Date.now().toString(), text: newItemText.trim(), done: false }];
-                      setChecklist(updated);
-                      setNewItemText("");
-                      saveDetail(cardId, { checklist: JSON.stringify(updated) });
-                    }
-                  }}
-                  className="px-3 py-1.5 bg-[#4f63ef] hover:bg-[#4051d6] text-white text-xs font-bold rounded-xl transition-all shadow-xs cursor-pointer"
-                >
-                  Add
-                </button>
+              {checklist.length > 0 && (
+                <div className="w-full h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-[#10b981] transition-all duration-300 rounded-full"
+                    style={{ width: `${(checklist.filter((i) => i.done).length / checklist.length) * 100}%` }}
+                  />
+                </div>
+              )}
+
+              <div className="flex flex-col gap-2">
+                {checklist.map((item, idx) => (
+                  <div key={item.id || idx} className="flex items-center gap-2.5 group">
+                    <input
+                      aria-label={`Complete ${item.text}`} type="checkbox"
+                      disabled={!canEdit}
+                      checked={item.done}
+                      onChange={(e) => {
+                        const updated = checklist.map((i, iIdx) => (iIdx === idx ? { ...i, done: e.target.checked } : i));
+                        setChecklist(updated);
+                        saveDetail(cardId, { checklist: JSON.stringify(updated) });
+                      }}
+                      className="w-4 h-4 rounded text-[#4051d6] accent-[#4051d6] cursor-pointer"
+                    />
+                    <span className={`text-xs font-medium flex-1 ${item.done ? "line-through text-slate-400 dark:text-slate-500" : "text-slate-800 dark:text-slate-200"}`}>
+                      {item.text}
+                    </span>
+                    {canEdit && (
+                      <button
+                        aria-label={`Remove checklist item: ${item.text}`}
+                        onClick={() => {
+                          const updated = checklist.filter((_, iIdx) => iIdx !== idx);
+                          setChecklist(updated);
+                          saveDetail(cardId, { checklist: JSON.stringify(updated) });
+                        }}
+                        className="text-slate-400 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity p-0.5 cursor-pointer"
+                      >
+                        <X size={13} />
+                      </button>
+                    )}
+                  </div>
+                ))}
+
+                {canEdit && (
+                  <div className="flex items-center gap-2 mt-1">
+                    <input
+                      type="text"
+                      aria-label="New checklist item" placeholder="Add a checklist item..."
+                      value={newItemText}
+                      onChange={(e) => setNewItemText(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && newItemText.trim()) {
+                          e.preventDefault();
+                          const updated = [...checklist, { id: Date.now().toString(), text: newItemText.trim(), done: false }];
+                          setChecklist(updated);
+                          setNewItemText("");
+                          saveDetail(cardId, { checklist: JSON.stringify(updated) });
+                        }
+                      }}
+                      className={`flex-1 px-3 py-1.5 rounded-xl border text-xs focus:outline-none ${
+                        theme === "dark" ? "bg-slate-900/60 border-slate-700 text-slate-100" : "bg-slate-50 border-slate-200 text-slate-800"
+                      }`}
+                    />
+                    <button
+                      onClick={() => {
+                        if (newItemText.trim()) {
+                          const updated = [...checklist, { id: Date.now().toString(), text: newItemText.trim(), done: false }];
+                          setChecklist(updated);
+                          setNewItemText("");
+                          saveDetail(cardId, { checklist: JSON.stringify(updated) });
+                        }
+                      }}
+                      className="px-3 py-1.5 bg-[#4f63ef] hover:bg-[#4051d6] text-white text-xs font-bold rounded-xl transition-all shadow-xs cursor-pointer"
+                    >
+                      Add
+                    </button>
+                  </div>
+                )}
               </div>
-            )}
+            </div>
+
+            {/* Notes & Activity */}
+            <section className="task-notes pt-2 border-t border-slate-100 dark:border-slate-800" aria-label="Notes">
+              <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">Notes</div>
+              {notes.length === 0 ? <p>Moves and short notes show up here.</p> : (
+                <ul>
+                  {(showEarlier ? notes : notes.slice(0, 8)).map((note) => {
+                    const when = noteStamp(note.CreatedAt);
+                    return (
+                      <li key={note.ID} className={note.Kind === "comment" ? "is-comment" : undefined}>
+                        <span>{note.Text}</span>
+                        {when ? <time dateTime={note.CreatedAt}>{when}</time> : null}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+              {notes.length > 8 && !showEarlier ? <button type="button" onClick={() => setShowEarlier(true)}>Show earlier</button> : null}
+              {canEdit ? (
+                <form onSubmit={(event) => {
+                  event.preventDefault();
+                  const text = draft.trim();
+                  if (!text || !onAddNote) return;
+                  if (onAddNote(cardId, text)) setDraft("");
+                }}>
+                  <input aria-label="Short note" placeholder="Add a short note" maxLength={280} value={draft} onChange={(event) => setDraft(event.target.value)} />
+                  <button type="submit" disabled={!draft.trim()}>Add note</button>
+                </form>
+              ) : null}
+            </section>
+          </div>
+
+          {/* Right Sidebar Column: Assignee, Schedule, Relationships */}
+          <div className={`md:col-span-5 flex flex-col gap-4 p-4 rounded-2xl border min-w-0 ${
+            theme === "dark" ? "bg-slate-900/40 border-slate-800" : "bg-slate-50/70 border-slate-200/80"
+          }`}>
+            <div className="flex flex-col gap-2">
+              <label htmlFor={`assignee-${cardId}`} className="text-xs font-bold text-slate-400 uppercase tracking-wider">Assignee</label>
+              <select
+                id={`assignee-${cardId}`}
+                aria-label="Assignee"
+                aria-describedby={onlyYou ? "assignee-hint" : undefined}
+                disabled={!canEdit}
+                value={String(assigneeID)}
+                onChange={(event) => saveDetail(cardId, { assigneeId: event.target.value })}
+                className={`w-full px-3 py-2 rounded-xl border text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#4f63ef] ${theme === "dark" ? "bg-slate-900/80 border-slate-700 text-slate-100" : "bg-white border-slate-200 text-slate-800"}`}
+              >
+                <option value="0">Unassigned</option>
+                {assigneeChoices.map((member) => <option key={member.id} value={String(member.id)}>{member.name}</option>)}
+              </select>
+              {onlyYou && (
+                <p className="assignee-hint" id="assignee-hint">
+                  <span>
+                    {shareHint === "guest"
+                      ? "Sign in to share this board and assign someone else."
+                      : shareHint === "owner"
+                        ? "Share this board to assign someone else."
+                        : "Ask the owner to share this board before you can assign someone else."}
+                  </span>
+                  {shareHint !== "member" && (
+                    <button type="button" onClick={onShare}>
+                      {shareHint === "guest" ? "Sign in" : "Share"}
+                    </button>
+                  )}
+                </p>
+              )}
+            </div>
+
+            <TaskPlanningFields card={card} cards={cards} boardType={boardType} canEdit={canEdit} onSave={changes => saveDetail(cardId, changes)} />
           </div>
         </div>
 
@@ -1057,15 +1070,35 @@ export default function Board() {
     try { localStorage.setItem(`co_board_view_v2_${boardId}`, view); } catch { /* Local preferences are optional. */ }
   };
   useEffect(() => {
-    const handleSearchShortcut = (event: KeyboardEvent) => {
+    const handleShortcuts = (event: KeyboardEvent) => {
       const element = event.target as HTMLElement | null;
-      if (event.key !== "/" || event.metaKey || event.ctrlKey || event.altKey || element?.closest("input, textarea, select, [contenteditable], [role=dialog]")) return;
-      event.preventDefault();
-      searchInputRef.current?.focus();
+      if (event.metaKey || event.ctrlKey || event.altKey || element?.closest("input, textarea, select, [contenteditable], [role=dialog]")) return;
+      if (event.key === "/") {
+        event.preventDefault();
+        searchInputRef.current?.focus();
+      } else if (event.key === "n" || event.key === "N") {
+        event.preventDefault();
+        openQuickAdd();
+      } else if ((event.key === "m" || event.key === "M") && user) {
+        event.preventDefault();
+        setMineOnly(current => !current);
+      } else if (event.key === "1") {
+        chooseBoardView("board");
+      } else if (event.key === "2") {
+        chooseBoardView("list");
+      } else if (event.key === "3") {
+        chooseBoardView("calendar");
+      } else if (event.key === "4") {
+        chooseBoardView("timeline");
+      } else if (event.key === "5") {
+        chooseBoardView("mindmap");
+      } else if (event.key === "6") {
+        chooseBoardView("due");
+      }
     };
-    window.addEventListener("keydown", handleSearchShortcut);
-    return () => window.removeEventListener("keydown", handleSearchShortcut);
-  }, []);
+    window.addEventListener("keydown", handleShortcuts);
+    return () => window.removeEventListener("keydown", handleShortcuts);
+  });
 
   const [isExporting, setIsExporting] = useState(false);
 
@@ -1987,8 +2020,10 @@ export default function Board() {
               <button type="button" role="menuitem" onClick={() => { setMoreOpen(false); handleExportPDF(); }} className="board-more-action"><FileText size={15} /> Print this board</button>
               <p className="board-more-label">Handy keys</p>
               <div className="board-more-keys">
+                <span>New task <kbd>N</kbd></span>
                 <span>Find a task <kbd>/</kbd></span>
-                <span>Add the task <kbd>Enter</kbd></span>
+                <span>My tasks filter <kbd>M</kbd></span>
+                <span>Switch views <kbd>1–6</kbd></span>
                 <span>Close or cancel <kbd>Esc</kbd></span>
               </div>
             </div>
@@ -2302,7 +2337,7 @@ export default function Board() {
       </div> : <div ref={boardContainerRef} className="task-view-export">
         {(boardView === "list" || boardView === "due") ? <BoardTaskViews cards={filteredCards} totalCards={cards.length} columns={columns} swimlanes={swimlanes} assignees={Object.fromEntries([...memberById].map(([id, person]) => [id, person.name]))} canEdit={canEdit} connected={status === "connected"} mode={boardView} onOpen={handleOpenCardDetail} onMove={moveFromAlternateView} onCreate={openQuickAdd} />
         : boardView === "scrum" ? <ScrumBoard cards={filteredCards} allCards={cards} columns={columns} sprint={sprint} saving={operations.some(operation => operation.label === "Update sprint" && operation.state === "saving")} canEdit={canEdit} connected={status === "connected"} onOpen={handleOpenCardDetail} onMove={moveFromAlternateView} onEdit={(card, changes) => editCardDetail(String(card.ID), changes)} onUpdateSprint={updateSprint} onCreate={openQuickAdd} />
-        : <BoardCanvasViews cards={filteredCards} allCards={cards} totalCards={cards.length} boardName={boardName} mode={boardView} canEdit={canEdit} connected={status === "connected"} onOpen={handleOpenCardDetail} onCreate={openFormatTask} />}
+        : <BoardCanvasViews cards={filteredCards} allCards={cards} totalCards={cards.length} boardName={boardName} mode={boardView} canEdit={canEdit} connected={status === "connected"} onOpen={handleOpenCardDetail} onCreate={openFormatTask} onReschedule={(card, dueDate) => editCardDetail(String(card.ID), { dueDate })} />}
       </div>}
 
       {creatingTask && <CreateTaskDialog columns={columns} initial={creatingTask} parentName={cards.find(card => String(card.ID) === creatingTask.parentId)?.Title} idea={boardView === "mindmap"} connected={status === "connected"} onClose={() => setCreatingTask(null)} onSave={(title, column, details) => {

@@ -40,6 +40,7 @@ import type { NewTaskDetails } from "../components/CreateTaskDialog";
 import { defaultBoardView, isBoardView } from "../boardFormats";
 import type { BoardView } from "../boardFormats";
 import { dueBucket, localDate } from "../boardDates";
+import { parseBoardCsv, serializeBoardCsv } from "../boardCsv";
 
 const VIEW_HINTS: Record<BoardView, string> = {
   board: "Drag a card between columns. Click it when you want to add details.",
@@ -1358,50 +1359,7 @@ export default function Board() {
   };
 
   const handleExportCSV = () => {
-    const escapeCell = (val: unknown) => {
-      const str = String(val ?? "").replace(/"/g, '""');
-      return `"${str}"`;
-    };
-    const headers = [
-      t("Task ID", "รหัสงาน"),
-      t("Title", "ชื่องาน"),
-      t("Column / Status", "คอลัมน์ / สถานะ"),
-      t("Group", "กลุ่มงาน"),
-      t("Assignee", "ผู้รับผิดชอบ"),
-      t("Start Date", "วันเริ่มต้น"),
-      t("Due Date", "วันครบกำหนด"),
-      t("Tags", "แท็ก"),
-      t("Checklist", "รายการย่อย"),
-      t("Description", "รายละเอียด"),
-    ];
-    const rows = cards.map((c) => {
-      const assigneeName = memberById.get(Number(c.AssigneeID || 0))?.name || "";
-      let checklistSummary = "";
-      if (c.Checklist) {
-        try {
-          const parsed = JSON.parse(c.Checklist);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            const done = parsed.filter((i: any) => i.done).length;
-            checklistSummary = `${done}/${parsed.length}`;
-          }
-        } catch {
-          checklistSummary = "";
-        }
-      }
-      return [
-        `TSK-${String(c.ID).padStart(3, "0")}`,
-        c.Title || "",
-        c.List || "",
-        c.Swimlane && c.Swimlane !== "Untitled" ? c.Swimlane : "",
-        assigneeName,
-        c.StartDate || "",
-        c.DueDate || "",
-        c.Tags || "",
-        checklistSummary,
-        c.Description || "",
-      ].map(escapeCell).join(",");
-    });
-    const csvContent = "\uFEFF" + [headers.map(escapeCell).join(","), ...rows].join("\r\n");
+    const csvContent = serializeBoardCsv(cards, t, (id) => memberById.get(id)?.name || "");
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -1495,71 +1453,10 @@ export default function Board() {
     e.target.value = "";
     if (!file || !canEdit || status !== "connected") return;
     try {
-      const text = (await file.text()).replace(/^\uFEFF/, "");
-      const parseCSVRows = (raw: string): string[][] => {
-        const rows: string[][] = [];
-        let row: string[] = [];
-        let cell = "";
-        let inQuotes = false;
-        for (let i = 0; i < raw.length; i++) {
-          const ch = raw[i];
-          if (inQuotes) {
-            if (ch === '"' && raw[i + 1] === '"') {
-              cell += '"';
-              i++;
-            } else if (ch === '"') {
-              inQuotes = false;
-            } else {
-              cell += ch;
-            }
-          } else if (ch === '"') {
-            inQuotes = true;
-          } else if (ch === ",") {
-            row.push(cell.trim());
-            cell = "";
-          } else if (ch === "\r" || ch === "\n") {
-            if (ch === "\r" && raw[i + 1] === "\n") i++;
-            row.push(cell.trim());
-            if (row.some((v) => v !== "")) rows.push(row);
-            row = [];
-            cell = "";
-          } else {
-            cell += ch;
-          }
-        }
-        row.push(cell.trim());
-        if (row.some((v) => v !== "")) rows.push(row);
-        return rows;
-      };
-
-      const allRows = parseCSVRows(text);
-      if (allRows.length < 2) return;
-      const header = allRows[0].map((h) => h.toLowerCase());
-      const findCol = (patterns: RegExp) => header.findIndex((h) => patterns.test(h));
-      const titleIdx = findCol(/title|task|name|ชื่องาน|งาน/);
-      const statusIdx = findCol(/column|status|list|คอลัมน์|สถานะ/);
-      const groupIdx = findCol(/group|swimlane|กลุ่มงาน/);
-      const startIdx = findCol(/start|วันเริ่ม/);
-      const dueIdx = findCol(/due|กำหนดส่ง|วันครบกำหนด/);
-      const tagsIdx = findCol(/tag|แท็ก/);
-      const descIdx = findCol(/desc|รายละเอียด/);
-
-      const effectiveTitleIdx = titleIdx >= 0 ? titleIdx : (header[0]?.includes("id") || header[0]?.includes("รหัส") ? 1 : 0);
+      const tasks = parseBoardCsv(await file.text(), columns, swimlanes);
       let basePos = Math.max(0, ...cards.map((c) => c.Position || 0)) + 1000;
-
-      allRows.slice(1, 51).forEach((r) => {
-        const title = (r[effectiveTitleIdx] || "").trim();
-        if (!title) return;
-        const rawCol = statusIdx >= 0 ? (r[statusIdx] || "").trim() : "";
-        const targetCol = columns.find((col) => col.toLowerCase() === rawCol.toLowerCase()) || columns[0] || "To do";
-        const rawSwim = groupIdx >= 0 ? (r[groupIdx] || "").trim() : "";
-        const targetSwim = swimlanes.find((s) => s.toLowerCase() === rawSwim.toLowerCase()) || swimlanes[0] || "Untitled";
-        const startDate = startIdx >= 0 && /^\d{4}-\d{2}-\d{2}$/.test(r[startIdx] || "") ? r[startIdx] : "";
-        const dueDate = dueIdx >= 0 && /^\d{4}-\d{2}-\d{2}$/.test(r[dueIdx] || "") ? r[dueIdx] : "";
-        const tags = tagsIdx >= 0 ? (r[tagsIdx] || "").trim() : "";
-        const description = descIdx >= 0 ? (r[descIdx] || "").trim() : "";
-
-        addCard(title, targetCol, basePos, targetSwim, {
+      tasks.forEach(({ title, column, swimlane, startDate, dueDate, tags, description }) => {
+        addCard(title, column, basePos, swimlane, {
           startDate,
           dueDate,
           tags,

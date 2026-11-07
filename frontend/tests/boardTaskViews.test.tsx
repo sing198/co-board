@@ -33,8 +33,13 @@ it("lets an editor move a task from the list and lets a viewer open it without m
 
 it("sorts the table by due date across statuses and keeps undated tasks last", () => {
   render(<BoardTaskViews cards={[task, { ...task, ID: 8, Title: "No deadline", List: "REVIEW", DueDate: "" }, { ...task, ID: 9, Title: "Earlier", List: "REVIEW", DueDate: "2026-10-02" }]} totalCards={3} columns={["DRAFTING", "REVIEW"]} swimlanes={[]} connected canEdit mode="list" onOpen={vi.fn()} onMove={vi.fn()} onCreate={vi.fn()} />);
-  fireEvent.click(screen.getByRole("button", { name: "Due ↕" }));
+  const dueSort = screen.getByRole("button", { name: "Due" });
+  const dueHeader = screen.getByRole("columnheader", { name: "Due" });
+  expect(dueHeader.getAttribute("aria-sort")).toBe("none");
+  fireEvent.click(dueSort);
+  expect(dueHeader.getAttribute("aria-sort")).toBe("ascending");
   expect(screen.getAllByRole("button", { name: /^Open task:/ }).map(button => button.getAttribute("aria-label"))).toEqual(["Open task: Earlier", "Open task: Review draft", "Open task: No deadline"]);
-  fireEvent.click(screen.getByRole("button", { name: "Due ↑" }));
+  fireEvent.click(dueSort);
+  expect(dueHeader.getAttribute("aria-sort")).toBe("descending");
   expect(screen.getAllByRole("button", { name: /^Open task:/ }).map(button => button.getAttribute("aria-label"))).toEqual(["Open task: Review draft", "Open task: Earlier", "Open task: No deadline"]);
 });

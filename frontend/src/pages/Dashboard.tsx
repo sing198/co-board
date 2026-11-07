@@ -1017,7 +1017,7 @@ export default function Dashboard() {
                 }`}
             >
               <Star size={14} className={activeTab === "starred" ? "fill-current" : ""} />
-              {t("Starred", "ติดดาว")} ({starredIds.length})
+              {t("Starred", "ติดดาว")} ({starredBoardCount})
             </button>
           </div>
 
@@ -1152,7 +1152,9 @@ export default function Dashboard() {
                           onClick={(e) => toggleStar(e, board.ID)}
                           className={`p-1.5 rounded-lg transition-colors border shadow-xs ${theme === "dark" ? "bg-[#0f172a]/90 border-[#334155]" : "bg-white/90 border-slate-200"
                             } ${isStarred ? "text-amber-500 dark:text-amber-400" : "text-slate-400 hover:text-[#4f63ef] dark:hover:text-[#a5b4fc]"}`}
-                          title={t("Star Board", "ติดดาวบอร์ด")}
+                          aria-pressed={isStarred}
+                          aria-label={t("Star board", "ติดดาวบอร์ด")}
+                          title={isStarred ? t("Unstar board", "เอาดาวออกจากบอร์ด") : t("Star board", "ติดดาวบอร์ด")}
                         >
                           <Star size={13} fill={isStarred ? "currentColor" : "none"} />
                         </button>
@@ -1283,7 +1285,9 @@ export default function Dashboard() {
                         onClick={(e) => toggleStar(e, board.ID)}
                         className={`p-1.5 rounded-lg transition-colors border ${theme === "dark" ? "border-[#334155]" : "border-slate-200"
                           } ${isStarred ? "text-[#4f63ef] dark:text-[#a5b4fc]" : "text-slate-400 hover:text-[#4f63ef] dark:hover:text-[#a5b4fc]"}`}
-                        title={t("Star Board", "ติดดาวบอร์ด")}
+                        aria-pressed={isStarred}
+                        aria-label={t("Star board", "ติดดาวบอร์ด")}
+                        title={isStarred ? t("Unstar board", "เอาดาวออกจากบอร์ด") : t("Star board", "ติดดาวบอร์ด")}
                       >
                         <Star size={14} fill={isStarred ? "currentColor" : "none"} />
                       </button>

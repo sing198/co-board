@@ -29,6 +29,7 @@ import {
   FileText,
   CheckCircle2,
   LayoutDashboard,
+  ChevronRight,
   Copy
 } from "lucide-react";
 import { API_URL } from "../config";
@@ -37,6 +38,7 @@ import { BoardFormatPreview } from "../components/BoardCanvasViews";
 import { useNotifications } from "../useNotifications";
 import AssignmentNotices from "../components/AssignmentNotices";
 import { dueBucket } from "../boardDates";
+import "../dashboardRefresh.css";
 
 type UserPresence = {
   id: number;
@@ -528,9 +530,19 @@ export default function Dashboard() {
     });
   }, [boards, searchQuery, activeTab, starredIds]);
 
+  const activeTabLabel = activeTab === "my"
+    ? t("My boards", "บอร์ดของฉัน")
+    : activeTab === "shared"
+      ? t("Shared with me", "แชร์กับฉัน")
+      : activeTab === "starred"
+        ? t("Starred boards", "บอร์ดที่ติดดาว")
+        : t("All boards", "บอร์ดทั้งหมด");
+  const totalTasks = boards.reduce((count, board) => count + (board.Cards?.length || 0), 0);
+  const starredBoardCount = boards.filter(board => starredIds.includes(board.ID)).length;
+
   if (!user) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-[#f8fafc] via-[#f1f5f9] to-[#eef2ff] dark:from-[#0b0f19] dark:via-[#0f172a] dark:to-[#172033] text-[#172033] dark:text-slate-100 flex flex-col font-sans selection:bg-[#4f63ef]/20 transition-colors">
+      <div className="dashboard-entry min-h-screen bg-gradient-to-br from-[#f8fafc] via-[#f1f5f9] to-[#eef2ff] dark:from-[#0b0f19] dark:via-[#0f172a] dark:to-[#172033] text-[#172033] dark:text-slate-100 flex flex-col font-sans selection:bg-[#4f63ef]/20 transition-colors">
         {/* Top Minimal Navbar */}
         <header className="landing-top">
           <div className="landing-brand">
@@ -709,7 +721,7 @@ export default function Dashboard() {
       {/* HEADER */}
       <header className={`board-topbar dashboard-topbar px-8 py-4 border-b flex items-center justify-between backdrop-blur-md sticky top-0 z-20 transition-colors ${theme === "dark" ? "bg-[#0f172a]/95 border-[#334155]" : "bg-white border-slate-200 shadow-xs"
         }`}>
-        <div className="board-brand flex items-center gap-3"><span className="mobile-workspace-symbol"><KanbanMark /></span><h1 className="board-title">{t("All boards", "บอร์ดทั้งหมด")}</h1></div>
+        <div className="board-brand flex items-center gap-3"><span className="mobile-workspace-symbol"><KanbanMark /></span><span className="workspace-breadcrumb">{t("Workspace", "พื้นที่ทำงาน")}<ChevronRight size={13} aria-hidden="true" /></span><h1 className="board-title">{activeTabLabel}</h1></div>
         <div className="dashboard-top-actions flex items-center gap-3">
           {/* Language Switcher Pill (EN / TH) */}
           <div
@@ -895,19 +907,12 @@ export default function Dashboard() {
         </div>
       </header>
 
-      <section className="board-overview" aria-label="Workspace overview">
+      <section className="board-overview dashboard-overview" aria-label={t("Workspace overview", "ภาพรวมพื้นที่ทำงาน")}>
         <div className="overview-copy">
-          {boards.length === 0 && <div className="board-eyebrow"><span /> {t("START HERE", "เริ่มต้นใช้งาน")}</div>}
+          <div className="dashboard-welcome">{t("Welcome back", "ยินดีต้อนรับกลับมา")}{user.name ? `, ${user.name.split(" ")[0]}` : ""}</div>
           <h2>{t("My workspace", "พื้นที่ทำงานของฉัน")}</h2>
-          <p>{boards.length === 0 ? t("Open a board to move tasks, or create one from a template. Kanban is the easiest place to begin.", "เปิดบอร์ดเพื่อจัดการงาน หรือสร้างบอร์ดใหม่จากเทมเพลต แนะนำให้เริ่มจากบอร์ดแคนบาน (Kanban) จะใช้งานง่ายที่สุด") : t("Open a board to move tasks, or create one from a template.", "เลือกบอร์ดเพื่อเข้าจัดการงาน หรือกดสร้างบอร์ดใหม่จากเทมเพลตด้านล่าง")}</p>
-          <div className="overview-meta">
-            <span><Layers3 size={14} /> {boards.length} {t(boards.length === 1 ? "board" : "boards", "บอร์ด")}</span>
-            <span><Star size={14} /> {boards.filter(b => starredIds.includes(b.ID)).length} {t("starred", "ติดดาว")}</span>
-            <span>{boards.reduce((n, b) => n + (b.Cards?.length || 0), 0)} {t(boards.reduce((n, b) => n + (b.Cards?.length || 0), 0) === 1 ? "task across your boards" : "tasks across your boards", "งานในทุกบอร์ดรวมกัน")}</span>
-            {user?.email === "guest@kanban.demo" && (
-              <span className="overview-access font-bold">{t("Guest session", "โหมดทดลองใช้ (Guest)")}</span>
-            )}
-          </div>
+          <p>{boards.length === 0 ? t("A clear space for your next project. Create a board to get started.", "เริ่มโปรเจกต์ใหม่ในพื้นที่ทำงานที่เป็นระเบียบ สร้างบอร์ดแรกเพื่อเริ่มต้นได้เลย") : t("Pick up where you left off, or make room for your next idea.", "กลับมาจัดการงานต่อ หรือเริ่มต้นไอเดียใหม่ได้จากที่นี่")}</p>
+          {user.email === "guest@kanban.demo" && <span className="dashboard-guest-label">{t("Guest session", "โหมดทดลองใช้ (Guest)")}</span>}
         </div>
         <div className="overview-action">
           <button className="new-task-button" onClick={() => { setNewBoardName(""); setShowCreateModal(true); }}>
@@ -916,8 +921,16 @@ export default function Dashboard() {
         </div>
       </section>
 
+      <section className="dashboard-summary" aria-label={t("Workspace totals", "สรุปพื้นที่ทำงาน")}>
+        <div><span className="dashboard-summary-icon"><Layers3 size={18} /></span><div><strong>{isLoadingBoards ? "—" : boards.length}</strong><span>{t("Boards", "บอร์ดทั้งหมด")}</span></div></div>
+        <div><span className="dashboard-summary-icon"><CheckCircle2 size={18} /></span><div><strong>{isLoadingBoards ? "—" : totalTasks}</strong><span>{t("Tasks across boards", "งานในทุกบอร์ด")}</span></div></div>
+        <div><span className="dashboard-summary-icon"><Star size={18} /></span><div><strong>{isLoadingBoards ? "—" : starredBoardCount}</strong><span>{t("Starred boards", "บอร์ดที่ติดดาว")}</span></div></div>
+      </section>
+
+      {(attention.length > 0 || assignedToYou.length > 0) && <div className="dashboard-focus-grid">
       {attention.length > 0 && (
-        <section className="due-soon" aria-label="Tasks that need attention">
+        <section className="due-soon" aria-label={t("Tasks that need attention", "งานที่ต้องติดตาม")}>
+          <h3 className="dashboard-focus-heading"><Calendar size={16} />{t("Coming up", "งานที่ต้องติดตาม")}</h3>
           <div className="due-soon-counts">
             <strong>{attention.filter((item) => item.bucket === "overdue").length} {t("overdue", "เลยกำหนด")}</strong>
             <strong>{attention.filter((item) => item.bucket === "today").length} {t("due today", "ครบกำหนดวันนี้")}</strong>
@@ -937,8 +950,8 @@ export default function Dashboard() {
       )}
 
       {assignedToYou.length > 0 && (
-        <section className="assigned-you" aria-label="Assigned to you">
-          <h3>{t("Assigned to you", "งานที่มอบหมายให้คุณ")} <span>{assignedToYou.length}</span></h3>
+        <section className="assigned-you" aria-label={t("Assigned to you", "งานที่มอบหมายให้คุณ")}>
+          <h3 className="dashboard-focus-heading"><CheckCircle2 size={16} />{t("Assigned to you", "งานที่มอบหมายให้คุณ")} <span>{assignedToYou.length}</span></h3>
           <ul>
             {assignedToYou.slice(0, 6).map((item) => (
               <li key={item.key}>
@@ -951,9 +964,12 @@ export default function Dashboard() {
           </ul>
         </section>
       )}
+      </div>}
 
       {/* MAIN CONTAINER */}
       <main className="dashboard-main max-w-7xl w-full mx-auto px-8 py-6 flex-1 space-y-6">
+
+        <div className="dashboard-library-heading"><h2>{activeTabLabel}</h2>{!isLoadingBoards && <span>{filteredBoards.length} {t(filteredBoards.length === 1 ? "board" : "boards", "บอร์ด")}</span>}</div>
 
         {/* ACTION BAR: SEARCH, TABS, VIEW TOGGLE */}
         <div className={`dashboard-controls flex flex-col md:flex-row md:items-center justify-between gap-4 pb-5 border-b ${theme === "dark" ? "border-[#334155]" : "border-slate-200"
@@ -1006,14 +1022,14 @@ export default function Dashboard() {
           </div>
 
           {/* Controls: Search + View Toggle */}
-          <div className="flex items-center gap-3">
+          <div className="dashboard-search-tools flex items-center gap-3">
 
             {/* Search Input */}
-            <div className="relative w-64">
+            <div className="dashboard-search-field relative w-64">
               <Search className={`absolute left-3.5 top-2.5 ${theme === "dark" ? "text-slate-400" : "text-slate-400"}`} size={16} />
               <input
                 type="text"
-                aria-label="Search boards"
+                aria-label={t("Search boards", "ค้นหาบอร์ด")}
                 placeholder={t("Search boards…", "ค้นหาชื่อบอร์ด…")}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -1025,7 +1041,7 @@ export default function Dashboard() {
               {searchQuery && (
                 <button
                   type="button"
-                  aria-label="Clear search"
+                  aria-label={t("Clear search", "ล้างคำค้นหา")}
                   onClick={() => setSearchQuery("")}
                   className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
                 >
@@ -1036,7 +1052,7 @@ export default function Dashboard() {
 
 
             {/* Grid / List Switcher */}
-            <div className={`flex items-center rounded-xl p-1 shadow-xs border ${theme === "dark" ? "bg-[#0f172a] border-[#334155]" : "bg-white border-slate-200"
+            <div role="group" aria-label={t("Board display", "รูปแบบการแสดงบอร์ด")} className={`dashboard-view-switcher flex items-center rounded-xl p-1 shadow-xs border ${theme === "dark" ? "bg-[#0f172a] border-[#334155]" : "bg-white border-slate-200"
               }`}>
               <button
                 aria-pressed={viewMode === "grid"}
@@ -1046,6 +1062,7 @@ export default function Dashboard() {
                   : ""
                   }`}
                 title={t("Grid View", "มุมมองตารางการ์ด")}
+                aria-label={t("Grid view", "มุมมองตารางการ์ด")}
               >
                 <LayoutGrid size={16} />
               </button>
@@ -1057,6 +1074,7 @@ export default function Dashboard() {
                   : ""
                   }`}
                 title={t("List View", "มุมมองรายการ")}
+                aria-label={t("List view", "มุมมองรายการ")}
               >
                 <ListIcon size={16} />
               </button>
@@ -1087,7 +1105,7 @@ export default function Dashboard() {
         ) : boardLoadError && boards.length === 0 ? null : filteredBoards.length === 0 ? (
           <div className={`dashboard-empty text-center py-20 border-2 border-dashed rounded-3xl ${theme === "dark" ? "border-[#334155] bg-[#0f172a]/50" : "border-slate-200 bg-white/60"
             }`}>
-            <FolderKanban className={`mx-auto mb-3 ${theme === "dark" ? "text-slate-500" : "text-slate-400"}`} size={48} />
+            <span className="dashboard-empty-icon"><FolderKanban size={28} /></span>
             <h3 className={`text-lg font-bold mb-1 ${theme === "dark" ? "text-slate-200" : "text-slate-800"}`}>{t("Nothing in this list yet", "ยังไม่มีบอร์ดในหมวดหมู่นี้")}</h3>
             <p className={`text-sm max-w-sm mx-auto mb-6 leading-relaxed ${theme === "dark" ? "text-slate-400" : "text-slate-500"}`}>
               {searchQuery
@@ -1103,7 +1121,7 @@ export default function Dashboard() {
               className={`px-5 py-2.5 rounded-xl text-white text-xs font-bold transition-all hover:scale-105 active:scale-95 ${theme === "dark" ? "bg-[#4051d6] hover:bg-[#4051d6] shadow-md shadow-[#4f63ef]/20" : "bg-[#4f63ef] hover:bg-[#4051d6] shadow-md shadow-[#4f63ef]/20"
                 }`}
             >
-              {searchQuery || activeTab !== "all" ? t("View all boards", "ดูบอร์ดทั้งหมด") : t("+ Create New Board", "+ สร้างบอร์ดใหม่")}
+              {!searchQuery && activeTab === "all" && <Plus size={15} />}{searchQuery || activeTab !== "all" ? t("View all boards", "ดูบอร์ดทั้งหมด") : t("Create a board", "สร้างบอร์ดใหม่")}
             </button>
           </div>
         ) : viewMode === "grid" ? (
@@ -1129,7 +1147,7 @@ export default function Dashboard() {
                       </div>
 
                       {/* Action buttons overlay */}
-                      <div className={`absolute top-2 right-2 flex items-center gap-1 transition-opacity z-20 ${isStarred ? "opacity-100" : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"}`}>
+                      <div className={`dashboard-card-actions absolute top-2 right-2 flex items-center gap-1 transition-opacity z-20 ${isStarred ? "opacity-100" : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"}`}>
                         <button
                           onClick={(e) => toggleStar(e, board.ID)}
                           className={`p-1.5 rounded-lg transition-colors border shadow-xs ${theme === "dark" ? "bg-[#0f172a]/90 border-[#334155]" : "bg-white/90 border-slate-200"
@@ -1173,19 +1191,19 @@ export default function Dashboard() {
                     </div>
 
                     {/* Card Title & Badges */}
-                    <div className="pt-3">
+                    <div className="dashboard-card-body pt-3">
                       <div className="dashboard-card-details flex flex-col items-start gap-2 mb-2">
                         <h3 className={`text-sm font-bold transition-colors ${theme === "dark" ? "text-slate-100 group-hover:text-[#a5b4fc]" : "text-slate-900 group-hover:text-[#4f63ef]"
                           }`}>
                           {board.Name || t("Untitled Board", "บอร์ดไม่มีชื่อ")}
                         </h3>
                         <div className="flex items-center gap-1.5 flex-shrink-0">
-                          <span className={`px-2 py-0.5 rounded-md text-[10px] font-semibold flex items-center gap-1 ${theme === "dark" ? "bg-[#243052] text-[#c7d2fe]" : "bg-[#eef2ff] text-[#4051d6]"
+                          <span className={`dashboard-board-type px-2 py-0.5 rounded-md text-[10px] font-semibold flex items-center gap-1 ${theme === "dark" ? "bg-[#243052] text-[#c7d2fe]" : "bg-[#eef2ff] text-[#4051d6]"
                             }`}>
                             {getBoardTypeIcon(board.Type)}
                             {boardTypeLabel(board.Type, lang)}
                           </span>
-                          <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold flex-shrink-0 ${board.IsOwner
+                          <span className={`dashboard-board-access px-2 py-0.5 rounded-md text-[10px] font-bold flex-shrink-0 ${board.IsOwner
                             ? theme === "dark" ? "bg-[#4f63ef]/20 text-[#a5b4fc] border border-[#4f63ef]/30" : "bg-[#f8fafc] text-[#4051d6] border border-[#c7d2fe]"
                             : theme === "dark" ? "bg-violet-500/15 text-violet-300 border border-violet-500/30" : "bg-violet-50 text-violet-700 border border-violet-200"
                             }`}>
@@ -1195,14 +1213,14 @@ export default function Dashboard() {
                       </div>
                     </div>
 
-                    <div className={`flex items-center justify-between text-xs pt-2 border-t ${theme === "dark" ? "border-[#334155] text-slate-400" : "border-slate-100 text-slate-500"
+                    <div className={`dashboard-card-footer flex items-center justify-between text-xs pt-2 border-t ${theme === "dark" ? "border-[#334155] text-slate-400" : "border-slate-100 text-slate-500"
                       }`}>
                       <span className="text-[13px] font-semibold">
                         {board.Cards?.length || 0} {t((board.Cards?.length || 0) === 1 ? "task" : "tasks", "งาน")}
                       </span>
                       <span className="flex items-center gap-3">
                         {renderOnlineAvatars(board.OnlineUsers, "sm")}
-                        <span className="dashboard-open-cue">{t("Open", "เปิดบอร์ด")}</span>
+                        <span className="dashboard-open-cue">{t("Open", "เปิดบอร์ด")}<ArrowRight size={13} /></span>
                       </span>
                     </div>
                   </div>
@@ -1251,7 +1269,7 @@ export default function Dashboard() {
 
                     {/* Owner Column */}
                     <div className="col-span-2 flex items-center justify-center">
-                      <span className={`px-2.5 py-0.5 rounded-md text-[10px] font-bold ${board.IsOwner
+                      <span className={`dashboard-board-access px-2.5 py-0.5 rounded-md text-[10px] font-bold ${board.IsOwner
                         ? theme === "dark" ? "bg-[#4f63ef]/20 text-[#a5b4fc] border border-[#4f63ef]/30" : "bg-[#f8fafc] text-[#4051d6] border border-[#c7d2fe]"
                         : theme === "dark" ? "bg-violet-500/15 text-violet-300 border border-violet-500/30" : "bg-violet-50 text-violet-700 border border-violet-200"
                         }`}>

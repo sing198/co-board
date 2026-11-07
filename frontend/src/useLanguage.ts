@@ -22,6 +22,10 @@ export function useLanguage() {
   const [lang, setLangState] = useState<Language>(getInitialLanguage);
 
   useEffect(() => {
+    document.documentElement.lang = lang;
+  }, [lang]);
+
+  useEffect(() => {
     const handleLangChange = (e: Event) => {
       const custom = e as CustomEvent<Language>;
       if (custom.detail === "th" || custom.detail === "en") {

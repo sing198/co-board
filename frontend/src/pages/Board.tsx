@@ -41,6 +41,7 @@ import { defaultBoardView, isBoardView } from "../boardFormats";
 import type { BoardView } from "../boardFormats";
 import { dueBucket, localDate } from "../boardDates";
 import { parseBoardCsv, serializeBoardCsv } from "../boardCsv";
+import "../boardRefresh.css";
 
 const VIEW_HINTS: Record<BoardView, string> = {
   board: "Drag a card between columns. Click it when you want to add details.",
@@ -56,7 +57,7 @@ const VIEW_HINTS_TH: Record<BoardView, string> = {
   board: "ลากการ์ดย้ายระหว่างคอลัมน์ หรือคลิกที่การ์ดเพื่อเพิ่มรายละเอียด",
   list: "คลิกที่งานเพื่อดูรายละเอียด หรือเปลี่ยนสถานะได้จากเมนูในตาราง",
   due: "จัดกลุ่มงานตามกำหนดส่ง คลิกที่งานเพื่อเปลี่ยนวันที่ได้ทันที",
-  calendar: "แสดงงานตามวันครบกำหนด ลากงานไปวางในช่องวันที่เพื่อเลื่อนกำหนดส่ง",
+  calendar: "แสดงงานตามวันครบกำหนด คลิกที่งานเพื่อดูหรือแก้ไขรายละเอียด",
   timeline: "แต่ละแท่งแสดงช่วงเวลาของงานตั้งแต่วันเริ่มต้นถึงวันครบกำหนด",
   mindmap: "คลิกที่ไอเดียเพื่อดูรายละเอียด หรือกด + เพื่อแตกกิ่งไอเดียย่อย",
   scrum: "เลือกงานจาก Backlog เข้าสปรินต์ แล้วกดเริ่มสปรินต์เมื่อพร้อม",
@@ -333,7 +334,7 @@ function DraggableCard({
 
       {cardData.Description && <p className="task-description">{cardData.Description}</p>}
       {canEdit && (
-        <div className="absolute top-3 right-3 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-white/90 dark:bg-slate-800/90 backdrop-blur-sm p-1 rounded-lg border border-slate-200 dark:border-slate-700 shadow-xs z-10">
+        <div className="task-card-actions absolute top-3 right-3 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-white/90 dark:bg-slate-800/90 backdrop-blur-sm p-1 rounded-lg border border-slate-200 dark:border-slate-700 shadow-xs z-10">
           <button
             onPointerDown={(e) => e.stopPropagation()}
             onMouseDown={(e) => e.stopPropagation()}
@@ -770,7 +771,7 @@ export function CardDetailModal({
             else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
           }
         }}
-        className={`w-full max-w-3xl rounded-3xl border shadow-2xl p-6 flex flex-col gap-5 my-8 max-h-[90vh] overflow-y-auto ${
+        className={`task-detail-dialog w-full max-w-3xl rounded-3xl border shadow-2xl p-6 flex flex-col gap-5 my-8 max-h-[90vh] overflow-y-auto ${
           theme === "dark" ? "bg-[#172033] border-[#334155] text-slate-100" : "bg-white border-slate-200 text-slate-800"
         }`}
         onClick={(e) => e.stopPropagation()}
@@ -1870,7 +1871,7 @@ export default function Board() {
   const bgPresetClass = BOARD_BACKGROUND_PRESETS[boardBackground]?.class || "";
 
   return (
-    <div className={`board-workspace min-h-screen font-sans relative selection:bg-[#4f63ef]/20 transition-all duration-300 ${
+    <div className={`board-workspace board-page min-h-screen font-sans relative selection:bg-[#4f63ef]/20 transition-all duration-300 ${
       bgPresetClass || (theme === "dark" ? "bg-[#0f172a] text-slate-100" : "bg-[#f8fafc] text-[#172033]")
     }`}>
 
@@ -1921,6 +1922,7 @@ export default function Board() {
 
           <div className={`h-4 w-px ${theme === "dark" ? "bg-[#172033]" : "bg-slate-200"}`} />
 
+          <span className="board-breadcrumb">{t("Workspace", "พื้นที่ทำงาน")}<ChevronRight size={14} /></span>
           {isEditingBoardName ? (
             <input
               type="text"
@@ -1971,7 +1973,7 @@ export default function Board() {
           <div
             role="group"
             aria-label="Language"
-            className={`inline-flex items-center rounded-xl p-0.5 border text-[11px] font-extrabold tracking-wider ${
+            className={`board-language-switch inline-flex items-center rounded-xl p-0.5 border text-[11px] font-extrabold tracking-wider ${
               theme === "dark"
                 ? "bg-[#172033] border-[#334155]"
                 : "bg-slate-100 border-slate-200"
@@ -2008,6 +2010,7 @@ export default function Board() {
           </div>
 
           <button
+            aria-label={theme === "dark" ? t("Switch to Light Mode", "เปลี่ยนเป็นโหมดสว่าง") : t("Switch to Dark Mode", "เปลี่ยนเป็นโหมดมืด")}
             onClick={toggleTheme}
             className={`p-1.5 rounded-xl border transition-colors cursor-pointer ${theme === "dark"
               ? "bg-[#172033] text-amber-400 hover:bg-[#334155] border-[#334155]"
@@ -2198,44 +2201,29 @@ export default function Board() {
       )}
       <section id="board-overview" className="board-overview" aria-label="Board overview">
         <div className="overview-copy">
-          <div className="overview-title-row">
-            <h2>{boardName}</h2>
-            <div className="overview-meta">
-              {(boardView === "board" || boardView === "scrum") && swimlanes.length > 1 && <span><UserPlus size={14} /> {swimlanes.length} {t("groups", "กลุ่มงาน")}</span>}
-              <span className="overview-access">{isOwner ? t("Full access", "เจ้าของบอร์ด") : canEdit ? t("Can edit", "แก้ไขได้") : t("View only", "ดูอย่างเดียว")}</span>
-              <span><strong>{cards.length}</strong> {t(cards.length === 1 ? "task" : "tasks", "งาน")}</span>
-              {boardProgress.total > 0 && (
-                <button
-                  type="button"
-                  onClick={() => setIsInsightsOpen(true)}
-                  className="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20 cursor-pointer transition-colors"
-                  title={t("Click to view Board Insights & Workload", "คลิกเพื่อดูสรุปสถิติและภาระงานในบอร์ด")}
-                >
-                  <span>{boardProgress.done}/{boardProgress.total} {t("done", "เสร็จแล้ว")} ({boardProgress.percent}%)</span>
-                  <span className="w-14 h-1.5 rounded-full bg-emerald-950/15 dark:bg-emerald-950/60 overflow-hidden inline-flex">
-                    <span className="h-full bg-emerald-500 transition-all duration-300 rounded-full" style={{ width: `${boardProgress.percent}%` }} />
-                  </span>
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={() => setIsInsightsOpen(true)}
-                className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-indigo-500/10 hover:bg-indigo-500/20 text-[#4f63ef] dark:text-[#a5b4fc] border border-indigo-500/20 cursor-pointer transition-colors"
-                title={t("View Board Insights & Workload", "ดูสรุปสถิติโปรเจกต์และภาระงาน")}
-              >
-                <BarChart3 size={12} /> {t("Insights", "สถิติบอร์ด")}
-              </button>
-              {boardProgress.overdue > 0 && (
-                <button
-                  type="button"
-                  onClick={() => setSelectedDueFilter(selectedDueFilter === "overdue" ? "all" : "overdue")}
-                  className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-500/10 text-rose-600 dark:text-rose-300 border border-rose-500/20 cursor-pointer hover:bg-rose-500/20 transition-colors"
-                >
-                  <Clock size={12} /> {boardProgress.overdue} {t("overdue", "เลยกำหนด")}
-                </button>
-              )}
-            </div>
+          <h2>{boardName}</h2>
+          <div className="overview-meta">
+            <span className="overview-access">{isOwner ? <Lock size={12} /> : canEdit ? <Edit2 size={12} /> : <Eye size={12} />}{isOwner ? t("Full access", "เจ้าของบอร์ด") : canEdit ? t("Can edit", "แก้ไขได้") : t("View only", "ดูอย่างเดียว")}</span>
+            <span><strong>{cards.length}</strong> {t(cards.length === 1 ? "task" : "tasks", "งาน")}</span>
+            {status === "connected" && onlineUsers.length > 0 && <span className="overview-live"><i />{onlineUsers.length} {t("online", "ออนไลน์")}</span>}
+            {(boardView === "board" || boardView === "scrum") && swimlanes.length > 1 && <span><UserPlus size={13} /> {swimlanes.length} {t("groups", "กลุ่มงาน")}</span>}
+            {boardProgress.overdue > 0 && <button type="button" aria-pressed={selectedDueFilter === "overdue"} onClick={() => setSelectedDueFilter(selectedDueFilter === "overdue" ? "all" : "overdue")} className="overview-overdue"><Clock size={12} /> {boardProgress.overdue} {t("overdue", "เลยกำหนด")}</button>}
           </div>
+          <p className="board-view-description">{lang === "th" ? VIEW_HINTS_TH[boardView] : VIEW_HINTS[boardView]}</p>
+        </div>
+        <div className="overview-action">
+          <div className="overview-primary-actions">
+            <button type="button" className="overview-insights" onClick={() => setIsInsightsOpen(true)} title={t("View Board Insights & Workload", "ดูสรุปสถิติโปรเจกต์และภาระงาน")}><BarChart3 size={15} />{t("Insights", "สถิติบอร์ด")}</button>
+            {canEdit && columns.length > 0 && <button className="new-task-button" disabled={status !== "connected"} onClick={openQuickAdd}><Plus size={16} /> {boardView === "mindmap" ? t("New idea", "เพิ่มไอเดีย") : t("New task", "เพิ่มงานใหม่")}</button>}
+          </div>
+          {boardProgress.total > 0 && <button type="button" className="overview-progress" onClick={() => setIsInsightsOpen(true)} title={t("View progress and team workload", "ดูความคืบหน้าและภาระงานของทีม")}>
+            <span>{boardProgress.done}/{boardProgress.total} {t("complete", "เสร็จแล้ว")}</span>
+            <span className="overview-progress-track"><span style={{ width: `${boardProgress.percent}%` }} /></span>
+            <strong>{boardProgress.percent}%</strong>
+          </button>}
+        </div>
+      </section>
+      <nav className="board-navigation" aria-label={t("Board views and layout", "มุมมองและรูปแบบบอร์ด")}>
           <div className="board-view-switch" role="group" aria-label="Board view">
             <button aria-pressed={boardView === "board"} title={t("Drag cards between columns", "ลากการ์ดย้ายระหว่างคอลัมน์")} onClick={() => chooseBoardView("board")}><LayoutDashboard size={15} /> {t("Board", "บอร์ด")}</button>
             <button aria-pressed={boardView === "list"} title={t("Every task in a list", "ดูงานทั้งหมดในรูปแบบตารางรายการ")} onClick={() => chooseBoardView("list")}><FileText size={15} /> {t("List", "รายการ")}</button>
@@ -2256,6 +2244,7 @@ export default function Board() {
                 onClick={() => setViewsOpen((open) => !open)}
               >
                 {boardView === "calendar" ? t("Calendar", "ปฏิทิน") : boardView === "timeline" ? t("Timeline", "ไทม์ไลน์") : boardView === "mindmap" ? t("Mind map", "แผนผังความคิด") : boardView === "scrum" ? t("Sprint", "สปรินต์") : boardView === "due" ? t("Due", "กำหนดส่ง") : t("Views", "มุมมองอื่นๆ")}
+                <ChevronDown size={13} />
               </button>
               {viewsOpen && (
                 <div className="board-view-menu" role="menu">
@@ -2268,11 +2257,27 @@ export default function Board() {
               )}
             </div>
           </div>
-        </div>
-        <div className="overview-action">
-          {canEdit && columns.length > 0 && <button className="new-task-button" disabled={status !== "connected"} onClick={openQuickAdd}><Plus size={17} /> {boardView === "mindmap" ? t("New idea", "เพิ่มไอเดีย") : t("New task", "เพิ่มงานใหม่")}</button>}
-        </div>
-      </section>
+        {boardView === "board" && <div className="board-layout-tools">
+            {canEdit && (
+              <button
+                type="button"
+                onClick={() => {
+                  let name = "Column 1";
+                  let count = 1;
+                  while (columns.includes(name)) {
+                    name = `Column ${++count}`;
+                  }
+                  addColumn(name);
+                }}
+                disabled={status !== "connected"}
+                title={t("Add a column, such as Review", "เพิ่มคอลัมน์ใหม่")}
+                className="board-add-column-trailing"
+              >
+                <Plus size={14} /> {t("Add column", "เพิ่มคอลัมน์")}
+              </button>
+            )}
+        </div>}
+      </nav>
       {/* Search stays in view. Background, export, and shortcuts live in More. */}
       <div className={`board-toolbar px-6 py-2.5 border-b flex flex-wrap items-center justify-between gap-3 ${
         theme === "dark" ? "bg-[#0f172a]/80 border-[#334155]" : "bg-slate-50 border-slate-200"
@@ -2309,7 +2314,7 @@ export default function Board() {
             <option value="later">{t("Later", "หลังจากนั้น")}</option>
             <option value="none">{t("No due date", "ไม่ระบุวันส่ง")}</option>
           </select>
-          {user && <button type="button" className="board-mine-filter" aria-pressed={mineOnly} title={mineOnly ? t("Showing only tasks assigned to me", "กำลังแสดงเฉพาะงานของฉัน") : t("Show only tasks assigned to me", "แสดงเฉพาะงานที่มอบหมายให้ฉัน")} onClick={() => setMineOnly((current) => !current)}>{mineOnly ? t("✓ Mine", "✓ งานของฉัน") : t("Mine", "งานของฉัน")}</button>}
+          {user && <button type="button" className="board-mine-filter" aria-pressed={mineOnly} title={mineOnly ? t("Showing only tasks assigned to me", "กำลังแสดงเฉพาะงานของฉัน") : t("Show only tasks assigned to me", "แสดงเฉพาะงานที่มอบหมายให้ฉัน")} onClick={() => setMineOnly((current) => !current)}>{mineOnly && <Check size={13} />}{t("Mine", "งานของฉัน")}</button>}
 
           <div className="board-filter-chips flex items-center gap-1.5 overflow-x-auto py-0.5 max-w-full">
             <button
@@ -2342,7 +2347,7 @@ export default function Board() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="board-toolbar-actions flex items-center gap-2">
           <button
             type="button"
             onClick={() => { setCommandQuery(""); setIsCommandOpen(true); }}
@@ -2469,7 +2474,7 @@ export default function Board() {
         <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={() => setIsDraggingCard(true)} onDragCancel={() => setIsDraggingCard(false)} onDragEnd={(event) => { setIsDraggingCard(false); handleDragEnd(event); }}>
 
           {/* Top Column Headers Row */}
-          <div className="flex gap-6 items-center w-full px-1">
+          <div className="board-columns-header flex gap-6 items-center w-full px-1">
             {columns.map((col, colIdx) => {
               const totalColCards = cards.filter((c: any) => c.List === col).length;
               const colStyle = COLUMN_STYLES[colIdx % COLUMN_STYLES.length];
@@ -2512,7 +2517,7 @@ export default function Board() {
                   </div>
 
                   {canEdit && (
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="column-actions flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button
                         onClick={() => openColumnQuickAdd(col)}
                         className="p-1 text-slate-400 hover:text-[#4f63ef] dark:hover:text-[#a5b4fc] rounded transition-colors cursor-pointer"
@@ -2549,24 +2554,7 @@ export default function Board() {
                 </div>
               );
             })}
-            {canEdit && (
-              <button
-                type="button"
-                onClick={() => {
-                  let name = "Column 1";
-                  let count = 1;
-                  while (columns.includes(name)) {
-                    name = `Column ${++count}`;
-                  }
-                  addColumn(name);
-                }}
-                disabled={status !== "connected"}
-                title={t("Add a column, such as Review", "เพิ่มคอลัมน์ใหม่")}
-                className="board-add-column-trailing"
-              >
-                <Plus size={14} /> {t("Add column", "เพิ่มคอลัมน์")}
-              </button>
-            )}
+
           </div>
 
           {/* Unified Swimlane Rows Section */}
@@ -2612,7 +2600,7 @@ export default function Board() {
                       </span>
 
                       {canEdit && (
-                        <div className="flex items-center gap-1 opacity-0 group-hover/swim:opacity-100 transition-opacity ml-1">
+                        <div className="workstream-actions flex items-center gap-1 opacity-0 group-hover/swim:opacity-100 transition-opacity ml-1">
                           <button
                             onClick={() => openRenameModal(t("Rename group", "เปลี่ยนชื่อกลุ่มงาน"), swim, (newName) => renameSwimlane(swim, newName))}
                             className={`p-1 text-slate-400 hover:text-[#4f63ef] dark:hover:text-[#a5b4fc] rounded transition-colors cursor-pointer ${theme === "dark" ? "hover:bg-slate-800" : "hover:bg-slate-100"}`}
@@ -2634,7 +2622,7 @@ export default function Board() {
 
                   {/* Swimlane Columns Grid */}
                   {!isCollapsed && (
-                    <div className="flex gap-6 items-start w-full">
+                    <div className="board-columns-row flex gap-6 items-start w-full">
                       {columns.map((col, colIdx) => {
                         const rowSwim = swim || "Untitled";
                         const swimCards = filteredCards
